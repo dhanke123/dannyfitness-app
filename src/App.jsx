@@ -18,13 +18,21 @@ const disp = { fontFamily:"'Barlow Condensed', sans-serif", textTransform:"upper
 const body = { fontFamily:"'Barlow', sans-serif" };
 
 /* ---------- locations (dynamic — this is the whole point of req.1) ---------- */
+// ExerciseOnly's real training locations (Gardens by the Bay = Danny's base at 11 Rhu Cross).
 const seedLocations = [
-  { id:"CR", name:"Costa Rhu" },
-  { id:"PB", name:"Pebble Bay" },
-  { id:"SG", name:"Sanctuary Green" },
+  { id:"GBB", name:"Gardens by the Bay" },
+  { id:"MP",  name:"Meyer Park" },
+  { id:"WS",  name:"Waterside" },
+  { id:"CDS", name:"Costa Del Sol" },
+  { id:"BP",  name:"Bayshore Park" },
 ];
 const DEFAULT_TRAVEL = 15; // minutes — fallback for any location pair without a specific value
-const seedTravel = { "CR|PB":15, "CR|SG":20, "PB|SG":15 };
+// East Coast venues sit close together; Gardens by the Bay is a longer hop across town.
+const seedTravel = {
+  "BP|CDS":5, "BP|GBB":25, "BP|MP":12, "BP|WS":10,
+  "CDS|GBB":25, "CDS|MP":10, "CDS|WS":8,
+  "GBB|MP":20, "GBB|WS":20, "MP|WS":5,
+};
 const travelKey = (a,b)=>[a,b].sort().join("|");
 const travelBetween = (travel, a, b) => {
   if (!a || !b || a===b) return 0;
@@ -32,16 +40,23 @@ const travelBetween = (travel, a, b) => {
   return travel[travelKey(a,b)] ?? DEFAULT_TRAVEL;
 };
 
+// Danny Teo (owner/head coach) + Dylan are the real ExerciseOnly team; the last two are demo
+// placeholders until Danny confirms his full roster.
 const TRAINERS = [
-  { id:"danny", name:"Danny", tag:"Head Coach", admin:true },
-  { id:"hafiz", name:"Hafiz", tag:"Coach" },
-  { id:"meilin", name:"Mei Lin", tag:"Coach" },
-  { id:"ravi", name:"Ravi", tag:"Coach" },
+  { id:"danny", name:"Danny", tag:"Head Coach", admin:true,
+    bio:"Danny Teo — founder of ExerciseOnly. Functional-training and post-injury rehab specialist, and an NS/IPPT prep coach. \"Sore today, strong tomorrow.\"" },
+  { id:"dylan", name:"Dylan", tag:"Coach",
+    bio:"Dylan has been with ExerciseOnly for years — passionate about helping clients improve their fitness and hit their goals." },
+  { id:"marcus", name:"Marcus", tag:"Coach", demo:true, bio:"Demo coach — replace with a real trainer." },
+  { id:"wei", name:"Wei", tag:"Coach", demo:true, bio:"Demo coach — replace with a real trainer." },
 ];
+// ExerciseOnly's actual group offerings (bootcamp, HIIT, NS/IPPT prep, strength, cardio).
 const CT = {
-  STR:{ name:"Strength", dur:60, price:35, color:"#E8500A", desc:"Progressive lifts and accessories for foundational strength." },
-  CON:{ name:"Conditioning", dur:45, price:30, color:"#1F7A4D", desc:"Aerobic + anaerobic capacity. Stamina, calorie burn, recovery." },
-  HYX:{ name:"HYROX Prep", dur:75, price:40, color:"#2B4C7E", desc:"Ergs, sleds, wall balls, running mechanics. Race-day ready." },
+  STR:{ name:"Strength", dur:60, price:35, color:"#E8500A", desc:"Tailored strength work focused on your goals — and safe post-injury progressions." },
+  HIT:{ name:"HIIT", dur:45, price:30, color:"#1F7A4D", desc:"High-intensity intervals — torch ~700 calories a session." },
+  BC: { name:"Boot Camp", dur:60, price:30, color:"#2B4C7E", desc:"Weekly outdoor group camp for overall fitness and muscle endurance." },
+  NS: { name:"NS / IPPT Prep", dur:60, price:40, color:"#7B4B94", desc:"Targeted IPPT preparation from a coach who's trained many NS soldiers." },
+  CAR:{ name:"Cardio", dur:45, price:28, color:"#B8860B", desc:"All-round conditioning to keep you fit and moving." },
 };
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const TODAY = 0;
@@ -51,20 +66,20 @@ const mkS = (day,time,type,loc,trainer,cap,names) => ({
   attendees: names.map(n => ({ name:n, status:"confirmed" })),
 });
 const seedSessions = [
-  mkS(0,"06:30","STR","CR","danny",8,["Aloysius","Priya","Wen Jie","Farah","Marcus","Ivan","Grace"]),
-  mkS(0,"07:30","CON","PB","hafiz",10,["Kavitha","Dominic","Sarah T","Jun Kai"]),
-  mkS(0,"18:30","HYX","CR","danny",8,["Ben","Cheryl","Ivan","Nadia","Zhi Hao","Grace","Dinesh","Kumar"]),
-  mkS(0,"19:45","STR","SG","ravi",8,["Elaine","Kumar"]),
-  mkS(1,"06:30","CON","SG","meilin",10,["Farah","Marcus","Priya"]),
-  mkS(1,"18:30","STR","CR","danny",8,["Ben","Ivan","Sarah T","Wen Jie","Grace"]),
-  mkS(2,"06:30","STR","PB","hafiz",8,["Dominic"]),
-  mkS(2,"18:30","HYX","SG","ravi",8,["Cheryl","Nadia","Zhi Hao","Dinesh"]),
-  mkS(3,"07:30","HYX","CR","danny",8,["Ben","Ivan","Kumar"]),
-  mkS(3,"18:30","CON","PB","meilin",10,["Kavitha","Elaine","Jun Kai","Farah"]),
-  mkS(4,"06:30","STR","CR","hafiz",8,["Marcus","Priya","Wen Jie"]),
-  mkS(5,"09:00","HYX","CR","danny",10,["Ben","Cheryl","Ivan","Nadia","Grace","Dinesh"]),
-  mkS(5,"10:30","STR","PB","meilin",8,["Sarah T","Elaine"]),
-  mkS(6,"09:00","CON","SG","ravi",10,["Kumar","Dominic","Jun Kai"]),
+  mkS(0,"06:30","STR","GBB","danny",8,["Aloysius","Priya","Wen Jie","Farah","Anu","Ivan","Grace"]),
+  mkS(0,"07:30","BC","MP","dylan",10,["Kavitha","Dominic","Sarah T","Jun Kai"]),
+  mkS(0,"18:30","NS","GBB","danny",8,["Ben","Cheryl","Ivan","Nadia","Zhi Hao","Grace","Jaiveer","Kumar"]),
+  mkS(0,"19:45","STR","CDS","wei",8,["Elaine","Kumar"]),
+  mkS(1,"06:30","HIT","BP","marcus",10,["Farah","Gireesh","Priya"]),
+  mkS(1,"18:30","STR","GBB","danny",8,["Ben","Ivan","Sarah T","Wen Jie","Grace"]),
+  mkS(2,"06:30","STR","MP","dylan",8,["Dominic"]),
+  mkS(2,"18:30","NS","CDS","wei",8,["Cheryl","Nadia","Zhi Hao","Jaiveer"]),
+  mkS(3,"07:30","BC","GBB","danny",8,["Ben","Ivan","Kumar"]),
+  mkS(3,"18:30","HIT","MP","marcus",10,["Kavitha","Elaine","Jun Kai","Farah"]),
+  mkS(4,"06:30","STR","GBB","dylan",8,["Gireesh","Priya","Wen Jie"]),
+  mkS(5,"09:00","NS","GBB","danny",10,["Ben","Cheryl","Ivan","Nadia","Grace","Jaiveer"]),
+  mkS(5,"10:30","STR","MP","marcus",8,["Sarah T","Elaine"]),
+  mkS(6,"09:00","CAR","CDS","wei",10,["Kumar","Dominic","Jun Kai"]),
 ];
 
 /* ---------- PT scheduling model (req 4/5/6) ----------
@@ -79,25 +94,25 @@ const SLOT_STEP = 45; // bookable start granularity = one PT session, so slots s
 // On-shift working hours per trainer (general, not per-location). `days` = demo weekdays worked.
 const WORK = {
   danny:  { start:"09:00", end:"16:00", days:[0,1,2,3,4,5] },
-  hafiz:  { start:"08:00", end:"13:00", days:[0,1,2,3,4] },
-  meilin: { start:"10:00", end:"15:00", days:[0,1,3,4,5] },
-  ravi:   { start:"14:00", end:"19:00", days:[0,1,2,5,6] },
+  dylan:  { start:"08:00", end:"13:00", days:[0,1,2,3,4] },
+  marcus: { start:"10:00", end:"15:00", days:[0,1,3,4,5] },
+  wei:    { start:"14:00", end:"19:00", days:[0,1,2,5,6] },
 };
 const workWindow = (trainerId, dayIdx) => {
   const w = WORK[trainerId];
   return w && w.days.includes(dayIdx) ? [toMin(w.start), toMin(w.end)] : null;
 };
 // Head coach (Danny) is priced separately from the other coaches — see PT packs too.
-const PT_PRICE = { danny:120, hafiz:90, meilin:90, ravi:90 };
+const PT_PRICE = { danny:120, dylan:90, marcus:85, wei:85 };
 const isHead = (trainerId) => !!TRAINERS.find(t=>t.id===trainerId)?.admin;
-// seed PT booking by *another* client at Costa Rhu — demonstrates same-location back-to-back
-// (0 gap) vs. cross-location travel buffer (auto-shift) on Danny's Monday.
+// seed PT booking by *another* client at Gardens by the Bay — demonstrates same-location
+// back-to-back (0 gap) vs. cross-location travel buffer (auto-shift) on Danny's Monday.
 const seedPtBookings = [
-  { id:"ptb1", trainer:"danny", day:0, time:"11:15", loc:"CR", who:"Priya" },
+  { id:"ptb1", trainer:"danny", day:0, time:"11:15", loc:"GBB", who:"Priya" },
 ];
 // trainer time off — one-off date or weekly-recurring, full day or a time range
 const seedTimeOff = [
-  { id:"to1", trainer:"ravi", scope:"weekly", day:1, allDay:false, start:"16:00", end:"18:00", reason:"School pickup" },
+  { id:"to1", trainer:"wei", scope:"weekly", day:1, allDay:false, start:"16:00", end:"18:00", reason:"School pickup" },
 ];
 
 /* ---------- products ----------
@@ -117,33 +132,33 @@ const seedProducts = [
 
 /* ---------- camps: builder data — days -> session blocks, not a flat date range ---------- */
 const seedCamps = [
-  { id:"c1", name:"HYROX Adult Camp", type:"Adult", dates:"15–16 Aug", loc:"CR", price:180, spots:6, cap:16,
+  { id:"c1", name:"Adult Conditioning Camp", type:"Adult", dates:"15–16 Aug", loc:"GBB", price:180, spots:6, cap:16,
     days:[
-      { label:"Day 1", sessions:[{ activity:"Erg & Sled Conditioning", trainer:"danny", start:"09:00", hours:2 }] },
-      { label:"Day 2", sessions:[{ activity:"Race Simulation", trainer:"danny", start:"09:00", hours:2 }] },
+      { label:"Day 1", sessions:[{ activity:"HIIT & Strength Circuit", trainer:"danny", start:"09:00", hours:2 }] },
+      { label:"Day 2", sessions:[{ activity:"Boot Camp & Conditioning", trainer:"danny", start:"09:00", hours:2 }] },
     ] },
-  { id:"c2", name:"Kids Functional Camp", type:"Kids", dates:"3–5 Sep (ages 8–12)", loc:"SG", price:120, spots:9, cap:20,
+  { id:"c2", name:"Kids Multi-Sport Camp", type:"Kids", dates:"3–5 Sep (ages 10–15)", loc:"CDS", price:120, spots:9, cap:20,
     days:[
-      { label:"Day 1", sessions:[{ activity:"Football", trainer:"ravi", start:"09:00", hours:2 }] },
-      { label:"Day 2", sessions:[{ activity:"Dodgeball", trainer:"meilin", start:"09:00", hours:2 }] },
-      { label:"Day 3", sessions:[{ activity:"Obstacle Relay", trainer:"ravi", start:"09:00", hours:2 },
-                                   { activity:"Swim Fun", trainer:"meilin", start:"13:00", hours:1 }] },
+      { label:"Day 1", sessions:[{ activity:"Football", trainer:"dylan", start:"09:00", hours:2 }] },
+      { label:"Day 2", sessions:[{ activity:"Swimming", trainer:"danny", start:"09:00", hours:2 }] },
+      { label:"Day 3", sessions:[{ activity:"Muay Thai Basics", trainer:"wei", start:"09:00", hours:2 },
+                                   { activity:"Fun Fitness Games", trainer:"dylan", start:"13:00", hours:1 }] },
     ] },
 ];
 
 /* ---------- classes: reusable weekly-timetable templates ---------- */
 const seedClassTemplates = [
   { id:"t1", name:"Standard Timetable", blocks:[
-    { day:0, time:"06:30", type:"STR", loc:"CR", trainer:"danny", cap:8 },
-    { day:0, time:"07:30", type:"CON", loc:"PB", trainer:"hafiz", cap:10 },
-    { day:0, time:"18:30", type:"HYX", loc:"CR", trainer:"danny", cap:8 },
-    { day:1, time:"06:30", type:"CON", loc:"SG", trainer:"meilin", cap:10 },
-    { day:2, time:"06:30", type:"STR", loc:"PB", trainer:"hafiz", cap:8 },
-    { day:3, time:"07:30", type:"HYX", loc:"CR", trainer:"danny", cap:8 },
+    { day:0, time:"06:30", type:"STR", loc:"GBB", trainer:"danny", cap:8 },
+    { day:0, time:"07:30", type:"BC", loc:"MP", trainer:"dylan", cap:10 },
+    { day:0, time:"18:30", type:"NS", loc:"GBB", trainer:"danny", cap:8 },
+    { day:1, time:"06:30", type:"HIT", loc:"BP", trainer:"marcus", cap:10 },
+    { day:2, time:"06:30", type:"STR", loc:"MP", trainer:"dylan", cap:8 },
+    { day:3, time:"07:30", type:"BC", loc:"GBB", trainer:"danny", cap:8 },
   ] },
 ];
 
-const COUPONS = { WELCOME10:{ pct:10, label:"10% off — new client" }, HYROX5: { flat:5, label:"$5 off HYROX Prep" } };
+const COUPONS = { WELCOME10:{ pct:10, label:"10% off — new client" }, IPPT5: { flat:5, label:"$5 off NS/IPPT Prep" } };
 const seedLedger = [
   { id:nid(), who:"Priya", what:"10 Class Pack", amt:300, method:"PayNow", status:"paid", d:"Mon 09:12" },
   { id:nid(), who:"Ben", what:"5 PT Pack", amt:425, method:"Card", status:"paid", d:"Mon 08:47" },
@@ -164,7 +179,7 @@ const seedWorkoutSessions = [
     sets:[{ex:"Back Squat", muscle:"Legs", w:75, reps:"5×5"},{ex:"Leg Press", muscle:"Legs", w:130, reps:"3×10"}] },
 ];
 const seedLeads = [
-  { id:nid(), name:"Rachel Ong", source:"Instagram", status:"new", note:"DM'd asking about HYROX prep pricing" },
+  { id:nid(), name:"Rachel Ong", source:"Instagram", status:"new", note:"DM'd @exercise.only asking about NS/IPPT prep pricing" },
   { id:nid(), name:"Jon Tay", source:"Enquiry form", status:"contacted", note:"Wants a trial Strength class" },
   { id:nid(), name:"Wen Jie's colleague", source:"Referral", status:"trial booked", note:"Referred by Wen Jie" },
 ];
@@ -322,12 +337,12 @@ export default function DannyFitnessDemo() {
   const [classTemplates, setClassTemplates] = useState(seedClassTemplates);
   const [ledger, setLedger] = useState(seedLedger);
   const [leads, setLeads] = useState(seedLeads);
-  const [perm, setPerm] = useState({ hafiz:{editDesc:false, cancel:false, earnings:false, manageLocations:false},
-    meilin:{editDesc:true, cancel:false, earnings:false, manageLocations:false}, ravi:{editDesc:false, cancel:false, earnings:true, manageLocations:false} });
+  const [perm, setPerm] = useState({ dylan:{editDesc:false, cancel:false, earnings:false, manageLocations:false},
+    marcus:{editDesc:true, cancel:false, earnings:false, manageLocations:false}, wei:{editDesc:false, cancel:false, earnings:true, manageLocations:false} });
   const [measurements, setMeasurements] = useState([{who:"Sam Lee", weight:74.5, fat:19.2, d:"1 Jul"},{who:"Sam Lee", weight:73.8, fat:18.4, d:"15 Jul"}]);
   const [ratings, setRatings] = useState({});
   const [noShowQueue, setNoShowQueue] = useState([
-    { id:nid(), who:"Kumar", session:"Strength · Sun 19:45 · Sanctuary Green", policy:"Forfeit 1 credit" },
+    { id:nid(), who:"Kumar", session:"Strength · Sun 19:45 · Costa Del Sol", policy:"Forfeit 1 credit" },
   ]);
   const [referralCode] = useState("SAM-LEE-24");
   const [referralUses, setReferralUses] = useState(1);
@@ -339,7 +354,7 @@ export default function DannyFitnessDemo() {
   const [loc, setLoc] = useState("all");
   const [ptLoc, setPtLoc] = useState(seedLocations[0].id); // PT needs a real place (coach is available anywhere); supports "other"
   const [otherPlace, setOtherPlace] = useState("");
-  const [ptTrainers, setPtTrainers] = useState(["danny","hafiz","meilin","ravi"]);
+  const [ptTrainers, setPtTrainers] = useState(["danny","dylan","marcus","wei"]);
   const [sheet, setSheet] = useState(null);
   const [payMode, setPayMode] = useState("credit");
   const [coupon, setCoupon] = useState("");
@@ -362,7 +377,7 @@ export default function DannyFitnessDemo() {
 
   const login = (role) => {
     if (role==="client") setUser({role, id:"sam", name:"Sam Lee"});
-    if (role==="trainer") setUser({role, id:"hafiz", name:"Hafiz"});
+    if (role==="trainer") setUser({role, id:"dylan", name:"Dylan"});
     if (role==="admin") setUser({role, id:"danny", name:"Danny"});
     setTab(role==="client"?"home":"today");
     setCoupon(""); setCouponMsg(null);
@@ -496,12 +511,13 @@ export default function DannyFitnessDemo() {
       <style>{FONTS}</style>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div style={{...disp,fontWeight:700,fontSize:52,lineHeight:1,color:T.paper}}>DANNY<span style={{color:T.accent}}>FITNESS</span></div>
+          <div style={{...disp,fontWeight:700,fontSize:52,lineHeight:1,color:T.paper}}>EXERCISE<span style={{color:T.accent}}>ONLY</span></div>
+          <div className="text-xs mt-2 italic" style={{color:T.accent}}>Sore today, strong tomorrow.</div>
           <div className="text-sm mt-1" style={{color:"#B9B5A9"}}>{locations.map(l=>l.name).join(" · ")}</div>
         </div>
         {[
-          ["client","Sam Lee","Client · 5 class + 2 PT credits"],
-          ["trainer","Hafiz","Trainer · Coach"],
+          ["client","Sam Lee","Client · class + PT credits"],
+          ["trainer","Dylan","Trainer · Coach"],
           ["admin","Danny","Admin · Head Coach & Owner"],
         ].map(([role,name,sub])=>(
           <button key={role} onClick={()=>login(role)}
@@ -536,7 +552,7 @@ export default function DannyFitnessDemo() {
       <div className="w-full max-w-md min-h-screen flex flex-col relative" style={{background:T.paper}}>
         <header className="px-5 pt-5 pb-3 flex items-center justify-between">
           <div>
-            <div style={{...disp,fontWeight:700,fontSize:21,lineHeight:1}}>DANNY<span style={{color:T.accent}}>FITNESS</span></div>
+            <div style={{...disp,fontWeight:700,fontSize:21,lineHeight:1}}>EXERCISE<span style={{color:T.accent}}>ONLY</span></div>
             <div className="text-xs" style={{color:T.muted}}>{user.name} · {isAdmin?"Admin":isClient?"Member":"Coach"} · Mon (demo)</div>
           </div>
           <button onClick={()=>setUser(null)} className="text-xs font-bold px-3 py-2 rounded-lg"
@@ -841,6 +857,11 @@ export default function DannyFitnessDemo() {
             </Card>
             <Card className="flex justify-between items-center"><div className="text-sm">Marketing messages</div>
               <span className="text-xs font-bold" style={{color:T.muted}}>OPT-IN OFF ▢</span></Card>
+            <Card style={{background:"#EFF3EE"}} className="flex items-center justify-between">
+              <div><div className="font-semibold text-sm">Message your coach</div>
+                <div className="text-xs" style={{color:T.muted}}>WhatsApp Danny · +65 8100 6608</div></div>
+              <Btn small kind="dark" onClick={()=>ping("Opens WhatsApp chat with your coach (deep-link in production)")}>Chat</Btn>
+            </Card>
             <div className="text-xs text-center" style={{color:T.muted}}>Privacy policy · Request account deletion</div>
           </main>)}
 
@@ -944,12 +965,13 @@ export default function DannyFitnessDemo() {
         {!isClient && !isAdmin && tab==="me" && (
           <main className="flex-1 pb-24 px-5 space-y-3">
             <H>Me</H>
-            <Card><div className="font-bold">Hafiz</div><div className="text-xs" style={{color:T.muted}}>Coach · Strength & Conditioning</div></Card>
+            <Card><div className="font-bold">Dylan</div><div className="text-xs" style={{color:T.muted}}>Coach · Strength & Conditioning</div>
+              <div className="text-xs mt-2" style={{color:T.muted}}>{TRAINERS.find(t=>t.id==="dylan").bio}</div></Card>
             <Card><div className="text-xs font-bold mb-1" style={{color:T.muted}}>THIS WEEK</div>
-              <div className="text-sm">{staffSessions("hafiz").length} classes · PT shift {WORK.hafiz.start}–{WORK.hafiz.end} ({WORK.hafiz.days.length} days), bookable at any location</div></Card>
+              <div className="text-sm">{staffSessions("dylan").length} classes · PT shift {WORK.dylan.start}–{WORK.dylan.end} ({WORK.dylan.days.length} days), bookable at any location</div></Card>
             <Card><div className="text-xs font-bold mb-1" style={{color:T.muted}}>EARNINGS</div>
-              <div className="text-sm" style={{color:T.muted}}>{perm.hafiz.earnings?"Visible: 12 sessions × $40 = $480 this month":"Hidden — enabled by admin per trainer"}</div></Card>
-            <div className="text-xs text-center" style={{color:T.muted}}>Permissions set by Danny (admin). Currently: attendance ✓, availability ✓, edit descriptions {perm.hafiz.editDesc?"✓":"✗"}.</div>
+              <div className="text-sm" style={{color:T.muted}}>{perm.dylan.earnings?"Visible: 12 sessions × $40 = $480 this month":"Hidden — enabled by admin per trainer"}</div></Card>
+            <div className="text-xs text-center" style={{color:T.muted}}>Permissions set by Danny (admin). Currently: attendance ✓, availability ✓, edit descriptions {perm.dylan.editDesc?"✓":"✗"}.</div>
           </main>)}
 
         {/* ==================== ADMIN: CAMPS (builder) ==================== */}
@@ -1009,7 +1031,7 @@ export default function DannyFitnessDemo() {
                 </Card>)}
               <Card style={{background:"#F7EEE9"}}>
                 <div className="text-xs font-bold" style={{color:T.accent}}>ALERTS</div>
-                <div className="text-sm mt-1">· Wed 06:30 Strength @ Pebble Bay has 1 booking — consider auto-cancel rule</div>
+                <div className="text-sm mt-1">· Wed 06:30 Strength @ Meyer Park has 1 booking — consider auto-cancel rule</div>
                 <div className="text-sm">· Priya's 10-pack expires in 6 days (3 unused)</div>
               </Card>
             </div>}
@@ -1129,6 +1151,14 @@ export default function DannyFitnessDemo() {
             </div>}
 
             {adminSec==="settings" && <div className="space-y-3">
+              <div className="text-xs font-bold" style={{color:T.muted}}>BUSINESS PROFILE</div>
+              <Card style={{background:T.ink,color:T.paper,border:"none"}}>
+                <div style={{...disp,fontWeight:700,fontSize:18}}>EXERCISE<span style={{color:T.accent}}>ONLY</span></div>
+                <div className="text-xs italic mt-0.5" style={{color:T.accent}}>Sore today, strong tomorrow.</div>
+                <div className="text-xs mt-2" style={{color:"#B9B5A9"}}>{TRAINERS.find(t=>t.id==="danny").bio}</div>
+                <div className="text-xs mt-2" style={{color:"#B9B5A9"}}>WhatsApp +65 8100 6608 · @exercise.only · 4exerciseonly@gmail.com</div>
+                <div className="text-xs" style={{color:"#B9B5A9"}}>11 Rhu Cross, Singapore 437440 (Gardens by the Bay)</div>
+              </Card>
               <div className="text-xs font-bold" style={{color:T.muted}}>LOCATIONS</div>
               {locations.map(l=>(
                 <Card key={l.id} className="!p-3 flex items-center justify-between">
