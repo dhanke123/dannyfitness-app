@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 
 /* ============================================================
    DannyFitness — v2 demo (Client / Trainer / Admin)
@@ -384,9 +384,13 @@ export default function DannyFitnessDemo() {
     { from:"coach", text:"Hi Sam! Great work in Monday's session 💪 Let me know if you want to add a PT slot this week." },
   ]);
   const [chatInput, setChatInput] = useState("");
-  const [addTrainer, setAddTrainer] = useState(null); // Add Trainer form
+  const [addTrainer, setAddTrainer] = useState(null); // Add/Edit Trainer form (has .editId when editing)
   const [shiftEditor, setShiftEditor] = useState(null); // {trainer}
   const [moveDay, setMoveDay] = useState(null); // running-late cascade sheet {trainer}
+  const [doneSheet, setDoneSheet] = useState(null); // complete-session sheet {session/pt}
+  const [incidentals, setIncidentals] = useState([  // trainer-logged extras awaiting Danny's approval
+    { id:nid(), trainer:"wei", label:"Parking at Costa Del Sol", amt:8, note:"Sat NS class", status:"pending" },
+  ]);
 
   const [seg, setSeg] = useState("classes");
   const [day, setDay] = useState(TODAY);
@@ -412,6 +416,28 @@ export default function DannyFitnessDemo() {
 
   const tName = (id)=>trainers.find(t=>t.id===id)?.name || id;
   const locName = (id)=> id==="other" ? "Other" : (locations.find(l=>l.id===id)?.name || id);
+
+  // ---- Android/browser back handling: back closes an open sheet, else returns to the home
+  // tab, and never drops the user out of the app. ----
+  const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
+    setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
+    setMeasForm(null); setLogSheet(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
+    setDoneSheet(null); setRateSheet(null); };
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||logSheet||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet);
+  const backRef = useRef({});
+  backRef.current = { anyOverlay, tab, user, closeOverlays };
+  useEffect(() => {
+    window.history.pushState({app:true}, "");
+    const onPop = () => {
+      const st = backRef.current;
+      if (st.anyOverlay) { st.closeOverlays(); }
+      else if (st.user && !["home","today"].includes(st.tab)) { setTab(st.user.role==="client"?"home":"today"); }
+      // else: at a root tab — stay put (re-push below so the app isn't exited)
+      window.history.pushState({app:true}, "");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const booked = (s)=>s.attendees.length + (myClassBookings.includes(s.id)?1:0);
 
   const login = (role) => {
@@ -557,7 +583,7 @@ export default function DannyFitnessDemo() {
 
   const staffSessions = (tid)=>sessions.filter(s=>sessTrainers(s).includes(tid));
   const staffTimeOff = (tid)=>timeOff.filter(t=>t.trainer===tid && t.active!==false);
-  const revenue = ledger.filter(l=>l.status==="paid").reduce((a,b)=>a+b.amt,0);
+  const revenue = ledger.filter(l=>l.status==="paid").reduce((a,b)=>a+Math.max(0,b.amt),0);
 
   /* ============================ LOGIN ============================ */
   if (!user) return (
@@ -961,9 +987,12 @@ export default function DannyFitnessDemo() {
                     <div style={{...disp,fontWeight:700,fontSize:24,minWidth:56}} className="text-right">{s.time}</div>
                     <div style={{width:3,height:34,borderRadius:2,background:ct.color}}/>
                     <div className="flex-1">
-                      <div className="font-semibold text-sm">{ct.name} · {locName(s.loc)}</div>
+                      <div className="font-semibold text-sm">{ct.name} · {locName(s.loc)} {s.done && <span className="text-xs" style={{color:T.moss}}>· DONE ✓</span>}</div>
                       <div className="text-xs" style={{color:T.muted}}>Coach {tName(s.trainer)} · {n}/{s.cap} booked</div></div>
-                    <Btn small kind="ghost" onClick={()=>setRosterOpen(rosterOpen===s.id?null:s.id)}>{rosterOpen===s.id?"Hide":"Roster"}</Btn>
+                    <div className="flex flex-col gap-1">
+                      <Btn small kind="ghost" onClick={()=>setRosterOpen(rosterOpen===s.id?null:s.id)}>{rosterOpen===s.id?"Hide":"Roster"}</Btn>
+                      {!s.done && <Btn small kind="dark" onClick={()=>setDoneSheet({kind:"class", id:s.id, trainer:s.trainer, label:`${ct.name} · ${locName(s.loc)}`, incLabel:"", incAmt:""})}>Complete</Btn>}
+                    </div>
                   </div>
                   {rosterOpen===s.id && (
                     <div className="mt-3 pt-3" style={{borderTop:`1.5px solid ${T.line}`}}>
@@ -1130,7 +1159,8 @@ export default function DannyFitnessDemo() {
               };
               const payouts = trainers.map(t=>({t, amt:payoutFor(t.id)}));
               const totalPayout = payouts.reduce((a,b)=>a+b.amt,0);
-              const profit = revenue - totalPayout;
+              const approvedInc = incidentals.filter(i=>i.status==="approved").reduce((a,b)=>a+b.amt,0);
+              const profit = revenue - totalPayout - approvedInc;
               return (
               <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
@@ -1141,6 +1171,7 @@ export default function DannyFitnessDemo() {
                 <div className="text-xs font-bold mb-2" style={{color:"#B9B5A9"}}>REVENUE vs COST (this week)</div>
                 <div className="flex justify-between text-sm"><span>Revenue collected</span><span className="font-bold" style={{color:"#8FD9B6"}}>${revenue}</span></div>
                 <div className="flex justify-between text-sm"><span>Trainer payout (est.)</span><span className="font-bold" style={{color:T.accent}}>-${totalPayout}</span></div>
+                {approvedInc>0 && <div className="flex justify-between text-sm"><span>Approved incidentals</span><span className="font-bold" style={{color:T.accent}}>-${approvedInc}</span></div>}
                 <div className="flex justify-between text-sm mt-1 pt-1" style={{borderTop:"1px solid #3A362B"}}><span className="font-bold">Gross margin</span><span className="font-bold">${profit}</span></div>
                 <div className="mt-2 space-y-0.5">
                   {payouts.map(({t,amt})=>(
@@ -1192,9 +1223,10 @@ export default function DannyFitnessDemo() {
                   <div className="flex items-center justify-between">
                     <div><div className="font-semibold text-sm">{t.name}</div>
                       <div className="text-xs" style={{color:T.muted}}>{t.tag} · {rt ? (rt.type==="salary" ? `$${rt.monthly}/mo salary` : `$${rt.perClass}/class · $${rt.perPt}/PT`) : "rate not set"}</div></div>
-                    <div className="flex gap-2">
-                      <Btn small kind="ghost" onClick={()=>setPermOpen(permOpen===t.id?null:t.id)}>Permissions</Btn>
-                      <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — sessions need reassignment`)}>Deactivate</Btn>
+                    <div className="flex gap-1.5">
+                      <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
+                      <Btn small kind="ghost" onClick={()=>setPermOpen(permOpen===t.id?null:t.id)}>Perms</Btn>
+                      <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — sessions need reassignment`)}>Off</Btn>
                     </div>
                   </div>
                   {permOpen===t.id && (
@@ -1219,7 +1251,10 @@ export default function DannyFitnessDemo() {
                     <div className="text-xs" style={{color:T.muted}}>${p.price} · {p.kind}{p.sessions?` · ${p.sessions} sessions`:""}</div></div>
                   <button onClick={()=>setProducts(ps=>ps.map(x=>x.id!==p.id?x:{...x,active:!x.active}))}
                     className="text-xs font-bold" style={{color:p.active?T.moss:T.muted}}>{p.active?"ACTIVE ●":"HIDDEN ○"}</button>
+                  <button onClick={()=>{ setProducts(ps=>ps.filter(x=>x.id!==p.id)); ping(`${p.name} deleted`); }}
+                    className="text-xs font-bold px-1.5 py-1 rounded" style={{color:T.accent,border:`1.5px solid ${T.line}`}}>Delete</button>
                 </Card>))}
+              <div className="text-xs" style={{color:T.muted}}>Deactivate hides a pack from the shop but keeps already-purchased ones valid. Delete removes it entirely.</div>
               <div className="text-xs font-bold pt-2" style={{color:T.muted}}>COUPONS</div>
               {Object.entries(COUPONS).map(([code,c])=>(
                 <Card key={code} className="flex items-center gap-3 !p-3">
@@ -1260,6 +1295,24 @@ export default function DannyFitnessDemo() {
                 <div className="text-xs" style={{color:"#B9B5A9"}}>PAYMENT METHODS</div>
                 <div className="text-sm mt-1">PayNow (UEN linked) ✓ · Card via Stripe ✓ · Cash ✓</div>
               </Card>
+              {incidentals.filter(i=>i.status==="pending").length>0 && (
+                <>
+                  <div className="text-xs font-bold" style={{color:T.accent}}>INCIDENTALS · trainer-submitted, awaiting your approval</div>
+                  {incidentals.filter(i=>i.status==="pending").map(i=>(
+                    <Card key={i.id} style={{background:"#F7EEE9"}}>
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-sm">{i.label} · ${i.amt}</div>
+                        <div className="text-xs" style={{color:T.muted}}>{tName(i.trainer)}</div>
+                      </div>
+                      <div className="text-xs mb-2" style={{color:T.muted}}>{i.note}</div>
+                      <div className="flex gap-2">
+                        <Btn small kind="ghost" onClick={()=>{setIncidentals(x=>x.map(y=>y.id!==i.id?y:{...y,status:"rejected"})); ping("Incidental rejected");}}>Reject</Btn>
+                        <Btn small onClick={()=>{setIncidentals(x=>x.map(y=>y.id!==i.id?y:{...y,status:"approved"}));
+                          setLedger(l=>[{id:nid(),who:tName(i.trainer),what:`Incidental · ${i.label}`,amt:-i.amt,method:"Expense",status:"paid",d:"Today"},...l]);
+                          ping("Approved — recorded as an expense for analysis (audited)");}}>Approve</Btn>
+                      </div>
+                    </Card>))}
+                </>)}
               {noShowQueue.length>0 && (
                 <>
                   <div className="text-xs font-bold" style={{color:T.accent}}>NO-SHOW DECISIONS · waive or apply</div>
@@ -1342,8 +1395,11 @@ export default function DannyFitnessDemo() {
         {sheet && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setSheet(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>
-                {sheet.kind==="class"?`${CT[sheet.type].name} · ${DAYS[sheet.day]} ${sheet.time}`:`PT with ${tName(sheet.trainer)} · ${DAYS[sheet.day]} ${sheet.time}`}</div>
+              <div className="flex items-start justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>
+                  {sheet.kind==="class"?`${CT[sheet.type].name} · ${DAYS[sheet.day]} ${sheet.time}`:`PT with ${tName(sheet.trainer)} · ${DAYS[sheet.day]} ${sheet.time}`}</div>
+                <button onClick={()=>setSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg -mt-1" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
               {sheet.kind==="pt" && sheet.loc==="other" ? (
                 <div className="flex items-center gap-2 mb-1">
                   <input value={otherPlace} onChange={e=>setOtherPlace(e.target.value)} placeholder="Place name" className="flex-1 px-2 py-1.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`}}/>
@@ -1385,7 +1441,10 @@ export default function DannyFitnessDemo() {
         {shopSheet && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setShopSheet(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>Checkout</div>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Checkout</div>
+                <button onClick={()=>setShopSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
               <div className="text-sm mb-3" style={{color:T.muted}}>{shopSheet.product.name} · ${shopSheet.product.price}</div>
               <div className="space-y-2 mb-3">
                 {[["paynow","PayNow QR"],["card","Card"]].map(([k,label])=>(
@@ -1409,7 +1468,10 @@ export default function DannyFitnessDemo() {
         {campSheet && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setCampSheet(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[90vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>{campSheet.camp.name}</div>
+              <div className="flex items-start justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>{campSheet.camp.name}</div>
+                <button onClick={()=>setCampSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg -mt-1" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
               <div className="text-sm mb-3" style={{color:T.muted}}>{campSheet.camp.dates} · {locName(campSheet.camp.loc)} · ${campSheet.camp.price}</div>
 
               {campSheet.waiver && (<>
@@ -1550,6 +1612,33 @@ export default function DannyFitnessDemo() {
             </div>
           </div>);})()}
 
+        {/* complete-session sheet — mark done + log incidentals for Danny's approval */}
+        {doneSheet && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setDoneSheet(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Complete session</div>
+                <button onClick={()=>setDoneSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-sm mb-3" style={{color:T.muted}}>{doneSheet.label}</div>
+              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>ADD AN INCIDENTAL (optional) — goes to Danny for approval</div>
+              <div className="flex gap-2 mb-2">
+                <input value={doneSheet.incLabel} onChange={e=>setDoneSheet(d=>({...d,incLabel:e.target.value}))} placeholder="e.g. Parking, equipment, extra 30 min"
+                  className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <input value={doneSheet.incAmt} onChange={e=>setDoneSheet(d=>({...d,incAmt:e.target.value}))} placeholder="$" type="number"
+                  className="w-20 px-2 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+              </div>
+              <div className="text-xs mb-3" style={{color:T.muted}}>Recorded against this session for money & revenue analysis once Danny approves.</div>
+              <Btn full onClick={()=>{
+                setSessions(ss=>ss.map(s=>s.id!==doneSheet.id?s:{...s,done:true}));
+                if (doneSheet.incLabel && +doneSheet.incAmt>0) {
+                  setIncidentals(inc=>[...inc,{id:nid(), trainer:doneSheet.trainer, label:doneSheet.incLabel, amt:+doneSheet.incAmt, note:doneSheet.label, status:"pending"}]);
+                  ping("Session completed · incidental sent to Danny for approval");
+                } else ping("Session marked complete");
+                setDoneSheet(null);}}>Mark complete{doneSheet.incLabel&&+doneSheet.incAmt>0?" & submit incidental":""}</Btn>
+            </div>
+          </div>)}
+
         {/* shift-hours editor — per-weekday, weekly recurring */}
         {shiftEditor && (() => {
           const tid = shiftEditor.trainer; const sh = shifts[tid] || {};
@@ -1576,11 +1665,14 @@ export default function DannyFitnessDemo() {
             </div>
           </div>);})()}
 
-        {/* add trainer form (with cost/rate) */}
+        {/* add / edit trainer form (with cost/rate) */}
         {addTrainer && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setAddTrainer(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>Add trainer</div>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>{addTrainer.editId?"Edit trainer":"Add trainer"}</div>
+                <button onClick={()=>setAddTrainer(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
               <div className="text-xs mb-3" style={{color:T.muted}}>Rates can be temporary — set a per-class / per-PT rate or a monthly salary. Used for payout & cost tracking.</div>
               <div className="space-y-2 mb-3">
                 <input value={addTrainer.name} onChange={e=>setAddTrainer(a=>({...a,name:e.target.value}))} placeholder="Name"
@@ -1604,12 +1696,22 @@ export default function DannyFitnessDemo() {
                   </div>)}
               </div>
               <Btn full disabled={!addTrainer.name} onClick={()=>{
-                const id = addTrainer.name.trim().toLowerCase().replace(/[^a-z]/g,"").slice(0,8)+nid();
-                setTrainers(ts=>[...ts,{id,name:addTrainer.name.trim(),tag:"Coach"}]);
-                setRates(r=>({...r,[id]:{type:addTrainer.payType, perClass:+addTrainer.perClass||0, perPt:+addTrainer.perPt||0, monthly:+addTrainer.monthly||0}}));
-                setShifts(s=>({...s,[id]:{0:["09:00","17:00"],1:["09:00","17:00"],2:["09:00","17:00"],3:["09:00","17:00"],4:["09:00","17:00"]}}));
-                setPerm(p=>({...p,[id]:{editDesc:false,cancel:false,earnings:false,manageLocations:false}}));
-                ping(`${addTrainer.name.trim()} added — shift hours & rate set`); setAddTrainer(null);}}>Add trainer</Btn>
+                const nm = addTrainer.name.trim();
+                const rateObj = {type:addTrainer.payType, perClass:+addTrainer.perClass||0, perPt:+addTrainer.perPt||0, monthly:+addTrainer.monthly||0};
+                if (addTrainer.editId) {
+                  const id = addTrainer.editId;
+                  setTrainers(ts=>ts.map(t=>t.id!==id?t:{...t,name:nm,phone:addTrainer.phone}));
+                  setRates(r=>({...r,[id]:rateObj}));
+                  ping(`${nm} updated`);
+                } else {
+                  const id = nm.toLowerCase().replace(/[^a-z]/g,"").slice(0,8)+nid();
+                  setTrainers(ts=>[...ts,{id,name:nm,tag:"Coach",phone:addTrainer.phone}]);
+                  setRates(r=>({...r,[id]:rateObj}));
+                  setShifts(s=>({...s,[id]:{0:["09:00","17:00"],1:["09:00","17:00"],2:["09:00","17:00"],3:["09:00","17:00"],4:["09:00","17:00"]}}));
+                  setPerm(p=>({...p,[id]:{editDesc:false,cancel:false,earnings:false,manageLocations:false}}));
+                  ping(`${nm} added — shift hours & rate set`);
+                }
+                setAddTrainer(null);}}>{addTrainer.editId?"Save changes":"Add trainer"}</Btn>
             </div>
           </div>)}
 
