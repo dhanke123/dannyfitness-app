@@ -179,6 +179,12 @@ const seedLedger = [
   { id:nid(), who:"Kumar", what:"Drop-in · Strength", amt:35, method:"Cash", status:"paid", d:"Sun 19:50" },
   { id:nid(), who:"Elaine", what:"Unlimited Monthly", amt:280, method:"PayNow", status:"paid", d:"Sun 10:02" },
 ];
+// Cardio / activity types for the "Log activity" sheet. `dist` = whether a distance field applies.
+const ACTIVITIES = [
+  { name:"Run", dist:true }, { name:"Cycle", dist:true }, { name:"Swim", dist:true },
+  { name:"Walk / Hike", dist:true }, { name:"Row", dist:true }, { name:"Sports", dist:false },
+  { name:"Muay Thai", dist:false }, { name:"Yoga / Mobility", dist:false }, { name:"Other", dist:false },
+];
 const EXLIB = {
   Legs: ["Back Squat","Deadlift","Leg Press","Walking Lunge"],
   Back: ["Pull-up","Bent-over Row","Lat Pulldown"],
@@ -353,6 +359,7 @@ export default function DannyFitnessDemo() {
   const [logOpen, setLogOpen] = useState(null);
   const [logSheet, setLogSheet] = useState(null);
   const [progEx, setProgEx] = useState("Back Squat"); // exercise selected for the progress chart
+  const [noteSheet, setNoteSheet] = useState(null); // activity/cardio logger
   const [intakeForm, setIntakeForm] = useState(null);
   const [products, setProducts] = useState(seedProducts);
   const [camps, setCamps] = useState(seedCamps);
@@ -422,8 +429,8 @@ export default function DannyFitnessDemo() {
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setLogSheet(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setRateSheet(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||logSheet||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet);
+    setDoneSheet(null); setRateSheet(null); setNoteSheet(null); };
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||logSheet||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -901,7 +908,7 @@ export default function DannyFitnessDemo() {
               </Card>)}
             <div className="mt-3 flex gap-2">
               <Btn full kind="ghost" onClick={()=>setLogSheet({sets:[], label:"Workout"})}>+ Log exercises</Btn>
-              <Btn full kind="ghost" onClick={()=>{setLogs(l=>[{id:nid(),d:"Today",title:"Personal workout",detail:"Zone 2 run · 6km",kind:"self"},...l]); ping("Personal entry added");}}>+ Quick note</Btn>
+              <Btn full kind="ghost" onClick={()=>setNoteSheet({activity:"Run", duration:"", distance:"", notes:""})}>+ Log activity</Btn>
             </div>
           </main>)}
 
@@ -1751,6 +1758,45 @@ export default function DannyFitnessDemo() {
                 setMeasForm(null); ping("Stats saved — visible in client's Log tab");}}>Save</Btn>
             </div>
           </div>)}
+
+        {/* activity logger — cardio / sports with duration + optional distance */}
+        {noteSheet && (() => {
+          const act = ACTIVITIES.find(a=>a.name===noteSheet.activity) || ACTIVITIES[0];
+          return (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setNoteSheet(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Log activity</div>
+                <button onClick={()=>setNoteSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-xs font-bold mb-1.5 mt-2" style={{color:T.muted}}>ACTIVITY</div>
+              <div className="flex gap-1.5 flex-wrap mb-3">
+                {ACTIVITIES.map(a=>(
+                  <Chip key={a.name} active={noteSheet.activity===a.name} onClick={()=>setNoteSheet(n=>({...n,activity:a.name}))}>{a.name}</Chip>))}
+              </div>
+              <div className="flex gap-2 mb-3">
+                <div className="flex-1">
+                  <div className="text-xs mb-1" style={{color:T.muted}}>Duration (min)</div>
+                  <input value={noteSheet.duration} onChange={e=>setNoteSheet(n=>({...n,duration:e.target.value}))} placeholder="e.g. 40" type="number"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                </div>
+                {act.dist && (
+                  <div className="flex-1">
+                    <div className="text-xs mb-1" style={{color:T.muted}}>Distance (km)</div>
+                    <input value={noteSheet.distance} onChange={e=>setNoteSheet(n=>({...n,distance:e.target.value}))} placeholder="e.g. 6" type="number"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                  </div>)}
+              </div>
+              <input value={noteSheet.notes} onChange={e=>setNoteSheet(n=>({...n,notes:e.target.value}))} placeholder="Notes (optional) — how it felt, route, etc."
+                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-3" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              <Btn full disabled={!noteSheet.duration} onClick={()=>{
+                const parts = [`${noteSheet.duration} min`];
+                if (act.dist && noteSheet.distance) parts.push(`${noteSheet.distance} km`);
+                if (noteSheet.notes) parts.push(noteSheet.notes);
+                setLogs(l=>[{id:nid(), d:"Today", title:noteSheet.activity, detail:parts.join(" · "), kind:"cardio"},...l]);
+                ping(`${noteSheet.activity} logged`); setNoteSheet(null);}}>Save activity</Btn>
+            </div>
+          </div>);})()}
 
         {/* exercise log sheet — structured sets, pre-fillable via "repeat this session" */}
         {logSheet && (
