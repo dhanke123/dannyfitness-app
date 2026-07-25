@@ -838,7 +838,7 @@ export default function DannyFitnessDemo() {
             <LogoMark size={28}/>
             <div>
               <Wordmark size={19}/>
-              <div className="text-xs" style={{color:T.muted}}>{user.name} · {isAdmin?"Admin":isClient?"Member":"Coach"}</div>
+              <div className="text-xs" style={{color:T.muted}}>{isAdmin?"Admin console":isClient?"Member":"Coach"}</div>
             </div>
           </div>
           <button onClick={()=>setUser(null)} className="text-xs font-bold px-3 py-2 rounded-lg"
@@ -884,9 +884,9 @@ export default function DannyFitnessDemo() {
                 <span style={{...disp,fontWeight:700,fontSize:11,color:T.accent,background:"#fff",padding:"5px 11px",borderRadius:999}}>● NEXT UP · {DAYS[hero.day]} {hero.time}</span>
                 <div style={{...disp,fontWeight:800,fontSize:21,marginTop:10,position:"relative"}}>{hero.title}</div>
                 <div className="text-xs" style={{marginTop:3,opacity:.94,position:"relative"}}>{hero.sub}</div>
-                <div className="flex gap-2" style={{marginTop:14,position:"relative"}}>
+                <div className="flex items-center gap-3" style={{marginTop:14,position:"relative"}}>
                   <button onClick={()=>ping("Checked in — see you there! 💪")} style={{flex:1,...disp,fontWeight:700,fontSize:14,padding:12,borderRadius:14,border:"none",background:"#fff",color:T.accent}}>Check in</button>
-                  <button onClick={()=>setTab("book")} style={{flex:1,...disp,fontWeight:700,fontSize:14,padding:12,borderRadius:14,border:"none",background:"rgba(255,255,255,.2)",color:"#fff"}}>Manage</button>
+                  <button onClick={()=>{setTab("book"); setSeg("mine");}} className="text-xs font-semibold" style={{color:"#fff",opacity:.95,textDecoration:"underline",whiteSpace:"nowrap"}}>Manage bookings</button>
                 </div>
               </div>
             ) : (
@@ -932,50 +932,16 @@ export default function DannyFitnessDemo() {
               {classPass && <div className="text-xs mt-2 font-semibold" style={{color:T.moss}}>✓ {classPass.label} active — classes covered</div>}
             </div>
 
-            <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">UPCOMING</div>
-            <div className="space-y-3">
-            {nothing && (
-              <div className="text-sm py-1" style={{color:T.muted}}>Nothing booked yet.</div>)}
-            {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid);
-              return (
-              <Card key={sid} className="flex items-center gap-3">
-                <div style={{...disp,fontWeight:700,fontSize:22,minWidth:56}} className="text-right">{s.time}</div>
-                <div className="flex-1"><div className="font-semibold text-sm">{CT[s.type].name} · {DAYS[s.day]}</div>
-                  <div className="text-xs" style={{color:T.muted}}>{locName(s.loc)} · Coach {tName(s.trainer)}</div></div>
-                <Btn kind="ghost" small onClick={()=>cancelClass(sid)}>Cancel</Btn>
-              </Card>);})}
-            {myPT.map(b=>(
-              <Card key={b.id} className="flex items-center gap-3">
-                <div style={{...disp,fontWeight:700,fontSize:22,minWidth:56}} className="text-right">{b.time}</div>
-                <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {DAYS[b.day]}</div>
-                  <div className="text-xs" style={{color:T.muted}}>{b.loc==="other" ? b.otherLabel : locName(b.loc)} · Coach {tName(b.trainer)}</div></div>
-                <Btn kind="ghost" small onClick={()=>cancelPT(b.id)}>Cancel</Btn>
-              </Card>))}
-            {myCamps.map(cid=>{ const c=camps.find(x=>x.id===cid); const canCancel=(c.startInDays??99)>CAMP_CANCEL_DAYS; return (
-              <Card key={cid} className="flex items-center gap-3" style={{background:"#F3EEF5"}}>
-                <div className="flex-1"><div className="font-semibold text-sm">{c.name}</div>
-                  <div className="text-xs" style={{color:T.plum}}>{c.dates} · {locName(c.loc)}{c.type==="Kids"?" · waiver on file":""}</div></div>
-                {canCancel
-                  ? <Btn kind="ghost" small onClick={()=>cancelCamp(cid)}>Cancel</Btn>
-                  : <span className="text-xs" style={{color:T.muted}}>Cancellation closed<br/>(starts in {c.startInDays}d)</span>}
-              </Card>);})}
-            {myWaitlist.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
-              <Card key={sid} className="flex items-center gap-3" style={{background:"#FBF3EC"}}>
-                <div className="flex-1"><div className="font-semibold text-sm">Waitlisted · {CT[s.type].name} · {DAYS[s.day]} {s.time}</div>
-                  <div className="text-xs" style={{color:T.accent}}>We'll WhatsApp you if a spot opens</div></div>
-              </Card>);})}
-            </div>
-            {!nothing && <div className="text-xs text-center pt-3" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>}
           </main>);})()}
 
         {/* ==================== CLIENT: BOOK ==================== */}
         {isClient && tab==="book" && (
           <main className="flex-1 pb-24">
             <div className="px-5 flex gap-2 pb-2 overflow-x-auto">
-              {[["classes","Classes"],["pt","Personal Training"],["camps","Camps"]].map(([k,l])=>(
+              {[["classes","Classes"],["pt","Personal Training"],["camps","Camps"],["mine","My bookings"]].map(([k,l])=>(
                 <Chip key={k} active={seg===k} onClick={()=>setSeg(k)}>{l}</Chip>))}
             </div>
-            {seg!=="camps" && <>
+            {seg!=="camps" && seg!=="mine" && <>
               <div className="px-5 flex gap-2 overflow-x-auto pt-1 pb-2">
                 {DAYS.map((d,i)=><Chip key={d} active={day===i} onClick={()=>setDay(i)}>{d}</Chip>)}
               </div>
@@ -1101,6 +1067,41 @@ export default function DannyFitnessDemo() {
                   {c.type==="Kids" && !joined && <div className="text-xs mt-2" style={{color:T.plum}}>Requires child's first name, age band, emergency contact & waiver at checkout.</div>}
                 </Card>);})}
             </div>}
+
+            {/* MY BOOKINGS — view & cancel (moved here from Home) */}
+            {seg==="mine" && (() => {
+              const none = myClassBookings.length===0 && myPT.length===0 && myCamps.length===0 && myWaitlist.length===0;
+              return (
+              <div className="px-5 space-y-3 pt-1">
+                {none && <div className="text-center py-12 text-sm" style={{color:T.muted}}>No bookings yet. Book a class, PT or camp from the tabs above.</div>}
+                {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
+                  <Card key={sid} className="flex items-center gap-3">
+                    <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{s.time}</div>
+                    <div className="flex-1"><div className="font-semibold text-sm">{CT[s.type].name} · {DAYS[s.day]}</div>
+                      <div className="text-xs" style={{color:T.muted}}>{locName(s.loc)} · Coach {tName(s.trainer)}</div></div>
+                    <Btn kind="ghost" small onClick={()=>cancelClass(sid)}>Cancel</Btn>
+                  </Card>);})}
+                {myPT.map(b=>(
+                  <Card key={b.id} className="flex items-center gap-3">
+                    <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{b.time}</div>
+                    <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {DAYS[b.day]}</div>
+                      <div className="text-xs" style={{color:T.muted}}>{b.loc==="other" ? b.otherLabel : locName(b.loc)} · Coach {tName(b.trainer)}</div></div>
+                    <Btn kind="ghost" small onClick={()=>cancelPT(b.id)}>Cancel</Btn>
+                  </Card>))}
+                {myCamps.map(cid=>{ const c=camps.find(x=>x.id===cid); const canCancel=(c.startInDays??99)>CAMP_CANCEL_DAYS; return (
+                  <Card key={cid} className="flex items-center gap-3" style={{background:"#F3EEF5"}}>
+                    <div className="flex-1"><div className="font-semibold text-sm">{c.name}</div>
+                      <div className="text-xs" style={{color:T.plum}}>{c.dates} · {locName(c.loc)}{c.type==="Kids"?" · waiver on file":""}</div></div>
+                    {canCancel ? <Btn kind="ghost" small onClick={()=>cancelCamp(cid)}>Cancel</Btn>
+                      : <span className="text-xs text-right" style={{color:T.muted}}>Cancellation<br/>closed</span>}
+                  </Card>);})}
+                {myWaitlist.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
+                  <Card key={sid} className="flex items-center gap-3" style={{background:"#FBF3EC"}}>
+                    <div className="flex-1"><div className="font-semibold text-sm">Waitlisted · {CT[s.type].name} · {DAYS[s.day]} {s.time}</div>
+                      <div className="text-xs" style={{color:T.accent}}>We'll WhatsApp you if a spot opens</div></div>
+                  </Card>);})}
+                {!none && <div className="text-xs text-center pt-1" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>}
+              </div>);})()}
           </main>)}
 
         {/* ==================== CLIENT: LOG ==================== */}
