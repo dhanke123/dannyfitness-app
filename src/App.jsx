@@ -186,23 +186,66 @@ const ACTIVITIES = [
   { name:"Muay Thai", dist:false }, { name:"Yoga / Mobility", dist:false }, { name:"Other", dist:false },
 ];
 const EXLIB = {
-  Legs: ["Back Squat","Deadlift","Leg Press","Walking Lunge"],
-  Back: ["Pull-up","Bent-over Row","Lat Pulldown"],
+  Legs: ["Back Squat","Deadlift","Leg Press","Walking Lunge","Romanian Deadlift","Leg Curl"],
+  Back: ["Pull-up","Bent-over Row","Lat Pulldown","Seated Row"],
   Shoulder: ["Overhead Press","Lateral Raise","Face Pull"],
-  Chest: ["Bench Press","Incline DB Press","Push-up"],
+  Chest: ["Bench Press","Incline DB Press","Push-up","Cable Fly"],
   Core: ["Hanging Leg Raise","Plank","Cable Woodchop"],
 };
+// Per-exercise metadata: is it a barbell lift (plate calculator) + default rest seconds.
+const EXMETA = {
+  "Back Squat":{bar:true,rest:150}, "Deadlift":{bar:true,rest:180}, "Romanian Deadlift":{bar:true,rest:120},
+  "Bench Press":{bar:true,rest:150}, "Overhead Press":{bar:true,rest:120}, "Bent-over Row":{bar:true,rest:120},
+  "Front Squat":{bar:true,rest:150},
+};
+const exMeta = (name) => EXMETA[name] || { bar:false, rest:75 };
+const muscleOf = (name) => Object.entries(EXLIB).find(([,arr])=>arr.includes(name))?.[0] || "Other";
+const BAR_KG = 20;
+const PLATES = [25,20,15,10,5,2.5,1.25]; // kg plates available per side
+// Epley estimated 1RM from a single set.
+const est1RM = (w, reps) => reps>0 ? Math.round(w*(1+reps/30)*10)/10 : w;
+// Working sets only (warmup & failure never count toward PRs / charts).
+const isWorking = (st) => st.type!=="warmup" && st.type!=="failure";
+
+// New per-set log model: entries have `exercises:[{ex,muscle,sets:[{w,reps,type,rpe}]}]`.
+// `daysAgo` powers the streak calendar. Cardio entries keep {kind:'cardio', detail}.
+const mkSet = (w,reps,type="normal",rpe) => ({w,reps,type,rpe});
 const seedWorkoutSessions = [
-  { id:"w1", d:"Mon", title:"Leg Day", detail:"Coach-logged · Danny", kind:"class",
-    sets:[{ex:"Back Squat", muscle:"Legs", w:85, reps:"5×5", rpe:8},{ex:"Leg Press", muscle:"Legs", w:150, reps:"3×10", rpe:7},{ex:"Walking Lunge", muscle:"Legs", w:20, reps:"3×12", rpe:7}] },
-  { id:"w2", d:"22 Jul", title:"Push Day", detail:"Self-logged", kind:"self",
-    sets:[{ex:"Bench Press", muscle:"Chest", w:62.5, reps:"5×5", rpe:8},{ex:"Overhead Press", muscle:"Shoulder", w:40, reps:"3×8", rpe:8}] },
-  { id:"w3", d:"18 Jul", title:"Leg Day", detail:"Coach-logged · Danny", kind:"class",
-    sets:[{ex:"Back Squat", muscle:"Legs", w:80, reps:"5×5", rpe:8},{ex:"Leg Press", muscle:"Legs", w:140, reps:"3×10", rpe:7}] },
-  { id:"w4", d:"15 Jul", title:"Push Day", detail:"Self-logged", kind:"self",
-    sets:[{ex:"Bench Press", muscle:"Chest", w:60, reps:"5×5", rpe:8},{ex:"Overhead Press", muscle:"Shoulder", w:37.5, reps:"3×8", rpe:8}] },
-  { id:"w5", d:"9 Jul", title:"Leg Day", detail:"Self-logged", kind:"self",
-    sets:[{ex:"Back Squat", muscle:"Legs", w:75, reps:"5×5", rpe:9},{ex:"Leg Press", muscle:"Legs", w:130, reps:"3×10", rpe:8}] },
+  { id:"w1", d:"Today", daysAgo:0, title:"Leg Day", kind:"class", detail:"Coach-logged · Danny",
+    exercises:[
+      { ex:"Back Squat", muscle:"Legs", sets:[mkSet(60,5,"warmup"),mkSet(85,5,"normal",8),mkSet(85,5,"normal",8),mkSet(85,5,"normal",9)] },
+      { ex:"Leg Press", muscle:"Legs", sets:[mkSet(150,10,"normal",7),mkSet(150,10,"normal",8),mkSet(170,8,"dropset",9)] },
+    ] },
+  { id:"w2", d:"3d ago", daysAgo:3, title:"Push Day", kind:"self", detail:"Self-logged",
+    exercises:[
+      { ex:"Bench Press", muscle:"Chest", sets:[mkSet(40,8,"warmup"),mkSet(62.5,5,"normal",8),mkSet(62.5,5,"normal",8)] },
+      { ex:"Overhead Press", muscle:"Shoulder", sets:[mkSet(40,8,"normal",8),mkSet(40,8,"normal",8)] },
+    ] },
+  { id:"w3", d:"7d ago", daysAgo:7, title:"Leg Day", kind:"class", detail:"Coach-logged · Danny",
+    exercises:[
+      { ex:"Back Squat", muscle:"Legs", sets:[mkSet(82.5,5,"normal",8),mkSet(82.5,5,"normal",8)] },
+      { ex:"Leg Press", muscle:"Legs", sets:[mkSet(140,10,"normal",7)] },
+    ] },
+  { id:"w4", d:"10d ago", daysAgo:10, title:"Push Day", kind:"self", detail:"Self-logged",
+    exercises:[
+      { ex:"Bench Press", muscle:"Chest", sets:[mkSet(60,5,"normal",8),mkSet(60,5,"normal",8)] },
+      { ex:"Overhead Press", muscle:"Shoulder", sets:[mkSet(37.5,8,"normal",8)] },
+    ] },
+  { id:"w5", d:"14d ago", daysAgo:14, title:"Leg Day", kind:"self", detail:"Self-logged",
+    exercises:[
+      { ex:"Back Squat", muscle:"Legs", sets:[mkSet(80,5,"normal",8),mkSet(80,5,"normal",9)] },
+    ] },
+  { id:"w6", d:"21d ago", daysAgo:21, title:"Leg Day", kind:"self", detail:"Self-logged",
+    exercises:[
+      { ex:"Back Squat", muscle:"Legs", sets:[mkSet(75,5,"normal",9)] },
+    ] },
+];
+// Reusable routine templates (client- or trainer-authored; trainer can assign to a client).
+const seedRoutines = [
+  { id:"r1", name:"Leg Day", owner:"danny", assignedTo:"Sam Lee",
+    items:[{ex:"Back Squat",muscle:"Legs",sets:4,reps:5},{ex:"Romanian Deadlift",muscle:"Legs",sets:3,reps:8},{ex:"Leg Press",muscle:"Legs",sets:3,reps:10},{ex:"Leg Curl",muscle:"Legs",sets:3,reps:12}] },
+  { id:"r2", name:"Push Day", owner:"sam",
+    items:[{ex:"Bench Press",muscle:"Chest",sets:4,reps:5},{ex:"Overhead Press",muscle:"Shoulder",sets:3,reps:8},{ex:"Incline DB Press",muscle:"Chest",sets:3,reps:10},{ex:"Lateral Raise",muscle:"Shoulder",sets:3,reps:15}] },
 ];
 const seedLeads = [
   { id:nid(), name:"Rachel Ong", source:"Instagram", status:"new", note:"DM'd @exercise.only asking about NS/IPPT prep pricing" },
@@ -213,6 +256,32 @@ const seedLeads = [
 /* ---------- time helpers ---------- */
 const toMin = (t) => { const [h,m] = t.split(":").map(Number); return h*60+m; };
 const fromMin = (m) => { const h = Math.floor(m/60), mm = m%60; return `${String(h).padStart(2,"0")}:${String(mm).padStart(2,"0")}`; };
+
+/* ---------- workout-log analytics (Strong-style) ---------- */
+const SET_TYPES = { normal:{lbl:"N",name:"Normal",color:"#17150F"}, warmup:{lbl:"W",name:"Warm-up",color:"#B8860B"},
+  dropset:{lbl:"D",name:"Drop set",color:"#7B4B94"}, failure:{lbl:"F",name:"Failure",color:"#E8500A"} };
+const strengthLogs = (logs) => logs.filter(l=>l.exercises);
+const flatWorking = (log) => (log.exercises||[]).flatMap(e=>e.sets.filter(isWorking).map(s=>({...s, ex:e.ex, muscle:e.muscle})));
+const bestWeight = (logs, ex) => Math.max(0, ...strengthLogs(logs).flatMap(l=>flatWorking(l).filter(s=>s.ex===ex).map(s=>s.w)));
+const best1RM = (logs, ex) => Math.max(0, ...strengthLogs(logs).flatMap(l=>flatWorking(l).filter(s=>s.ex===ex).map(s=>est1RM(s.w,s.reps))));
+// PR shelf: heaviest set ever per exercise, sorted by weight.
+const prShelf = (logs) => {
+  const best = {};
+  strengthLogs(logs).forEach(l=>flatWorking(l).forEach(s=>{ if(s.w>(best[s.ex]?.w??-1)) best[s.ex]={w:s.w,reps:s.reps,d:l.d}; }));
+  return Object.entries(best).sort((a,b)=>b[1].w-a[1].w);
+};
+// est-1RM series for one exercise, oldest→newest, for the trend chart.
+const exSeries = (logs, ex) => strengthLogs(logs).filter(l=>flatWorking(l).some(s=>s.ex===ex))
+  .slice().sort((a,b)=>(b.daysAgo??0)-(a.daysAgo??0))
+  .map(l=>{ const sets=flatWorking(l).filter(s=>s.ex===ex); return { d:l.d, top:Math.max(...sets.map(s=>s.w)), orm:Math.max(...sets.map(s=>est1RM(s.w,s.reps))) }; });
+// sets-per-muscle-group within the last `days`.
+const muscleVolume = (logs, days) => {
+  const vol = {};
+  strengthLogs(logs).filter(l=>(l.daysAgo??0)<=days).forEach(l=>(l.exercises||[]).forEach(e=>{
+    const n = e.sets.filter(isWorking).length; vol[e.muscle]=(vol[e.muscle]||0)+n; }));
+  return Object.entries(vol).sort((a,b)=>b[1]-a[1]);
+};
+const loggedDaySet = (logs) => new Set(logs.filter(l=>l.exercises||l.kind==="cardio").map(l=>l.daysAgo??0));
 
 /* Merge everything that occupies a trainer's day into busy blocks: classes taught,
    confirmed PT bookings, and time off. loc:null on a block means "unavailable regardless
@@ -357,9 +426,19 @@ export default function DannyFitnessDemo() {
   const [myCamps, setMyCamps] = useState([]);
   const [logs, setLogs] = useState(seedWorkoutSessions);
   const [logOpen, setLogOpen] = useState(null);
-  const [logSheet, setLogSheet] = useState(null);
   const [progEx, setProgEx] = useState("Back Squat"); // exercise selected for the progress chart
   const [noteSheet, setNoteSheet] = useState(null); // activity/cardio logger
+  const [exLib, setExLib] = useState(EXLIB);         // exercise library (custom exercises append)
+  const [routines, setRoutines] = useState(seedRoutines);
+  const [active, setActive] = useState(null);        // active workout: {title, exercises:[{ex,muscle,sets:[...]}]}
+  const [exPicker, setExPicker] = useState(false);   // exercise picker open (for active workout)
+  const [exSearch, setExSearch] = useState("");
+  const [customEx, setCustomEx] = useState(null);    // {name,muscle} new-exercise form
+  const [rest, setRest] = useState(null);            // rest timer {sec, ex}
+  const [prToast, setPrToast] = useState(null);      // "New PR!" celebration
+  const [plate, setPlate] = useState(null);          // plate calc {target, bar}
+  const [routineSheet, setRoutineSheet] = useState(null); // build/assign a routine
+  const [progMetric, setProgMetric] = useState("top"); // 'top' weight or 'orm' est-1RM
   const [intakeForm, setIntakeForm] = useState(null);
   const [products, setProducts] = useState(seedProducts);
   const [camps, setCamps] = useState(seedCamps);
@@ -428,9 +507,12 @@ export default function DannyFitnessDemo() {
   // tab, and never drops the user out of the app. ----
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
-    setMeasForm(null); setLogSheet(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setRateSheet(null); setNoteSheet(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||logSheet||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet);
+    setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
+    setDoneSheet(null); setRateSheet(null); setNoteSheet(null);
+    // log sub-overlays close first; the active workout itself is closed last
+    if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
+    else setActive(null); };
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -572,6 +654,48 @@ export default function DannyFitnessDemo() {
   };
   const addTimeOff = (entry) => { setTimeOff(t=>[...t, {...entry, id:nid(), active:true}]); ping("Time off saved — those slots stop showing as available"); setTimeOffSheet(null); };
   const removeTimeOff = (id) => { setTimeOff(t=>t.filter(x=>x.id!==id)); ping("Time off removed — availability restored"); };
+
+  /* ---------- workout logger handlers (Strong-style active workout) ---------- */
+  const startBlank = () => setActive({ title:"Workout", exercises:[] });
+  const startFromRoutine = (r) => setActive({ title:r.name, routineId:r.id, exercises:r.items.map(it=>({
+    ex:it.ex, muscle:it.muscle, sets:Array.from({length:it.sets}).map(()=>mkSet(bestWeight(logs,it.ex)||0, it.reps, "normal")) })) });
+  const repeatLog = (l) => setActive({ title:l.title, exercises:(l.exercises||[]).map(e=>({ ex:e.ex, muscle:e.muscle, sets:e.sets.map(s=>({...s, done:false})) })) });
+  const addExerciseToActive = (name) => { setActive(a=>({...a, exercises:[...a.exercises, { ex:name, muscle:muscleOf(name), sets:[mkSet(bestWeight(logs,name)||0, 8, "normal")] }]})); setExPicker(false); setExSearch(""); };
+  const addSet = (ei) => setActive(a=>({...a, exercises:a.exercises.map((e,i)=>i!==ei?e:{...e, sets:[...e.sets, {...(e.sets[e.sets.length-1]||mkSet(0,8)), done:false}]})}));
+  const updSet = (ei,si,field,val) => setActive(a=>({...a, exercises:a.exercises.map((e,i)=>i!==ei?e:{...e, sets:e.sets.map((s,j)=>j!==si?s:{...s,[field]:val})})}));
+  const removeSet = (ei,si) => setActive(a=>({...a, exercises:a.exercises.map((e,i)=>i!==ei?e:{...e, sets:e.sets.filter((_,j)=>j!==si)})}));
+  const removeExercise = (ei) => setActive(a=>({...a, exercises:a.exercises.filter((_,i)=>i!==ei)}));
+  const cycleType = (ei,si) => { const order=["normal","warmup","dropset","failure"];
+    setActive(a=>({...a, exercises:a.exercises.map((e,i)=>i!==ei?e:{...e, sets:e.sets.map((s,j)=>j!==si?s:{...s, type:order[(order.indexOf(s.type)+1)%order.length]})})})); };
+  const toggleSetDone = (ei,si) => {
+    const e = active.exercises[ei], s = e.sets[si];
+    const nowDone = !s.done;
+    updSet(ei,si,"done",nowDone);
+    if (nowDone && isWorking(s) && s.w>0) {
+      // live PR check against history
+      if (s.w > bestWeight(logs, e.ex)) { setPrToast(`New PR! 🎉 ${e.ex} — ${s.w}kg`); setTimeout(()=>setPrToast(null),3200); }
+      else if (est1RM(s.w,s.reps) > best1RM(logs, e.ex)) { setPrToast(`New est-1RM PR! 🎉 ${e.ex} — ${est1RM(s.w,s.reps)}kg`); setTimeout(()=>setPrToast(null),3200); }
+      // auto-start rest timer (skip for warmups)
+      setRest({ sec: exMeta(e.ex).rest, ex: e.ex });
+    }
+  };
+  const finishWorkout = () => {
+    const exs = active.exercises.filter(e=>e.sets.length>0);
+    if (exs.length===0) { setActive(null); return; }
+    const totalSets = exs.reduce((a,e)=>a+e.sets.filter(isWorking).length,0);
+    setLogs(l=>[{ id:nid(), d:"Today", daysAgo:0, title:active.title||"Workout", kind:"self", detail:"Self-logged",
+      exercises:exs.map(e=>({ex:e.ex,muscle:e.muscle,sets:e.sets.map(s=>({w:s.w,reps:s.reps,type:s.type,rpe:s.rpe}))})) },...l]);
+    setActive(null); setRest(null);
+    ping(`Workout saved — ${exs.length} exercises · ${totalSets} sets`);
+  };
+  const addCustomExercise = () => {
+    if (!customEx.name.trim()) return;
+    const nm = customEx.name.trim(), mg = customEx.muscle;
+    setExLib(lib=>({...lib, [mg]:[...(lib[mg]||[]), nm]}));
+    if (active) addExerciseToActive(nm);
+    setCustomEx(null); setExPicker(false);
+    ping(`"${nm}" added to your exercise library`);
+  };
 
   const daySessions = useMemo(()=>sessions.filter(s=>s.day===day && (loc==="all"||s.loc===loc)).sort((a,b)=>a.time.localeCompare(b.time)),[sessions,day,loc]);
 
@@ -829,76 +953,141 @@ export default function DannyFitnessDemo() {
           </main>)}
 
         {/* ==================== CLIENT: LOG ==================== */}
-        {isClient && tab==="log" && (
+        {isClient && tab==="log" && (() => {
+          const prs = prShelf(logs);
+          const allEx = [...new Set(strengthLogs(logs).flatMap(l=>(l.exercises||[]).map(e=>e.ex)))];
+          const series = exSeries(logs, progEx);
+          const maxV = Math.max(1, ...series.map(s=>progMetric==="orm"?s.orm:s.top));
+          const vol = muscleVolume(logs, 30);
+          const maxVol = Math.max(1, ...vol.map(v=>v[1]));
+          const dayset = loggedDaySet(logs);
+          const weekWorkouts = strengthLogs(logs).filter(l=>(l.daysAgo??0)<=7).length;
+          const myRoutines = routines.filter(r=>r.owner==="sam" || r.assignedTo==="Sam Lee");
+          return (
           <main className="flex-1 pb-24 px-5">
-            <H>Training log</H>
-            <Card className="mb-3" style={{background:"#EFF3EE"}}>
-              <div className="text-xs font-bold mb-1" style={{color:T.moss}}>STATS · coach-tracked</div>
-              <div className="flex gap-6">
-                <div><span style={{...disp,fontWeight:700,fontSize:28}}>{measurements[measurements.length-1].weight}</span><span className="text-xs" style={{color:T.muted}}> kg</span></div>
-                <div><span style={{...disp,fontWeight:700,fontSize:28}}>{measurements[measurements.length-1].fat}</span><span className="text-xs" style={{color:T.muted}}> % fat</span></div>
-                <div className="text-xs self-end pb-1" style={{color:T.moss}}>▾ {(measurements[0].fat-measurements[measurements.length-1].fat).toFixed(1)}% since 1 Jul</div>
+            <div className="flex items-center justify-between mb-3">
+              <H>Training log</H>
+              <div className="flex gap-2">
+                <Btn small onClick={startBlank}>+ Start workout</Btn>
+                <Btn small kind="ghost" onClick={()=>setNoteSheet({activity:"Run", duration:"", distance:"", notes:""})}>Activity</Btn>
+              </div>
+            </div>
+
+            {/* streak + this-week stats */}
+            <Card className="mb-3" style={{background:T.ink,color:T.paper,border:"none"}}>
+              <div className="flex gap-5 mb-2">
+                <div><span style={{...disp,fontWeight:700,fontSize:26,color:T.accent}}>{weekWorkouts}</span> <span className="text-xs" style={{color:"#B9B5A9"}}>workouts / 7d</span></div>
+                <div><span style={{...disp,fontWeight:700,fontSize:26,color:T.accent}}>{prs.length}</span> <span className="text-xs" style={{color:"#B9B5A9"}}>PRs tracked</span></div>
+              </div>
+              <div className="text-xs mb-1" style={{color:"#B9B5A9"}}>LAST 3 WEEKS</div>
+              <div className="flex gap-1 flex-wrap">
+                {Array.from({length:21}).map((_,i)=>{ const off=20-i; const on=dayset.has(off);
+                  return <span key={i} title={`${off}d ago`} style={{width:11,height:11,borderRadius:3,background:on?T.accent:"#3A362B"}}/>; })}
               </div>
             </Card>
-            {/* Personal records — auto-computed max weight per exercise from logged sets */}
-            {(() => {
-              const prs = {};
-              logs.forEach(l => (l.sets||[]).forEach(s => { if (s.w > (prs[s.ex]?.w ?? -1)) prs[s.ex] = { w:s.w, reps:s.reps, d:l.d }; }));
-              const prList = Object.entries(prs).sort((a,b)=>b[1].w-a[1].w);
-              const allEx = [...new Set(logs.flatMap(l=>(l.sets||[]).map(s=>s.ex)))];
-              const series = logs.filter(l=>l.sets?.some(s=>s.ex===progEx)).slice().reverse()
-                .map(l=>({ w:Math.max(...l.sets.filter(s=>s.ex===progEx).map(s=>s.w)), d:l.d }));
-              const maxW = Math.max(1,...series.map(s=>s.w));
-              return (<>
-                {prList.length>0 && (
-                  <Card className="mb-3" style={{background:"#FBF3EC"}}>
-                    <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>PERSONAL RECORDS 🏆</div>
-                    <div className="flex flex-wrap gap-x-5 gap-y-1">
-                      {prList.slice(0,6).map(([ex,pr])=>(
-                        <div key={ex} className="text-sm"><span className="font-bold">{pr.w}kg</span> <span className="text-xs" style={{color:T.muted}}>{ex}</span></div>))}
-                    </div>
-                  </Card>)}
-                <Card className="mb-3" style={{background:"#EEF1F6"}}>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="text-xs font-bold" style={{color:T.navy}}>EXERCISE PROGRESS · top set per session</div>
+
+            {/* PR shelf */}
+            {prs.length>0 && (
+              <Card className="mb-3" style={{background:"#FBF3EC"}}>
+                <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>PERSONAL RECORDS 🏆</div>
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
+                  {prs.slice(0,6).map(([ex,pr])=>(
+                    <div key={ex} className="text-sm"><span className="font-bold">{pr.w}kg</span> <span className="text-xs" style={{color:T.muted}}>{ex} · {pr.reps}r</span></div>))}
+                </div>
+              </Card>)}
+
+            {/* progress chart — top set or est 1RM */}
+            {allEx.length>0 && (
+              <Card className="mb-3" style={{background:"#EEF1F6"}}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-xs font-bold" style={{color:T.navy}}>PROGRESS</div>
+                  <div className="flex gap-1.5 items-center">
+                    <button onClick={()=>setProgMetric(m=>m==="top"?"orm":"top")} className="text-xs font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.navy}}>{progMetric==="orm"?"est 1RM":"top set"}</button>
                     <select value={progEx} onChange={e=>setProgEx(e.target.value)} className="text-xs font-semibold px-2 py-1 rounded-lg outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}>
                       {allEx.map(ex=><option key={ex} value={ex}>{ex}</option>)}
                     </select>
                   </div>
-                  {series.length===0 ? <div className="text-xs" style={{color:T.muted}}>No logged sets for {progEx} yet.</div> : (
-                    <div className="flex items-end gap-3">
-                      {series.map((s,i)=>(
-                        <div key={i} className="text-center">
-                          <div className="rounded-t" style={{width:26,height:20+s.w/maxW*60,background:T.navy}}/>
-                          <div className="text-[10px] mt-1" style={{color:T.muted}}>{s.w}kg</div>
-                          <div className="text-[9px]" style={{color:T.muted}}>{s.d}</div>
-                        </div>))}
-                    </div>)}
-                </Card>
-              </>);
-            })()}
+                </div>
+                {series.length===0 ? <div className="text-xs" style={{color:T.muted}}>No logged sets for {progEx} yet.</div> : (
+                  <div className="flex items-end gap-3">
+                    {series.map((s,i)=>{ const v=progMetric==="orm"?s.orm:s.top; return (
+                      <div key={i} className="text-center">
+                        <div className="rounded-t" style={{width:24,height:20+v/maxV*60,background:T.navy}}/>
+                        <div className="text-[10px] mt-1" style={{color:T.muted}}>{v}kg</div>
+                        <div className="text-[9px]" style={{color:T.muted}}>{s.d}</div>
+                      </div>);})}
+                  </div>)}
+              </Card>)}
+
+            {/* muscle-group volume (last 30d) */}
+            {vol.length>0 && (
+              <Card className="mb-3">
+                <div className="text-xs font-bold mb-2" style={{color:T.muted}}>VOLUME BY MUSCLE · sets, last 30d</div>
+                <div className="space-y-1.5">
+                  {vol.map(([m,n])=>(
+                    <div key={m} className="flex items-center gap-2">
+                      <span className="text-xs w-16" style={{color:T.muted}}>{m}</span>
+                      <div className="flex-1 rounded-full h-3" style={{background:"#EFEBE3"}}>
+                        <div className="h-3 rounded-full" style={{width:`${n/maxVol*100}%`,background:T.moss}}/></div>
+                      <span className="text-xs font-bold w-6 text-right">{n}</span>
+                    </div>))}
+                </div>
+              </Card>)}
+
+            {/* routines */}
+            <Card className="mb-3">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold" style={{color:T.muted}}>ROUTINES</div>
+                <Btn small kind="ghost" onClick={()=>setRoutineSheet({name:"", items:[], owner:"sam"})}>+ New</Btn>
+              </div>
+              {myRoutines.length===0 && <div className="text-xs" style={{color:T.muted}}>No routines yet. Build one, or ask your coach to assign a plan.</div>}
+              {myRoutines.map(r=>(
+                <div key={r.id} className="flex items-center justify-between py-1.5">
+                  <div><div className="font-semibold text-sm">{r.name} {r.assignedTo && r.owner!=="sam" && <span className="text-xs" style={{color:T.plum}}>· from Coach {tName(r.owner)}</span>}</div>
+                    <div className="text-xs" style={{color:T.muted}}>{r.items.map(i=>i.ex).slice(0,3).join(", ")}{r.items.length>3?"…":""}</div></div>
+                  <Btn small onClick={()=>startFromRoutine(r)}>Start</Btn>
+                </div>))}
+            </Card>
+
+            {/* history */}
+            <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>HISTORY</div>
             <div className="space-y-2">
               {logs.map((l)=>(
                 <Card key={l.id||l.title+l.d}>
-                  <div className="flex justify-between items-center" onClick={()=>l.sets && setLogOpen(logOpen===l.id?null:l.id)}>
-                    <div><div className="font-semibold text-sm">{l.title}</div>
-                      <div className="text-xs" style={{color:T.muted}}>{l.detail}</div></div>
+                  <div className="flex justify-between items-center" onClick={()=>l.exercises && setLogOpen(logOpen===l.id?null:l.id)}>
+                    <div><div className="font-semibold text-sm">{l.title} {l.kind==="cardio" && <span className="text-xs" style={{color:T.moss}}>· activity</span>}</div>
+                      <div className="text-xs" style={{color:T.muted}}>{l.exercises ? `${l.exercises.length} exercises · ${l.detail}` : l.detail}</div></div>
                     <div className="flex items-center gap-2">
                       <div className="text-xs font-bold" style={{color:T.muted}}>{l.d}</div>
-                      {l.sets && <span className="text-xs" style={{color:T.navy}}>{logOpen===l.id?"▴":"▾"}</span>}
+                      {l.exercises && <span className="text-xs" style={{color:T.navy}}>{logOpen===l.id?"▴":"▾"}</span>}
                     </div>
                   </div>
-                  {l.sets && logOpen===l.id && (
-                    <div className="mt-3 pt-3 space-y-1.5" style={{borderTop:`1.5px solid ${T.line}`}}>
-                      {l.sets.map((s,i)=>(
-                        <div key={i} className="flex justify-between text-sm">
-                          <span>{s.ex} <span style={{color:T.muted}}>· {s.muscle}</span></span>
-                          <span className="font-semibold">{s.reps} @ {s.w}kg{s.rpe?<span className="text-xs font-normal" style={{color:T.muted}}> · RPE {s.rpe}</span>:null}</span>
+                  {l.exercises && logOpen===l.id && (
+                    <div className="mt-3 pt-3 space-y-2" style={{borderTop:`1.5px solid ${T.line}`}}>
+                      {l.exercises.map((e,i)=>(
+                        <div key={i}>
+                          <div className="text-sm font-semibold">{e.ex} <span className="text-xs font-normal" style={{color:T.muted}}>· {e.muscle}</span></div>
+                          {e.sets.map((s,j)=>(
+                            <div key={j} className="flex justify-between text-xs py-0.5" style={{color:T.muted}}>
+                              <span><span className="font-bold" style={{color:SET_TYPES[s.type]?.color||T.ink}}>{SET_TYPES[s.type]?.lbl||"N"}</span> set {j+1}</span>
+                              <span className="font-semibold" style={{color:T.ink}}>{s.reps} × {s.w}kg{s.rpe?` · RPE ${s.rpe}`:""}</span>
+                            </div>))}
                         </div>))}
-                      <div className="pt-2"><Btn small full kind="ghost" onClick={()=>{setLogSheet({sets:l.sets.map(s=>({...s})), label:l.title}); ping("Pre-filled from last session — adjust and log today's actuals");}}>Repeat this session</Btn></div>
+                      <Btn small full kind="ghost" onClick={()=>repeatLog(l)}>Repeat this workout</Btn>
                     </div>)}
                 </Card>))}
             </div>
+
+            {/* coach-tracked body stats */}
+            <Card className="mt-3" style={{background:"#EFF3EE"}}>
+              <div className="text-xs font-bold mb-1" style={{color:T.moss}}>BODY STATS · coach-tracked</div>
+              <div className="flex gap-6">
+                <div><span style={{...disp,fontWeight:700,fontSize:26}}>{measurements[measurements.length-1].weight}</span><span className="text-xs" style={{color:T.muted}}> kg</span></div>
+                <div><span style={{...disp,fontWeight:700,fontSize:26}}>{measurements[measurements.length-1].fat}</span><span className="text-xs" style={{color:T.muted}}> % fat</span></div>
+                <div className="text-xs self-end pb-1" style={{color:T.moss}}>▾ {(measurements[0].fat-measurements[measurements.length-1].fat).toFixed(1)}% since 1 Jul</div>
+              </div>
+            </Card>
+
             {myClassBookings.length>0 && (
               <Card className="mt-3" style={{background:"#FBF3EC"}}>
                 <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>RATE YOUR LAST CLASS</div>
@@ -906,11 +1095,7 @@ export default function DannyFitnessDemo() {
                 <Stars value={ratings[myClassBookings[myClassBookings.length-1]]||0}
                   onRate={(n)=>{setRatings(r=>({...r,[myClassBookings[myClassBookings.length-1]]:n})); ping("Thanks for the rating!");}}/>
               </Card>)}
-            <div className="mt-3 flex gap-2">
-              <Btn full kind="ghost" onClick={()=>setLogSheet({sets:[], label:"Workout"})}>+ Log exercises</Btn>
-              <Btn full kind="ghost" onClick={()=>setNoteSheet({activity:"Run", duration:"", distance:"", notes:""})}>+ Log activity</Btn>
-            </div>
-          </main>)}
+          </main>);})()}
 
         {/* ==================== CLIENT: SHOP ==================== */}
         {isClient && tab==="shop" && (
@@ -1082,19 +1267,34 @@ export default function DannyFitnessDemo() {
         {!isClient && tab==="clients" && (
           <main className="flex-1 pb-24 px-5">
             <H>Clients</H>
+            {/* PR feed — a low-effort reason to congratulate clients (retention driver) */}
+            <Card className="mb-3" style={{background:"#FBF3EC"}}>
+              <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>RECENT CLIENT PRs 🏆</div>
+              <div className="space-y-0.5">
+                <div className="text-sm">Sam Lee — <b>Back Squat 85kg</b> <span className="text-xs" style={{color:T.muted}}>· today</span></div>
+                <div className="text-sm">Ben — <b>Deadlift 140kg</b> <span className="text-xs" style={{color:T.muted}}>· yesterday</span></div>
+                <div className="text-sm">Priya — <b>Bench Press 47.5kg</b> <span className="text-xs" style={{color:T.muted}}>· 2d ago</span></div>
+              </div>
+            </Card>
             {["Sam Lee","Ben","Cheryl","Priya","Kumar","Elaine"].map(n=>(
-              <Card key={n} className="mb-2 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{background:T.line}}>{n[0]}</div>
-                <div className="flex-1">
-                  <div className="font-semibold text-sm">{n}</div>
-                  <div className="text-xs" style={{color:T.muted}}>{n==="Sam Lee"?`${credits.classes} class + ${credits.ptHead+credits.ptCoach} PT credits`:"Active member"}</div></div>
-                <div className="flex gap-1.5">
-                  <Btn small kind="ghost" onClick={()=>setMeasForm({who:n, weight:"", fat:""})}>+ Stats</Btn>
-                  <Btn small kind="ghost" onClick={()=>setIntakeForm({who:n})}>+ Intake</Btn>
+              <Card key={n} className="mb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{background:T.line}}>{n[0]}</div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm">{n}</div>
+                    <div className="text-xs" style={{color:T.muted}}>{n==="Sam Lee"?`${credits.classes} class + ${credits.ptHead+credits.ptCoach} PT credits`:"Active member"}</div></div>
+                  <div className="flex gap-1.5">
+                    <Btn small kind="ghost" onClick={()=>setMeasForm({who:n, weight:"", fat:""})}>+ Stats</Btn>
+                    <Btn small kind="ghost" onClick={()=>setIntakeForm({who:n})}>+ Intake</Btn>
+                  </div>
+                </div>
+                <div className="flex gap-1.5 mt-2">
+                  <Btn small kind="ghost" onClick={()=>{setActive({title:`${n} — coach-logged`, forClient:n, exercises:[]}); ping(`Logging a session for ${n}`);}}>Log workout</Btn>
+                  <Btn small kind="ghost" onClick={()=>setRoutineSheet({name:"", items:[], owner:user.id, assignedTo:n})}>Assign routine</Btn>
                 </div>
               </Card>))}
             <div className="text-xs mt-2" style={{color:T.muted}}>
-              {isAdmin?"Admin: create / import (CSV) / deactivate clients from Manage → People.":"Trainers see clients from their own sessions. Payment amounts hidden."}
+              Trainers co-author the log: log a session for a client, assign a routine (they see it in their Log), and enter stats/intake. {isAdmin?"Admin can also create / import (CSV) / deactivate clients from Manage → People.":"Payment amounts stay hidden."}
             </div>
           </main>)}
 
@@ -1798,40 +1998,131 @@ export default function DannyFitnessDemo() {
             </div>
           </div>);})()}
 
-        {/* exercise log sheet — structured sets, pre-fillable via "repeat this session" */}
-        {logSheet && (
-          <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setLogSheet(null)}>
-            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>{logSheet.label || "Log exercises"}</div>
-              <div className="text-xs mb-3" style={{color:T.muted}}>{logSheet.sets.length>0?"Adjust today's actuals below.":"Pick an exercise, then add sets/reps/weight."}</div>
-              <div className="space-y-2 mb-3">
-                {logSheet.sets.map((s,i)=>(
-                  <Card key={i} className="!p-3 flex items-center gap-2">
-                    <div className="flex-1">
-                      <div className="text-sm font-semibold">{s.ex}</div>
-                      <div className="text-xs" style={{color:T.muted}}>{s.muscle}</div>
-                    </div>
-                    <input value={s.reps} onChange={e=>setLogSheet(f=>({...f,sets:f.sets.map((x,j)=>j!==i?x:{...x,reps:e.target.value})}))}
-                      placeholder="3×10" className="w-16 px-2 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
-                    <input value={s.w} onChange={e=>setLogSheet(f=>({...f,sets:f.sets.map((x,j)=>j!==i?x:{...x,w:+e.target.value||0})}))}
-                      placeholder="kg" type="number" className="w-16 px-2 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
-                  </Card>))}
+        {/* ACTIVE WORKOUT — full-screen Strong-style logger */}
+        {active && (
+          <div className="fixed inset-0 z-30 flex flex-col" style={{background:T.paper}}>
+            <div className="px-5 pt-5 pb-2 flex items-center justify-between" style={{borderBottom:`1.5px solid ${T.line}`}}>
+              <div className="flex-1">
+                <input value={active.title} onChange={e=>setActive(a=>({...a,title:e.target.value}))}
+                  className="font-bold text-lg outline-none w-full" style={{...disp}}/>
+                <div className="text-xs" style={{color:T.muted}}>{active.exercises.length} exercises · tap the ○ to complete a set</div>
               </div>
-              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>ADD AN EXERCISE</div>
-              <div className="space-y-2 mb-3">
-                {Object.entries(EXLIB).map(([muscle,names])=>(
-                  <div key={muscle}>
-                    <div className="text-xs font-bold mb-1" style={{color:T.navy}}>{muscle.toUpperCase()}</div>
-                    <div className="flex gap-1.5 flex-wrap mb-1">
-                      {names.map(nm=>(
-                        <Chip key={nm} active={false} onClick={()=>setLogSheet(f=>({...f,sets:[...f.sets,{ex:nm,muscle,w:20,reps:"3×10"}]}))}>{nm}</Chip>))}
-                    </div>
-                  </div>))}
-              </div>
-              <Btn full disabled={logSheet.sets.length===0} onClick={()=>{
-                setLogs(l=>[{id:nid(), d:"Today", title:logSheet.label||"Workout", detail:"Self-logged", kind:"self", sets:logSheet.sets},...l]);
-                setLogSheet(null); ping("Session logged — feeds your exercise progress charts");}}>Save session</Btn>
+              <button onClick={()=>setActive(null)} className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>Discard</button>
             </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
+              {active.exercises.length===0 && <div className="text-center text-sm py-10" style={{color:T.muted}}>No exercises yet — add one below.</div>}
+              {active.exercises.map((e,ei)=>{
+                const pb = bestWeight(logs,e.ex);
+                return (
+                <div key={ei}>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="font-semibold text-sm" style={{color:T.navy}}>{e.ex} <span className="text-xs font-normal" style={{color:T.muted}}>· {e.muscle}{pb>0?` · PB ${pb}kg`:""}</span></div>
+                    <div className="flex gap-2">
+                      {exMeta(e.ex).bar && <button onClick={()=>setPlate({target:e.sets[e.sets.length-1]?.w||60, bar:BAR_KG, ex:e.ex})} className="text-xs font-bold" style={{color:T.navy}}>Plates</button>}
+                      <button onClick={()=>removeExercise(ei)} className="text-xs font-bold" style={{color:T.accent}}>Remove</button>
+                    </div>
+                  </div>
+                  <div className="flex text-[10px] font-bold mb-1" style={{color:T.muted}}>
+                    <span className="w-10">TYPE</span><span className="flex-1 text-center">KG</span><span className="flex-1 text-center">REPS</span><span className="flex-1 text-center">RPE</span><span className="w-8 text-center">✓</span><span className="w-5"/></div>
+                  {e.sets.map((s,si)=>(
+                    <div key={si} className="flex items-center gap-1 mb-1" style={{opacity:s.done?0.6:1}}>
+                      <button onClick={()=>cycleType(ei,si)} className="w-10 text-xs font-bold py-1.5 rounded-lg" style={{color:"#fff",background:SET_TYPES[s.type]?.color||T.ink}}>{SET_TYPES[s.type]?.lbl}</button>
+                      <input value={s.w} type="number" onChange={ev=>updSet(ei,si,"w",+ev.target.value||0)} className="flex-1 px-1 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+                      <input value={s.reps} type="number" onChange={ev=>updSet(ei,si,"reps",+ev.target.value||0)} className="flex-1 px-1 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+                      <input value={s.rpe||""} type="number" placeholder="–" onChange={ev=>updSet(ei,si,"rpe",+ev.target.value||undefined)} className="flex-1 px-1 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+                      <button onClick={()=>toggleSetDone(ei,si)} className="w-8 h-8 rounded-lg text-sm font-bold" style={{background:s.done?T.moss:"transparent",color:s.done?"#fff":T.muted,border:`1.5px solid ${s.done?T.moss:T.line}`}}>{s.done?"✓":"○"}</button>
+                      <button onClick={()=>removeSet(ei,si)} className="w-5 text-xs" style={{color:T.muted}}>✕</button>
+                    </div>))}
+                  <div className="text-xs mb-1" style={{color:T.muted}}>est 1RM (best set): <b style={{color:T.ink}}>{Math.max(0,...e.sets.filter(isWorking).map(s=>est1RM(s.w,s.reps)))||"–"}kg</b></div>
+                  <button onClick={()=>addSet(ei)} className="text-xs font-bold" style={{color:T.navy}}>+ Add set</button>
+                </div>);})}
+            </div>
+            <div className="px-5 py-3 flex gap-2" style={{borderTop:`1.5px solid ${T.line}`}}>
+              <Btn full kind="ghost" onClick={()=>setExPicker(true)}>+ Add exercise</Btn>
+              <Btn full onClick={finishWorkout}>Finish</Btn>
+            </div>
+          </div>)}
+
+        {/* exercise picker */}
+        {exPicker && (
+          <div className="fixed inset-0 z-40 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setExPicker(false)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-2">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Add exercise</div>
+                <button onClick={()=>setExPicker(false)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <input value={exSearch} onChange={e=>setExSearch(e.target.value)} placeholder="Search exercises…"
+                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-3" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              {Object.entries(exLib).map(([muscle,names])=>{
+                const filtered = names.filter(n=>n.toLowerCase().includes(exSearch.toLowerCase()));
+                if (filtered.length===0) return null;
+                return (
+                <div key={muscle} className="mb-2">
+                  <div className="text-xs font-bold mb-1" style={{color:T.navy}}>{muscle.toUpperCase()}</div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {filtered.map(nm=><Chip key={nm} active={false} onClick={()=>addExerciseToActive(nm)}>{nm}</Chip>)}
+                  </div>
+                </div>);})}
+              <Btn full kind="ghost" onClick={()=>setCustomEx({name:exSearch, muscle:"Legs"})}>+ Create custom exercise</Btn>
+            </div>
+          </div>)}
+
+        {/* custom exercise form */}
+        {customEx && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setCustomEx(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div style={{...disp,fontWeight:700,fontSize:22}}>New exercise</div>
+              <div className="space-y-2 my-3">
+                <input value={customEx.name} onChange={e=>setCustomEx(c=>({...c,name:e.target.value}))} placeholder="Exercise name"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <Select value={customEx.muscle} onChange={v=>setCustomEx(c=>({...c,muscle:v}))} options={Object.keys(exLib).map(m=>[m,m])} />
+              </div>
+              <Btn full disabled={!customEx.name.trim()} onClick={addCustomExercise}>Add to library</Btn>
+            </div>
+          </div>)}
+
+        {/* rest timer */}
+        {rest && <RestTimer rest={rest} onDone={()=>setRest(null)} onChange={(sec)=>setRest(r=>({...r,sec}))} />}
+
+        {/* plate calculator */}
+        {plate && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setPlate(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Plate calculator</div>
+                <button onClick={()=>setPlate(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="flex items-center gap-2 my-3">
+                <span className="text-sm">Target</span>
+                <input value={plate.target} type="number" onChange={e=>setPlate(p=>({...p,target:+e.target.value||0}))} className="w-20 px-2 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+                <span className="text-sm">kg · bar {plate.bar}kg</span>
+              </div>
+              {(() => {
+                let perSide = (plate.target - plate.bar)/2; const out=[];
+                if (perSide < 0) return <div className="text-sm" style={{color:T.accent}}>Target is below the bar weight.</div>;
+                PLATES.forEach(p=>{ while(perSide >= p - 1e-9){ out.push(p); perSide = Math.round((perSide-p)*100)/100; } });
+                return (<>
+                  <div className="text-xs font-bold mb-1" style={{color:T.muted}}>PER SIDE</div>
+                  <div className="flex gap-1.5 flex-wrap">
+                    {out.length===0 ? <span className="text-sm" style={{color:T.muted}}>Just the bar.</span> :
+                      out.map((p,i)=><span key={i} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{background:T.ink,color:"#fff"}}>{p}</span>)}
+                  </div>
+                  {perSide>0 && <div className="text-xs mt-2" style={{color:T.accent}}>{perSide}kg/side not loadable with available plates.</div>}
+                </>);
+              })()}
+            </div>
+          </div>)}
+
+        {/* routine builder / assign */}
+        {routineSheet && (
+          <RoutineBuilder rs={routineSheet} setRs={setRoutineSheet} exLib={exLib}
+            onSave={(r)=>{ setRoutines(rs=>[...rs, {...r, id:nid()}]); setRoutineSheet(null); ping(`Routine "${r.name}" saved`); }} />
+        )}
+
+        {/* PR celebration toast */}
+        {prToast && (
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[60] px-5 py-3 rounded-2xl text-center" style={{background:T.accent,color:"#fff",boxShadow:"0 8px 24px rgba(232,80,10,.4)"}}>
+            <div className="font-bold text-lg" style={{...disp}}>{prToast}</div>
           </div>)}
 
         {/* trainer intake assessment sheet */}
@@ -1856,6 +2147,66 @@ export default function DannyFitnessDemo() {
 }
 
 /* ---------- Time off form (separate component: local sheet state) ---------- */
+/* ---------- Rest timer (auto-countdown, ±15s, skip) ---------- */
+function RestTimer({ rest, onDone, onChange }) {
+  const [left, setLeft] = useState(rest.sec);
+  useEffect(() => { setLeft(rest.sec); }, [rest.sec, rest.ex]);
+  useEffect(() => {
+    if (left <= 0) return;
+    const t = setTimeout(() => setLeft(l => l - 1), 1000);
+    return () => clearTimeout(t);
+  }, [left]);
+  const mmss = `${Math.floor(Math.max(0,left)/60)}:${String(Math.max(0,left)%60).padStart(2,"0")}`;
+  return (
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40 px-4 pb-4">
+      <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{background:T.ink,color:T.paper,boxShadow:"0 6px 20px rgba(0,0,0,.3)"}}>
+        <div className="text-xs" style={{color:"#B9B5A9"}}>Rest · {rest.ex}</div>
+        <div style={{...disp,fontWeight:700,fontSize:24,color:left<=0?"#8FD9B6":T.paper}}>{left<=0?"Done!":mmss}</div>
+        <div className="flex-1"/>
+        <button onClick={()=>onChange(Math.max(0,left-15))} className="text-xs font-bold px-2 py-1 rounded-lg" style={{border:"1.5px solid #3A362B"}}>−15s</button>
+        <button onClick={()=>onChange(left+15)} className="text-xs font-bold px-2 py-1 rounded-lg" style={{border:"1.5px solid #3A362B"}}>+15s</button>
+        <button onClick={onDone} className="text-xs font-bold px-2 py-1 rounded-lg" style={{background:T.accent}}>Skip</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Routine builder ---------- */
+function RoutineBuilder({ rs, setRs, exLib, onSave }) {
+  const [pick, setPick] = useState(false);
+  const allEx = Object.entries(exLib).flatMap(([m,arr])=>arr.map(n=>[n,m]));
+  return (
+    <div className="fixed inset-0 z-40 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setRs(null)}>
+      <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div style={{...disp,fontWeight:700,fontSize:22}}>New routine</div>
+          <button onClick={()=>setRs(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+        </div>
+        <input value={rs.name} onChange={e=>setRs(r=>({...r,name:e.target.value}))} placeholder="Routine name (e.g. Leg Day)"
+          className="w-full px-3 py-2.5 rounded-lg text-sm outline-none my-3" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+        <div className="space-y-2 mb-3">
+          {rs.items.map((it,i)=>(
+            <div key={i} className="flex items-center gap-2">
+              <span className="flex-1 text-sm font-semibold">{it.ex}</span>
+              <input value={it.sets} type="number" onChange={e=>setRs(r=>({...r,items:r.items.map((x,j)=>j!==i?x:{...x,sets:+e.target.value||1})}))} className="w-12 px-1 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+              <span className="text-xs" style={{color:T.muted}}>×</span>
+              <input value={it.reps} type="number" onChange={e=>setRs(r=>({...r,items:r.items.map((x,j)=>j!==i?x:{...x,reps:+e.target.value||1})}))} className="w-12 px-1 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+              <button onClick={()=>setRs(r=>({...r,items:r.items.filter((_,j)=>j!==i)}))} className="text-xs" style={{color:T.accent}}>✕</button>
+            </div>))}
+        </div>
+        {pick ? (
+          <div className="mb-3 max-h-40 overflow-y-auto">
+            {allEx.map(([n,m])=>(
+              <button key={n} onClick={()=>{ setRs(r=>({...r,items:[...r.items,{ex:n,muscle:m,sets:3,reps:8}]})); setPick(false); }}
+                className="block w-full text-left text-sm py-1.5 px-2 rounded-lg" style={{color:T.ink}}>{n} <span className="text-xs" style={{color:T.muted}}>· {m}</span></button>))}
+          </div>
+        ) : <Btn full kind="ghost" onClick={()=>setPick(true)}>+ Add exercise</Btn>}
+        <div className="mt-3"><Btn full disabled={!rs.name.trim()||rs.items.length===0} onClick={()=>onSave(rs)}>Save routine</Btn></div>
+      </div>
+    </div>
+  );
+}
+
 function TimeOffForm({ trainer, tName, onCancel, onSave }) {
   const [scope, setScope] = useState("weekly");
   const [dayIdx, setDayIdx] = useState(0);
