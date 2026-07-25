@@ -248,9 +248,9 @@ const seedRoutines = [
     items:[{ex:"Bench Press",muscle:"Chest",sets:4,reps:5},{ex:"Overhead Press",muscle:"Shoulder",sets:3,reps:8},{ex:"Incline DB Press",muscle:"Chest",sets:3,reps:10},{ex:"Lateral Raise",muscle:"Shoulder",sets:3,reps:15}] },
 ];
 const seedLeads = [
-  { id:nid(), name:"Rachel Ong", source:"Instagram", status:"new", note:"DM'd @exercise.only asking about NS/IPPT prep pricing" },
-  { id:nid(), name:"Jon Tay", source:"Enquiry form", status:"contacted", note:"Wants a trial Strength class" },
-  { id:nid(), name:"Wen Jie's colleague", source:"Referral", status:"trial booked", note:"Referred by Wen Jie" },
+  { id:nid(), name:"Rachel Ong", phone:"91234567", source:"Instagram", status:"new", note:"DM'd @exercise.only asking about NS/IPPT prep pricing" },
+  { id:nid(), name:"Jon Tay", phone:"98765432", source:"Enquiry form", status:"contacted", note:"Wants a trial Strength class" },
+  { id:nid(), name:"Wen Jie's colleague", phone:"", source:"Referral", status:"trial booked", note:"Referred by Wen Jie" },
 ];
 
 /* ---------- time helpers ---------- */
@@ -282,6 +282,15 @@ const muscleVolume = (logs, days) => {
   return Object.entries(vol).sort((a,b)=>b[1]-a[1]);
 };
 const loggedDaySet = (logs) => new Set(logs.filter(l=>l.exercises||l.kind==="cardio").map(l=>l.daysAgo??0));
+
+/* ---------- calorie estimates (MET-based; clearly "est") ---------- */
+const MET = { "Run":9.8,"Cycle":7.5,"Swim":8,"Walk / Hike":3.8,"Row":7,"Sports":7,"Muay Thai":10,"Yoga / Mobility":3,"Other":5 };
+const workingSetCount = (log) => (log.exercises||[]).reduce((a,e)=>a+e.sets.filter(isWorking).length,0);
+// strength: est ~3 min/working-set at ~5 MET; cardio: MET × bodyweight × hours.
+const estKcalStrength = (log, kg) => Math.round(5 * kg * (workingSetCount(log)*3/60));
+const estKcalCardio = (mins, activity, kg) => Math.round((MET[activity]||5) * kg * ((mins||0)/60));
+const estKcal = (log, kg) => log.exercises ? estKcalStrength(log,kg) : (log.mins ? estKcalCardio(log.mins, log.activity, kg) : null);
+const estKcalRoutine = (r, kg) => Math.round(5 * kg * (r.items.reduce((a,i)=>a+(+i.sets||0),0)*3/60));
 
 /* Merge everything that occupies a trainer's day into busy blocks: classes taught,
    confirmed PT bookings, and time off. loc:null on a block means "unavailable regardless
@@ -475,6 +484,7 @@ export default function DannyFitnessDemo() {
   const [shiftEditor, setShiftEditor] = useState(null); // {trainer}
   const [moveDay, setMoveDay] = useState(null); // running-late cascade sheet {trainer}
   const [doneSheet, setDoneSheet] = useState(null); // complete-session sheet {session/pt}
+  const [addLead, setAddLead] = useState(null);     // manual lead capture (walk-in / IG DM)
   const [incidentals, setIncidentals] = useState([  // trainer-logged extras awaiting Danny's approval
     { id:nid(), trainer:"wei", label:"Parking at Costa Del Sol", amt:8, note:"Sat NS class", status:"pending" },
   ]);
@@ -684,10 +694,13 @@ export default function DannyFitnessDemo() {
     const exs = active.exercises.filter(e=>e.sets.length>0);
     if (exs.length===0) { setActive(null); return; }
     const totalSets = exs.reduce((a,e)=>a+e.sets.filter(isWorking).length,0);
-    setLogs(l=>[{ id:nid(), d:"Today", daysAgo:0, title:active.title||"Workout", kind:"self", detail:"Self-logged",
-      exercises:exs.map(e=>({ex:e.ex,muscle:e.muscle,sets:e.sets.map(s=>({w:s.w,reps:s.reps,type:s.type,rpe:s.rpe}))})) },...l]);
+    const entry = { id:nid(), d:"Today", daysAgo:0, title:active.title||"Workout", kind:"self",
+      detail: active.forClient ? `Coach-logged · ${tName(user.id)}` : "Self-logged",
+      exercises:exs.map(e=>({ex:e.ex,muscle:e.muscle,sets:e.sets.map(s=>({w:s.w,reps:s.reps,type:s.type,rpe:s.rpe}))})) };
+    const kc = estKcal(entry, measurements[measurements.length-1].weight);
+    setLogs(l=>[entry,...l]);
     setActive(null); setRest(null);
-    ping(`Workout saved — ${exs.length} exercises · ${totalSets} sets`);
+    ping(`Workout saved — ${exs.length} exercises · ${totalSets} sets · ~${kc} kcal`);
   };
   const addCustomExercise = () => {
     if (!customEx.name.trim()) return;
@@ -964,6 +977,9 @@ export default function DannyFitnessDemo() {
           const dayset = loggedDaySet(logs);
           const weekWorkouts = strengthLogs(logs).filter(l=>(l.daysAgo??0)<=7).length;
           const myRoutines = routines.filter(r=>r.owner==="sam" || r.assignedTo==="Sam Lee");
+          const bodyKg = measurements[measurements.length-1].weight;
+          const monthLogs = logs.filter(l=>(l.daysAgo??0)<=31); // history: last month only
+          const weekKcal = logs.filter(l=>(l.daysAgo??0)<=7).reduce((a,l)=>a+(estKcal(l,bodyKg)||0),0);
           return (
           <main className="flex-1 pb-24 px-5">
             <H>Training log</H>
@@ -975,7 +991,7 @@ export default function DannyFitnessDemo() {
             {/* ---------------- TRAIN: start, routines, history ---------------- */}
             {logView==="train" && (<>
               <Card className="mb-3" style={{background:T.ink,color:T.paper,border:"none"}}>
-                <div className="text-sm" style={{color:"#B9B5A9"}}>{weekWorkouts} workout{weekWorkouts!==1?"s":""} this week</div>
+                <div className="text-sm" style={{color:"#B9B5A9"}}>{weekWorkouts} workout{weekWorkouts!==1?"s":""} this week{weekKcal>0?` · ~${weekKcal} kcal burned`:""}</div>
                 <div className="mt-2"><Btn full onClick={startBlank}>Start a workout</Btn></div>
                 <button onClick={()=>setNoteSheet({activity:"Run", duration:"", distance:"", notes:""})}
                   className="w-full text-center text-xs mt-2 font-semibold" style={{color:"#B9B5A9"}}>or log a run / cardio activity</button>
@@ -991,19 +1007,19 @@ export default function DannyFitnessDemo() {
                 {myRoutines.map(r=>(
                   <div key={r.id} className="flex items-center justify-between py-1.5">
                     <div><div className="font-semibold text-sm">{r.name} {r.assignedTo && r.owner!=="sam" && <span className="text-xs" style={{color:T.plum}}>· from Coach {tName(r.owner)}</span>}</div>
-                      <div className="text-xs" style={{color:T.muted}}>{r.items.map(i=>i.ex).slice(0,3).join(", ")}{r.items.length>3?"…":""}</div></div>
+                      <div className="text-xs" style={{color:T.muted}}>{r.items.length} exercises · ~{estKcalRoutine(r,bodyKg)} kcal</div></div>
                     <Btn small onClick={()=>startFromRoutine(r)}>Start</Btn>
                   </div>))}
               </Card>
 
-              {/* history */}
-              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>HISTORY</div>
+              {/* history — last 30 days */}
+              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>HISTORY · last 30 days</div>
               <div className="space-y-2">
-                {logs.map((l)=>(
+                {monthLogs.map((l)=>{ const kc=estKcal(l,bodyKg); return (
                   <Card key={l.id||l.title+l.d}>
                     <div className="flex justify-between items-center" onClick={()=>l.exercises && setLogOpen(logOpen===l.id?null:l.id)}>
                       <div><div className="font-semibold text-sm">{l.title} {l.kind==="cardio" && <span className="text-xs" style={{color:T.moss}}>· activity</span>}</div>
-                        <div className="text-xs" style={{color:T.muted}}>{l.exercises ? `${l.exercises.length} exercises · ${l.detail}` : l.detail}</div></div>
+                        <div className="text-xs" style={{color:T.muted}}>{l.exercises ? `${l.exercises.length} exercises` : l.detail}{kc?` · ~${kc} kcal`:""}</div></div>
                       <div className="flex items-center gap-2">
                         <div className="text-xs font-bold" style={{color:T.muted}}>{l.d}</div>
                         {l.exercises && <span className="text-xs" style={{color:T.navy}}>{logOpen===l.id?"▴":"▾"}</span>}
@@ -1022,7 +1038,7 @@ export default function DannyFitnessDemo() {
                           </div>))}
                         <Btn small full kind="ghost" onClick={()=>repeatLog(l)}>Repeat this workout</Btn>
                       </div>)}
-                  </Card>))}
+                  </Card>);})}
               </div>
             </>)}
 
@@ -1432,7 +1448,7 @@ export default function DannyFitnessDemo() {
                     <div className="flex gap-1.5">
                       <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
                       <Btn small kind="ghost" onClick={()=>setPermOpen(permOpen===t.id?null:t.id)}>Perms</Btn>
-                      <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — sessions need reassignment`)}>Off</Btn>
+                      <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — their sessions need reassignment`)}>Deactivate</Btn>
                     </div>
                   </div>
                   {permOpen===t.id && (
@@ -1992,8 +2008,9 @@ export default function DannyFitnessDemo() {
                 const parts = [`${noteSheet.duration} min`];
                 if (act.dist && noteSheet.distance) parts.push(`${noteSheet.distance} km`);
                 if (noteSheet.notes) parts.push(noteSheet.notes);
-                setLogs(l=>[{id:nid(), d:"Today", title:noteSheet.activity, detail:parts.join(" · "), kind:"cardio"},...l]);
-                ping(`${noteSheet.activity} logged`); setNoteSheet(null);}}>Save activity</Btn>
+                const kc = estKcalCardio(+noteSheet.duration, noteSheet.activity, measurements[measurements.length-1].weight);
+                setLogs(l=>[{id:nid(), d:"Today", daysAgo:0, title:noteSheet.activity, detail:parts.join(" · "), kind:"cardio", mins:+noteSheet.duration, activity:noteSheet.activity},...l]);
+                ping(`${noteSheet.activity} logged — ~${kc} kcal`); setNoteSheet(null);}}>Save activity</Btn>
             </div>
           </div>);})()}
 
