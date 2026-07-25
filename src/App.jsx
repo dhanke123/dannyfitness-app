@@ -911,9 +911,9 @@ export default function DannyFitnessDemo() {
             {/* quick start */}
             <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">JUMP BACK IN</div>
             <div className="flex gap-2.5 mb-4">
-              <button onClick={()=>{setTab("log"); setLogView("train"); startBlank();}} className="flex-1 flex items-center gap-2.5" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:12,textAlign:"left"}}>
+              <button onClick={()=>{setTab("log"); setLogView("train");}} className="flex-1 flex items-center gap-2.5" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:12,textAlign:"left"}}>
                 <div style={{width:34,height:34,borderRadius:12,background:T.accent,color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:16}}>＋</div>
-                <div><div style={{...disp,fontWeight:700,fontSize:13}}>Start workout</div><div className="text-xs" style={{color:T.muted}}>Log &amp; beat PRs</div></div>
+                <div><div style={{...disp,fontWeight:700,fontSize:13}}>Train</div><div className="text-xs" style={{color:T.muted}}>Routines &amp; log</div></div>
               </button>
               <button onClick={()=>setTab("book")} className="flex-1 flex items-center gap-2.5" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:12,textAlign:"left"}}>
                 <div style={{width:34,height:34,borderRadius:12,background:T.blue,color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:16}}>↻</div>
@@ -937,8 +937,8 @@ export default function DannyFitnessDemo() {
         {/* ==================== CLIENT: BOOK ==================== */}
         {isClient && tab==="book" && (
           <main className="flex-1 pb-24">
-            <div className="px-5 flex gap-2 pb-2 overflow-x-auto">
-              {[["classes","Classes"],["pt","Personal Training"],["camps","Camps"],["mine","My bookings"]].map(([k,l])=>(
+            <div className="px-5 flex gap-2 pb-2">
+              {[["classes","Classes"],["pt","PT"],["camps","Camps"],["mine","Booked"]].map(([k,l])=>(
                 <Chip key={k} active={seg===k} onClick={()=>setSeg(k)}>{l}</Chip>))}
             </div>
             {seg!=="camps" && seg!=="mine" && <>
@@ -994,47 +994,35 @@ export default function DannyFitnessDemo() {
                     onClick={()=>setPtTrainers(p=>p.includes(t.id)?p.filter(x=>x!==t.id):[...p,t.id])}>
                     {t.name}{t.id==="danny"?" ★":""}</Chip>))}
               </div>
-              <div className="text-xs mb-3" style={{color:T.muted}}>
-                Coaches are bookable at <b>any</b> location during their shift — the times below already exclude
-                classes they're teaching and add travel time when they'd be coming from another venue.
-              </div>
+              <div className="text-xs mb-3" style={{color:T.muted}}>Tap a time to book a {PT_DUR}-min session · <span style={{color:T.accent}}>⏱</span> = travel time added.</div>
               <div className="space-y-3">
                 {ptLoc==="other" ? (
                   <Card>
-                    <div className="text-sm mb-2" style={{color:T.muted}}>Ad-hoc spot — travel time can't be auto-checked, so pick a coach and set the exact time at checkout.</div>
+                    <div className="text-sm mb-2" style={{color:T.muted}}>Ad-hoc spot — pick a coach, set the exact time at checkout.</div>
                     <div className="flex flex-col gap-2">
                       {ptTrainers.map(tid=>(
                         <Btn key={tid} kind="ghost" onClick={()=>{setSheet({kind:"pt", trainer:tid, day, time:"10:00", loc:"other"}); setPayMode(credits[ptPool(tid)]>0?"credit":"paynow");}}
-                          disabled={!otherPlace}>{tName(tid)}{isHead(tid)?" (Head Coach)":""} · {DAYS[day]} — set time at checkout</Btn>))}
+                          disabled={!otherPlace}>{tName(tid)}{isHead(tid)?" ★":""}</Btn>))}
                     </div>
                     {!otherPlace && <div className="text-xs mt-2" style={{color:T.accent}}>Type a place name above first.</div>}
                   </Card>
                 ) : ptByTrainer.map(row=>(
                   <Card key={row.trainer}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="font-semibold text-sm">Coach {tName(row.trainer)} {isHead(row.trainer) && <span className="text-xs" style={{color:T.accent}}>★ HEAD COACH</span>}</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="font-semibold text-sm">{tName(row.trainer)}{isHead(row.trainer) && <span style={{color:T.accent}}> ★</span>}</div>
                       <div className="text-sm font-bold">${PT_PRICE[row.trainer]}<span className="text-xs font-normal" style={{color:T.muted}}> /{PT_DUR}m</span></div>
                     </div>
                     {!row.working ? (
-                      <div className="text-xs" style={{color:T.muted}}>Not on shift {DAYS[day]}.</div>
-                    ) : (<>
-                      <div className="text-xs mb-1" style={{color:T.moss}}>
-                        Free at {locName(ptLoc)}: {row.ranges.length? row.ranges.join(", ") : "—"}
-                      </div>
-                      {row.gaps.length>0 && (
-                        <div className="text-xs mb-2" style={{color:T.muted}}>
-                          Busy: {row.gaps.map((g,i)=><span key={i}>{i>0?" · ":""}{g.from}–{g.to} ({g.why})</span>)}
-                        </div>)}
-                      {row.slots.length===0 ? (
-                        <div className="text-xs" style={{color:T.muted}}>No open 45-min slot here on {DAYS[day]}.</div>
-                      ) : (
-                        <div className="flex gap-1.5 flex-wrap">
-                          {row.slots.map((sl,i)=>(
-                            <button key={i} onClick={()=>{setSheet({kind:"pt",...sl}); setPayMode(credits[ptPool(sl.trainer)]>0?"credit":"paynow");}}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold" style={{border:`1.5px solid ${sl.note?T.accent:T.line}`, color:sl.note?T.accent:T.ink}}
-                              title={sl.note||""}>{sl.time}{sl.note?" ⏱":""}</button>))}
-                        </div>)}
-                    </>)}
+                      <div className="text-xs" style={{color:T.muted}}>Off on {DAYS[day]}.</div>
+                    ) : row.slots.length===0 ? (
+                      <div className="text-xs" style={{color:T.muted}}>No open slots — try another day.</div>
+                    ) : (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {row.slots.map((sl,i)=>(
+                          <button key={i} onClick={()=>{setSheet({kind:"pt",...sl}); setPayMode(credits[ptPool(sl.trainer)]>0?"credit":"paynow");}}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold" style={{border:`1.5px solid ${sl.note?T.accent:T.line}`, color:sl.note?T.accent:T.ink}}
+                            title={sl.note||""}>{sl.time}{sl.note?" ⏱":""}</button>))}
+                      </div>)}
                   </Card>
                 ))}
               </div>
