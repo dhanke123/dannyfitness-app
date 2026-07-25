@@ -483,6 +483,7 @@ export default function DannyFitnessDemo() {
   const [routineSheet, setRoutineSheet] = useState(null); // build/assign a routine
   const [progMetric, setProgMetric] = useState("top"); // 'top' weight or 'orm' est-1RM
   const [logView, setLogView] = useState("train"); // Log sub-view: 'train' | 'progress'
+  const [goal, setGoal] = useState({ workouts:4, kcal:2000 }); // client's weekly goal (Log → Progress)
   const [intakeForm, setIntakeForm] = useState(null);
   const [products, setProducts] = useState(seedProducts);
   const [camps, setCamps] = useState(seedCamps);
@@ -854,7 +855,10 @@ export default function DannyFitnessDemo() {
           const weekWorkouts = strengthLogs(logs).filter(l=>(l.daysAgo??0)<=7).length;
           const weekKcal = logs.filter(l=>(l.daysAgo??0)<=7).reduce((a,l)=>a+(estKcal(l,bodyKg)||0),0);
           const prsN = prShelf(logs).length;
-          const ringPct = Math.min(100, Math.round(weekWorkouts/4*100));
+          // weekly-goal completion: blend of workouts + active-kcal progress
+          const wR = Math.min(1, weekWorkouts/(goal.workouts||1));
+          const kR = Math.min(1, weekKcal/(goal.kcal||1));
+          const ringPct = Math.round((wR+kR)/2*100);
           const nothing = myClassBookings.length===0 && myPT.length===0 && myCamps.length===0 && myWaitlist.length===0;
           return (
           <main className="flex-1 pb-24 px-5">
@@ -931,8 +935,7 @@ export default function DannyFitnessDemo() {
             <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">UPCOMING</div>
             <div className="space-y-3">
             {nothing && (
-              <Card className="text-center"><div className="text-sm py-3" style={{color:T.muted}}>Nothing booked yet.</div>
-                <Btn full onClick={()=>setTab("book")}>Book a session</Btn></Card>)}
+              <div className="text-sm py-1" style={{color:T.muted}}>Nothing booked yet.</div>)}
             {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid);
               return (
               <Card key={sid} className="flex items-center gap-3">
@@ -962,7 +965,7 @@ export default function DannyFitnessDemo() {
                   <div className="text-xs" style={{color:T.accent}}>We'll WhatsApp you if a spot opens</div></div>
               </Card>);})}
             </div>
-            <div className="text-xs text-center pt-3" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>
+            {!nothing && <div className="text-xs text-center pt-3" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>}
           </main>);})()}
 
         {/* ==================== CLIENT: BOOK ==================== */}
@@ -1177,7 +1180,38 @@ export default function DannyFitnessDemo() {
             </>)}
 
             {/* ---------------- PROGRESS: streak, PRs, charts, body stats ---------------- */}
-            {logView==="progress" && (<>
+            {logView==="progress" && (() => {
+              const bodyKg = measurements[measurements.length-1].weight;
+              const weekWorkouts = strengthLogs(logs).filter(l=>(l.daysAgo??0)<=7).length;
+              const weekKcal = logs.filter(l=>(l.daysAgo??0)<=7).reduce((a,l)=>a+(estKcal(l,bodyKg)||0),0);
+              const wPct = Math.min(100, Math.round(weekWorkouts/(goal.workouts||1)*100));
+              const kPct = Math.min(100, Math.round(weekKcal/(goal.kcal||1)*100));
+              return (<>
+              {/* weekly goal — client sets it, drives the Home ring */}
+              <Card className="mb-3">
+                <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">MY WEEKLY GOAL</div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">Workouts</span>
+                    <button onClick={()=>setGoal(g=>({...g,workouts:Math.max(1,g.workouts-1)}))} className="w-6 h-6 rounded-lg font-bold" style={{border:`1.5px solid ${T.line}`}}>−</button>
+                    <span className="text-sm font-bold w-5 text-center">{goal.workouts}</span>
+                    <button onClick={()=>setGoal(g=>({...g,workouts:g.workouts+1}))} className="w-6 h-6 rounded-lg font-bold" style={{border:`1.5px solid ${T.line}`}}>+</button>
+                  </div>
+                  <span className="text-xs" style={{color:T.muted}}>{weekWorkouts}/{goal.workouts} done</span>
+                </div>
+                <div className="rounded-full h-2 mb-3" style={{background:"#efe7d8"}}><div className="h-2 rounded-full" style={{width:`${wPct}%`,background:T.accent}}/></div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">Active kcal</span>
+                    <button onClick={()=>setGoal(g=>({...g,kcal:Math.max(500,g.kcal-250)}))} className="w-6 h-6 rounded-lg font-bold" style={{border:`1.5px solid ${T.line}`}}>−</button>
+                    <span className="text-sm font-bold w-12 text-center">{goal.kcal}</span>
+                    <button onClick={()=>setGoal(g=>({...g,kcal:g.kcal+250}))} className="w-6 h-6 rounded-lg font-bold" style={{border:`1.5px solid ${T.line}`}}>+</button>
+                  </div>
+                  <span className="text-xs" style={{color:T.muted}}>{weekKcal}/{goal.kcal}</span>
+                </div>
+                <div className="rounded-full h-2" style={{background:"#efe7d8"}}><div className="h-2 rounded-full" style={{width:`${kPct}%`,background:T.amber}}/></div>
+                <div className="text-xs mt-2" style={{color:T.muted}}>Your Home ring shows the average of these two.</div>
+              </Card>
               <Card className="mb-3" style={{background:T.ink,color:T.paper,border:"none"}}>
                 <div className="flex gap-5 mb-2">
                   <div><span style={{...disp,fontWeight:700,fontSize:26,color:T.accent}}>{weekWorkouts}</span> <span className="text-xs" style={{color:"#B9B5A9"}}>workouts / 7d</span></div>
@@ -1243,7 +1277,7 @@ export default function DannyFitnessDemo() {
                   <div className="text-xs self-end pb-1" style={{color:T.moss}}>▾ {(measurements[0].fat-measurements[measurements.length-1].fat).toFixed(1)}% since 1 Jul</div>
                 </div>
               </Card>
-            </>)}
+            </>);})()}
           </main>);})()}
 
         {/* ==================== CLIENT: SHOP (Buy · About · Offers) ==================== */}
