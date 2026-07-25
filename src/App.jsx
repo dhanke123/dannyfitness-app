@@ -519,11 +519,11 @@ export default function DannyFitnessDemo() {
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setRateSheet(null); setNoteSheet(null);
+    setDoneSheet(null); setRateSheet(null); setNoteSheet(null); setAddLead(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet||addLead||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -1423,21 +1423,31 @@ export default function DannyFitnessDemo() {
             </div>); })()}
 
             {adminSec==="people" && <div className="space-y-3">
-              <div className="text-xs font-bold" style={{color:T.muted}}>LEADS · enquiry, Instagram & referrals</div>
-              {leads.map(l=>(
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold" style={{color:T.muted}}>LEADS · enquiry, Instagram & referrals</div>
+                <Btn small kind="ghost" onClick={()=>setAddLead({name:"", phone:"", source:"Walk-in", note:""})}>+ Add lead</Btn>
+              </div>
+              {leads.map(l=>{ const wa = (l.phone||"").replace(/\D/g,""); return (
                 <Card key={l.id} className="!p-3">
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold text-sm">{l.name}</div>
+                    <div className="font-semibold text-sm">{l.name} {l.phone && <span className="text-xs font-normal" style={{color:T.muted}}>· +65 {l.phone}</span>}</div>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:T.line}}>{l.source}</span>
                   </div>
                   <div className="text-xs mt-0.5" style={{color:T.muted}}>{l.note}</div>
+                  {/* one-tap contact-back */}
+                  <div className="flex gap-1.5 mt-2">
+                    <button disabled={!wa} onClick={()=>{ if(l.status==="new") setLeads(ls=>ls.map(x=>x.id!==l.id?x:{...x,status:"contacted"})); ping(wa?`Opening WhatsApp to +65 ${l.phone} (deep-link in production)`:"No number on file"); }}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{background:wa?"#25D366":T.line, color:"#fff", opacity:wa?1:.5}}>WhatsApp</button>
+                    <button disabled={!wa} onClick={()=>ping(wa?`Calling +65 ${l.phone}…`:"No number on file")}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{border:`1.5px solid ${T.line}`, color:wa?T.ink:T.muted}}>Call</button>
+                  </div>
                   <div className="flex gap-1.5 mt-2 flex-wrap">
-                    {["new","contacted","trial booked","converted"].map(st=>(
+                    {["new","contacted","trial booked","converted","lost"].map(st=>(
                       <button key={st} onClick={()=>setLeads(ls=>ls.map(x=>x.id!==l.id?x:{...x,status:st}))}
                         className="text-xs font-bold px-2 py-1 rounded-lg"
                         style={{background:l.status===st?T.plum:"transparent", color:l.status===st?"#fff":T.muted, border:`1px solid ${l.status===st?T.plum:T.line}`}}>{st}</button>))}
                   </div>
-                </Card>))}
+                </Card>);})}
               <Btn full kind="ghost" onClick={()=>ping("Instagram booking link — opens this same flow from your bio/stories")}>View Instagram booking link</Btn>
               <div className="text-xs font-bold pt-2" style={{color:T.muted}}>TRAINERS · rate + permissions</div>
               {trainers.filter(t=>!t.admin).map(t=>{ const rt=rates[t.id]; return (
@@ -1759,6 +1769,31 @@ export default function DannyFitnessDemo() {
                   setTimeout(()=>setChatMsgs(m=>[...m,{from:"coach",text:"Got it — I'll get back to you shortly. (A future AI assistant could answer schedule/credit questions here instantly.)"}]),700);
                 }}>Send</Btn>
               </div>
+            </div>
+          </div>)}
+
+        {/* add lead (manual walk-in / IG DM capture) */}
+        {addLead && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setAddLead(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Add lead</div>
+                <button onClick={()=>setAddLead(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-xs mb-3" style={{color:T.muted}}>Log a walk-in, phone enquiry, or an Instagram DM you want to follow up.</div>
+              <div className="space-y-2 mb-3">
+                <input value={addLead.name} onChange={e=>setAddLead(a=>({...a,name:e.target.value}))} placeholder="Name"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <input value={addLead.phone} onChange={e=>setAddLead(a=>({...a,phone:e.target.value}))} placeholder="Mobile (for WhatsApp / call)"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <Select value={addLead.source} onChange={v=>setAddLead(a=>({...a,source:v}))}
+                  options={[["Walk-in","Walk-in"],["Instagram","Instagram DM"],["Enquiry form","Phone / enquiry"],["Referral","Referral"]]} />
+                <input value={addLead.note} onChange={e=>setAddLead(a=>({...a,note:e.target.value}))} placeholder="Note (what they're interested in)"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              </div>
+              <Btn full disabled={!addLead.name.trim()} onClick={()=>{
+                setLeads(ls=>[{id:nid(), name:addLead.name.trim(), phone:addLead.phone.replace(/\D/g,""), source:addLead.source, status:"new", note:addLead.note},...ls]);
+                ping(`${addLead.name.trim()} added to leads`); setAddLead(null);}}>Add lead</Btn>
             </div>
           </div>)}
 
