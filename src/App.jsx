@@ -2385,36 +2385,63 @@ export default function DannyFitnessDemo() {
         )}
 
         {/* move session sheet */}
-        {moveSheet && (
+        {moveSheet && (() => {
+          const nd = moveSheet.newDay ?? moveSheet.day;
+          const nt = moveSheet.newTime || moveSheet.time;
+          const nl = moveSheet.newLoc || moveSheet.loc;
+          const isPt = moveSheet.kind==="pt";
+          const dur = isPt ? PT_DUR : CT[sessions.find(s=>s.id===moveSheet.id)?.type]?.dur || 60;
+          const ns = toMin(nt), ne = ns+dur;
+          // conflict: overlap with another commitment for this coach on the *target* day (exclude self)
+          const others = trainerBusyBlocks(moveSheet.trainer, nd, ptCtx)
+            .filter(b => !(nd===moveSheet.day && b.start===toMin(moveSheet.time)));
+          const conflict = others.find(b => ns < b.end && ne > b.start);
+          const moved = nd!==moveSheet.day || nt!==moveSheet.time || nl!==moveSheet.loc;
+          const doCancel = () => {
+            if (isPt) setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,status:"cancelled"}));
+            else setSessions(ss=>ss.filter(s=>s.id!==moveSheet.id));
+            if (isAdmin) logAudit(`Cancelled ${moveSheet.label} · was ${DAYS[moveSheet.day]} ${moveSheet.time} · ${locName(moveSheet.loc)}`);
+            ping("Cancelled — booked clients notified (audited)"); setMoveSheet(null);
+          };
+          return (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setMoveSheet(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Move · {moveSheet.label}</div><button onClick={()=>setMoveSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
-              <div className="text-xs mb-3" style={{color:T.muted}}>{DAYS[moveSheet.day]} · currently {moveSheet.time} · {locName(moveSheet.loc)}</div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-sm font-semibold">New start time</span>
-                <input defaultValue={moveSheet.time} onChange={e=>setMoveSheet(m=>({...m,newTime:e.target.value}))}
-                  placeholder="HH:MM" className="w-24 px-2 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
-              </div>
-              <div className="text-xs mb-3" style={{color:T.muted}}>Re-checked against this coach's other sessions and the travel-time buffer before it's confirmed — booked clients are notified if it moves.</div>
-              {(() => {
-                const nt = moveSheet.newTime || moveSheet.time;
-                // conflict check: does the moved block overlap another commitment for this coach that day?
-                const dur = moveSheet.kind==="pt" ? PT_DUR : CT[sessions.find(s=>s.id===moveSheet.id)?.type]?.dur || 60;
-                const ns = toMin(nt), ne = ns+dur;
-                const others = trainerBusyBlocks(moveSheet.trainer, moveSheet.day, ptCtx)
-                  .filter(b => !(b.start===toMin(moveSheet.time))); // exclude itself (approx by start time)
-                const conflict = others.find(b => ns < b.end && ne > b.start);
-                return (<>
-                  {conflict && <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>⚠ Conflicts with {conflict.label} ({fromMin(conflict.start)}–{fromMin(conflict.end)}). You'll need to move that one too, or pick another time.</div>}
-                  <Btn full onClick={()=>{
-                    if (moveSheet.kind==="class") setSessions(ss=>ss.map(s=>s.id!==moveSheet.id?s:{...s,time:nt}));
-                    else setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,time:nt}));
-                    ping(conflict ? `Moved to ${nt} despite a conflict — resolve the overlap (audited)` : `Moved to ${nt} — booked clients notified (audited)`);
-                    setMoveSheet(null);}}>{conflict?"Move anyway":"Confirm move"}</Btn>
-                </>);
-              })()}
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Reschedule · {moveSheet.label}</div><button onClick={()=>setMoveSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
+              <div className="text-xs mb-3" style={{color:T.muted}}>Currently {DAYS[moveSheet.day]} · {moveSheet.time} · {locName(moveSheet.loc)}</div>
+
+              {moveSheet.confirmingCancel ? (<>
+                <div className="text-sm mb-4">Cancel this {isPt?"session":"class"}? Booked clients are notified. This can't be undone in the demo.</div>
+                <button onClick={doCancel} className="w-full font-bold rounded-xl py-3 mb-2" style={{background:T.accent,color:"#fff"}}>Yes, cancel it</button>
+                <button onClick={()=>setMoveSheet(m=>({...m,confirmingCancel:false}))} className="w-full text-sm font-bold" style={{color:T.muted}}>Keep it</button>
+              </>) : (<>
+                <div className="text-xs font-bold mb-1" style={{color:T.muted}}>NEW DAY</div>
+                <div className="flex gap-1.5 mb-3 overflow-x-auto">
+                  {[0,1,2,3,4,5,6].map(d=>{ const on=nd===d; return (
+                    <button key={d} onClick={()=>setMoveSheet(m=>({...m,newDay:d}))} className="rounded-lg text-center" style={{flex:"1 0 auto", minWidth:40, padding:"6px 8px",
+                      background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${on?T.ink:T.line}`}}>
+                      <div className="text-[11px] font-bold leading-none">{DAYS[d]}</div>
+                      <div className="text-[9px] leading-none mt-0.5" style={{opacity:.75}}>{fmtDM(upcomingDate(d))}</div>
+                    </button>);})}
+                </div>
+                <div className="flex gap-2 mb-3">
+                  <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>NEW TIME</div>
+                    <input value={nt} onChange={e=>setMoveSheet(m=>({...m,newTime:e.target.value}))}
+                      placeholder="HH:MM" className="w-full px-3 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                  <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>LOCATION</div>
+                    <Select value={nl} onChange={v=>setMoveSheet(m=>({...m,newLoc:v}))} options={locations.map(l=>[l.id,l.name])}/></div>
+                </div>
+                <div className="text-xs mb-3" style={{color:T.muted}}>Re-checked against this coach's other sessions and the travel-time buffer — booked clients are notified if it moves.</div>
+                {conflict && <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>⚠ Conflicts with {conflict.label} ({fromMin(conflict.start)}–{fromMin(conflict.end)}) on {DAYS[nd]}. Move that one too, or pick another slot.</div>}
+                <Btn full disabled={!moved} onClick={()=>{
+                  if (isPt) setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,day:nd,time:nt,loc:nl, date: b.date?fmtFull(dateFor(b.weekOff??0,nd)):b.date}));
+                  else setSessions(ss=>ss.map(s=>s.id!==moveSheet.id?s:{...s,day:nd,time:nt,loc:nl}));
+                  if (isAdmin) logAudit(`Moved ${moveSheet.label} · ${DAYS[moveSheet.day]} ${moveSheet.time} → ${DAYS[nd]} ${nt} · ${locName(nl)}`);
+                  ping(conflict ? `Moved to ${DAYS[nd]} ${nt} despite a conflict — resolve the overlap (audited)` : `Moved to ${DAYS[nd]} ${nt} — booked clients notified (audited)`);
+                  setMoveSheet(null);}}>{conflict?"Move anyway":"Confirm move"}</Btn>
+                <button onClick={()=>setMoveSheet(m=>({...m,confirmingCancel:true}))} className="w-full text-sm font-bold mt-2" style={{color:T.accent}}>Cancel this {isPt?"session":"class"}</button>
+              </>)}
             </div>
-          </div>)}
+          </div>);})()}
 
         {/* running-late / shift-my-day cascade */}
         {moveDay && (() => {
