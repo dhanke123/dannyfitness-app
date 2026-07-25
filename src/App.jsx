@@ -15,7 +15,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
    secondary accent (from the logo). Fonts: Bricolage Grotesque headlines + Hanken Grotesk body. */
 const T = { paper:"#FBF7F0", ink:"#241C16", accent:"#FF5A3C", amber:"#FFA53D",
   moss:"#12B39C", line:"#EEE7DB", muted:"#93897C", card:"#FFFFFF", navy:"#1E50A0", blue:"#1E50A0",
-  orange:"#F0812F", plum:"#7B4B94" };
+  orange:"#F0812F", plum:"#C24E6B" };
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');`;
 const disp = { fontFamily:"'Bricolage Grotesque', sans-serif", letterSpacing:"-0.01em" };
 const body = { fontFamily:"'Hanken Grotesk', sans-serif" };
@@ -538,7 +538,6 @@ export default function DannyFitnessDemo() {
   const [adminSec, setAdminSec] = useState("dash");
   const [permOpen, setPermOpen] = useState(null);
   const [measForm, setMeasForm] = useState(null);
-  const [rateSheet, setRateSheet] = useState(null);
   const [timeOffSheet, setTimeOffSheet] = useState(null); // {trainer}
   const [moveSheet, setMoveSheet] = useState(null); // {kind:'class'|'pt', ...item}
   const [newLocName, setNewLocName] = useState("");
@@ -554,12 +553,12 @@ export default function DannyFitnessDemo() {
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setRateSheet(null); setNoteSheet(null); setAddLead(null);
+    setDoneSheet(null); setNoteSheet(null); setAddLead(null);
     setAboutEdit(null); setBioEdit(null); setOfferSheet(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet||addLead||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -830,7 +829,7 @@ export default function DannyFitnessDemo() {
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
   return (
-    <div className="min-h-screen flex justify-center" style={{background:"#DEDACF", ...body, color:T.ink}}>
+    <div className="min-h-screen flex justify-center" style={{background:"#E6DFD3", ...body, color:T.ink}}>
       <style>{FONTS}</style>
       <div className="w-full max-w-md min-h-screen flex flex-col relative" style={{background:T.paper}}>
         <header className="px-5 pt-5 pb-3 flex items-center justify-between">
@@ -859,7 +858,6 @@ export default function DannyFitnessDemo() {
           const wR = Math.min(1, weekWorkouts/(goal.workouts||1));
           const kR = Math.min(1, weekKcal/(goal.kcal||1));
           const ringPct = Math.round((wR+kR)/2*100);
-          const nothing = myClassBookings.length===0 && myPT.length===0 && myCamps.length===0 && myWaitlist.length===0;
           return (
           <main className="flex-1 pb-24 px-5">
             {/* greeting + activity ring */}
@@ -1030,7 +1028,7 @@ export default function DannyFitnessDemo() {
 
             {seg==="camps" && <div className="px-5 space-y-3 pt-1">
               {camps.map(c=>{ const joined=myCamps.includes(c.id); const open=campOpenId===c.id; return (
-                <Card key={c.id} style={{background:"#F3EEF5"}}>
+                <Card key={c.id} style={{background:"#FBEDEF"}}>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:T.plum,color:"#fff"}}>{c.type.toUpperCase()} CAMP</span>
                   </div>
@@ -1077,7 +1075,7 @@ export default function DannyFitnessDemo() {
                     <Btn kind="ghost" small onClick={()=>cancelPT(b.id)}>Cancel</Btn>
                   </Card>))}
                 {myCamps.map(cid=>{ const c=camps.find(x=>x.id===cid); const canCancel=(c.startInDays??99)>CAMP_CANCEL_DAYS; return (
-                  <Card key={cid} className="flex items-center gap-3" style={{background:"#F3EEF5"}}>
+                  <Card key={cid} className="flex items-center gap-3" style={{background:"#FBEDEF"}}>
                     <div className="flex-1"><div className="font-semibold text-sm">{c.name}</div>
                       <div className="text-xs" style={{color:T.plum}}>{c.dates} · {locName(c.loc)}{c.type==="Kids"?" · waiver on file":""}</div></div>
                     {canCancel ? <Btn kind="ghost" small onClick={()=>cancelCamp(cid)}>Cancel</Btn>
@@ -1644,7 +1642,7 @@ export default function DannyFitnessDemo() {
                 </div>
                 <div className="text-xs mt-2" style={{color:"#6B675C"}}>Payout est. from each coach's rate (per-class/PT or salary). Actual payout runs in Money → payouts.</div>
               </Card>
-              <Card style={{background:"#F3EEF5"}}>
+              <Card style={{background:"#FBEDEF"}}>
                 <div className="text-xs font-bold" style={{color:T.plum}}>LEAD FUNNEL</div>
                 <div className="flex gap-4 mt-1">
                   {["new","contacted","trial booked"].map(st=>(
