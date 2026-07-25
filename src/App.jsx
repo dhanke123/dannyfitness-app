@@ -28,11 +28,27 @@ const Wordmark = ({ size=18, onDark=false }) => (
   <span style={{...disp, fontWeight:800, fontSize:size, color:onDark?"#fff":T.ink}}>
     Exercise<span style={{color:T.accent}}>Only</span></span>);
 /* social / contact icon link */
-const Social = ({ label, href, color, path }) => (
-  <a href={href} target="_blank" rel="noreferrer" title={label}
-    style={{width:42, height:42, borderRadius:14, background:color, display:"grid", placeItems:"center", flex:"none"}}>
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d={path}/></svg>
+const Social = ({ label, href, color, path, stroke }) => (
+  <a href={href} target="_blank" rel="noreferrer" title={label} aria-label={label}
+    style={{width:44, height:44, borderRadius:14, background:color, display:"grid", placeItems:"center", flex:"none"}}>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill={stroke?"none":"#fff"} stroke={stroke?"#fff":"none"}
+      strokeWidth={stroke?2:0} strokeLinecap="round" strokeLinejoin="round"><path d={path}/></svg>
   </a>);
+// Single source of truth for ExerciseOnly's public contact channels (icons only, real links).
+const CONTACTS = [
+  { label:"Instagram", href:"https://instagram.com/exercise.only", color:"#E1306C",
+    path:"M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.26 2.2.43.6.2 1 .5 1.4 1 .5.4.8.8 1 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c0 1.2-.2 1.8-.4 2.2-.2.6-.5 1-1 1.4-.4.5-.8.8-1.4 1-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2 0-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-1-.5-.4-.8-.8-1-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c0-1.2.2-1.8.4-2.2.2-.6.5-1 1-1.4.4-.5.8-.8 1.4-1 .4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 1-1.5-1.5 1.5 1.5 0 0 1 1.5 1.5Z" },
+  { label:"Facebook", href:"https://facebook.com/exercise.only", color:"#1877F2",
+    path:"M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.2c-1.2 0-1.6.8-1.6 1.5V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z" },
+  { label:"WhatsApp", href:"https://wa.me/6581006608", color:"#25D366",
+    path:"M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.6.1-.2.3-.7.9-.9 1-.1.2-.3.2-.6.1-1.6-.8-2.6-1.4-3.7-3.2-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.8-2-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1.1 2.7c.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3ZM12 3.5A8.5 8.5 0 0 0 4.6 16.3L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z" },
+  { label:"Email", href:"mailto:4exerciseonly@gmail.com", color:"#F0812F", stroke:true,
+    path:"M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z M3.5 6.5 12 12l8.5-5.5" },
+];
+const ConnectRow = ({ size }) => (
+  <div className="flex gap-2.5 justify-center">
+    {CONTACTS.map(c=><Social key={c.label} {...c}/>)}
+  </div>);
 
 /* ---------- locations (dynamic — this is the whole point of req.1) ---------- */
 // ExerciseOnly's real training locations (Gardens by the Bay = Danny's base at 11 Rhu Cross).
@@ -42,6 +58,9 @@ const seedLocations = [
   { id:"WS",  name:"Waterside" },
   { id:"CDS", name:"Costa Del Sol" },
   { id:"BP",  name:"Bayshore Park" },
+  { id:"CR",  name:"Costa Rhu" },
+  { id:"PB",  name:"Pebble Bay" },
+  { id:"SG",  name:"Sanctuary Green" },
 ];
 const DEFAULT_TRAVEL = 15; // minutes — fallback for any location pair without a specific value
 // East Coast venues sit close together; Gardens by the Bay is a longer hop across town.
@@ -60,7 +79,7 @@ const travelBetween = (travel, a, b) => {
 // Danny Teo (owner/head coach) + Dylan are the real ExerciseOnly team; the last two are demo
 // placeholders until Danny confirms his full roster.
 const TRAINERS = [
-  { id:"danny", name:"Danny", tag:"Head Coach", admin:true,
+  { id:"danny", name:"Danny", tag:"Head Coach", head:true,
     bio:"Danny Teo — founder of ExerciseOnly. Functional-training and post-injury rehab specialist, and an NS/IPPT prep coach. \"Sore today, strong tomorrow.\"" },
   { id:"dylan", name:"Dylan", tag:"Coach",
     bio:"Dylan has been with ExerciseOnly for years — passionate about helping clients improve their fitness and hit their goals." },
@@ -78,7 +97,38 @@ const CT = {
 };
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const FULLDAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
-const TODAY = 0;
+// Real-date layer. Weekday index stays 0=Mon..6=Sun (sessions recur weekly); a (weekOffset, day)
+// pair maps to an actual calendar date anchored on the Monday of the real current week.
+const MS_DAY = 86400000;
+const TODAY = (new Date().getDay() + 6) % 7;               // real current weekday, Mon=0
+const ANCHOR_MON = (() => { const n = new Date(); n.setHours(0,0,0,0); n.setDate(n.getDate() - TODAY); return n; })();
+const dateFor = (weekOff, d) => new Date(ANCHOR_MON.getTime() + (weekOff*7 + d) * MS_DAY);
+const fmtDM   = (dt) => dt.toLocaleDateString('en-GB', {day:'numeric', month:'short'});          // "28 Jul"
+const fmtFull = (dt) => dt.toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'}); // "Mon 28 Jul"
+const weekLabel = (weekOff) => { const a=dateFor(weekOff,0), b=dateFor(weekOff,6);
+  return `${a.toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${b.toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`; };
+// next real calendar date for a weekday (this week if still upcoming, else next week)
+const upcomingDate = (d) => dateFor(d>=TODAY ? 0 : 1, d);
+// location id is already a short code (GBB, MP, WS, CDS, BP) — used as the compact initials
+const locAbbr = (loc) => loc==="other" ? "OTH" : String(loc||"").toUpperCase();
+const firstName = (n) => String(n||"").split(" ")[0];
+
+// Per-week demo variety: deterministic extra PT bookings so each week looks different
+// (lets you visibly test week-to-week navigation). Current week (0) stays curated.
+function mulberry(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+const XNAMES=["Aloysius","Farah","Ivan","Grace","Jun Kai","Kavitha","Dominic","Zhi Hao","Anu","Ravi","Mei Ling","Josh","Nurul","Terence","Bala","Serene"];
+const XLOCS=["GBB","MP","WS","CDS","BP"];
+const XTRN=["danny","dylan","marcus","wei"];
+const _weekExtrasCache={};
+function weekExtras(weekOff){
+  if(weekOff===0) return [];
+  if(_weekExtrasCache[weekOff]) return _weekExtrasCache[weekOff];
+  const rnd=mulberry(weekOff*7919+13); const out=[]; const n=6+Math.floor(rnd()*7); // 6-12 extra PT/week
+  for(let i=0;i<n;i++){ const hr=8+Math.floor(rnd()*8), mm=rnd()<.5?"00":"30";
+    out.push({ id:`x${weekOff}_${i}`, trainer:XTRN[Math.floor(rnd()*XTRN.length)], day:Math.floor(rnd()*6),
+      time:`${String(hr).padStart(2,"0")}:${mm}`, who:XNAMES[Math.floor(rnd()*XNAMES.length)], loc:XLOCS[Math.floor(rnd()*XLOCS.length)], demo:true }); }
+  _weekExtrasCache[weekOff]=out; return out;
+}
 let _id = 0; const nid = () => "x" + ++_id;
 // `trainer` may be a single id or an array — a class/camp can need more than one coach.
 const mkS = (day,time,type,loc,trainer,cap,names) => {
@@ -129,11 +179,26 @@ const workWindow = (shifts, trainerId, dayIdx) => {
 };
 // Head coach (Danny) is priced separately from the other coaches — see PT packs too.
 const PT_PRICE = { danny:120, dylan:90, marcus:85, wei:85 };
-const isHead = (trainerId) => !!TRAINERS.find(t=>t.id===trainerId)?.admin;
+const isHead = (trainerId) => !!TRAINERS.find(t=>t.id===trainerId)?.head;
 // seed PT booking by *another* client at Gardens by the Bay — demonstrates same-location
 // back-to-back (0 gap) vs. cross-location travel buffer (auto-shift) on Danny's Monday.
+// Registered clients (demo roster) — used for the "book for an existing client" pickers.
+const CLIENTS = ["Sam Lee","Ben","Cheryl","Priya","Kumar","Elaine","Ivan","Nadia","Sarah T","Gireesh","Wen Jie","Dominic","Jaiveer"];
 const seedPtBookings = [
-  { id:"ptb1", trainer:"danny", day:0, time:"11:15", loc:"GBB", who:"Priya" },
+  // Danny's PT book — populated across the week for the demo (within his shift hours)
+  { id:"ptb1",  trainer:"danny", day:0, time:"09:00", loc:"GBB", who:"Priya" },
+  { id:"ptb2",  trainer:"danny", day:0, time:"11:15", loc:"GBB", who:"Kumar" },
+  { id:"ptb3",  trainer:"danny", day:1, time:"10:00", loc:"MP",  who:"Ben" },
+  { id:"ptb4",  trainer:"danny", day:1, time:"14:30", loc:"CDS", who:"Cheryl" },
+  { id:"ptb5",  trainer:"danny", day:2, time:"09:30", loc:"GBB", who:"Elaine" },
+  { id:"ptb6",  trainer:"danny", day:2, time:"15:00", loc:"GBB", who:"Sarah T" },
+  { id:"ptb7",  trainer:"danny", day:3, time:"11:00", loc:"MP",  who:"Ivan" },
+  { id:"ptb8",  trainer:"danny", day:4, time:"09:00", loc:"GBB", who:"Nadia" },
+  { id:"ptb9",  trainer:"danny", day:4, time:"13:30", loc:"CDS", who:"Gireesh" },
+  { id:"ptb10", trainer:"danny", day:5, time:"08:00", loc:"GBB", who:"Wen Jie" },
+  // other coaches — a few so the admin "all coaches" view has variety
+  { id:"ptb11", trainer:"dylan", day:0, time:"08:30", loc:"MP",  who:"Dominic" },
+  { id:"ptb12", trainer:"wei",   day:2, time:"16:00", loc:"CDS", who:"Jaiveer" },
 ];
 // trainer time off — one-off date or weekly-recurring, full day or a time range.
 // `overrides` = weekday indices where the coach chose to work anyway (availability override).
@@ -492,6 +557,8 @@ export default function DannyFitnessDemo() {
   const [camps, setCamps] = useState(seedCamps);
   const [classTemplates, setClassTemplates] = useState(seedClassTemplates);
   const [ledger, setLedger] = useState(seedLedger);
+  const [audit, setAudit] = useState([]); // admin override / book-on-behalf trail (never cleared in real build)
+  const logAudit = (what)=> setAudit(a=>[{id:nid(), what, when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}, ...a]);
   const [leads, setLeads] = useState(seedLeads);
   const [perm, setPerm] = useState({ dylan:{editDesc:false, cancel:false, earnings:false, manageLocations:false},
     marcus:{editDesc:true, cancel:false, earnings:false, manageLocations:false}, wei:{editDesc:false, cancel:false, earnings:true, manageLocations:false} });
@@ -522,7 +589,11 @@ export default function DannyFitnessDemo() {
   const [shiftEditor, setShiftEditor] = useState(null); // {trainer}
   const [moveDay, setMoveDay] = useState(null); // running-late cascade sheet {trainer}
   const [doneSheet, setDoneSheet] = useState(null); // complete-session sheet {session/pt}
-  const [schedView, setSchedView] = useState("week"); // schedule tab: 'week' master-calendar | 'coach' list
+  const [schedView, setSchedView] = useState("cal"); // schedule tab: 'cal' google-grid | 'week' list | 'coach'
+  const [calDay, setCalDay] = useState(TODAY);       // selected weekday in the calendar grid
+  const [calSpan, setCalSpan] = useState("day");     // calendar grid span: 'day' | 'week'
+  const [calTrainer, setCalTrainer] = useState("all"); // admin calendar filter: 'all' | trainerId
+  const [bookFor, setBookFor] = useState(null);      // book sheet {trainer,day,time,weekOff,self,who,nonClient}
   const [receiptSheet, setReceiptSheet] = useState(null); // reliable receipt-upload flow {step,file,amt,note,pct}
   const [walkSheet, setWalkSheet] = useState(null);  // class walk-in (attendance only, no payment) {sid,name}
   const [addLead, setAddLead] = useState(null);     // manual lead capture (walk-in / IG DM)
@@ -532,6 +603,9 @@ export default function DannyFitnessDemo() {
 
   const [seg, setSeg] = useState("classes");
   const [day, setDay] = useState(TODAY);
+  const [bookWeek, setBookWeek] = useState(0);   // client: which week is being browsed/booked (0 = this week)
+  const [calWeek, setCalWeek] = useState(0);     // trainer/admin google-calendar grid: week offset
+  const [bookDates, setBookDates] = useState({}); // {bookingKey: "Mon 28 Jul"} — human date per booking (demo)
   const [loc, setLoc] = useState("all");
   const [ptLoc, setPtLoc] = useState(seedLocations[0].id); // PT needs a real place (coach is available anywhere); supports "other"
   const [otherPlace, setOtherPlace] = useState("");
@@ -540,6 +614,8 @@ export default function DannyFitnessDemo() {
   const [payMode, setPayMode] = useState("credit");
   const [coupon, setCoupon] = useState("");
   const [couponMsg, setCouponMsg] = useState(null);
+  const [coupons, setCoupons] = useState(COUPONS); // admin-editable coupon table (seed = COUPONS)
+  const [couponForm, setCouponForm] = useState(null); // add-coupon sheet {code,mode,val,label}
   const [rosterOpen, setRosterOpen] = useState(null);
   const [adminSec, setAdminSec] = useState("dash");
   const [permOpen, setPermOpen] = useState(null);
@@ -559,12 +635,12 @@ export default function DannyFitnessDemo() {
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null);
+    setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null); setBookFor(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -581,23 +657,28 @@ export default function DannyFitnessDemo() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const booked = (s)=>s.attendees.length + (myClassBookings.includes(s.id)?1:0);
 
-  const login = (role) => {
-    if (role==="client") setUser({role, id:"sam", name:"Sam Lee"});
-    if (role==="trainer") setUser({role, id:"dylan", name:"Dylan"});
-    if (role==="admin") setUser({role, id:"danny", name:"Danny"});
-    setTab(role==="client"?"home":"today");
+  const ACCOUNTS = {
+    client: {role:"client",  id:"sam",   name:"Sam Lee"},
+    dylan:  {role:"trainer", id:"dylan", name:"Dylan"},
+    danny:  {role:"trainer", id:"danny", name:"Danny"},
+    admin:  {role:"admin",   id:"admin", name:"Admin"}, // pure admin — not a trainer
+  };
+  const login = (acct) => {
+    const u = ACCOUNTS[acct] || ACCOUNTS.client;
+    setUser(u);
+    setTab(u.role==="client"?"home":"today");
     setCoupon(""); setCouponMsg(null);
   };
 
   // pure price after coupon — safe to call during render (no state writes)
   const couponValue = (base) => {
-    const c = COUPONS[coupon.toUpperCase()];
+    const c = coupons[coupon.toUpperCase()];
     if (!c) return base;
     return c.pct ? base*(1-c.pct/100) : Math.max(0, base-c.flat);
   };
   // event-handler version: applies + shows a message
   const applyCoupon = (base) => {
-    const c = COUPONS[coupon.toUpperCase()];
+    const c = coupons[coupon.toUpperCase()];
     if (!c) { setCouponMsg(coupon? "Code not recognised" : null); return base; }
     setCouponMsg(`Applied: ${c.label}`);
     return c.pct ? base*(1-c.pct/100) : Math.max(0, base-c.flat);
@@ -613,15 +694,16 @@ export default function DannyFitnessDemo() {
       else { const price=applyCoupon(CT[s.type].price);
         setLedger(l=>[{id:nid(), who:"Sam Lee", what:`Drop-in · ${CT[s.type].name}${coupon?` (${coupon.toUpperCase()})`:""}`, amt:Math.round(price), method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]); }
       setMyClassBookings(b=>[...b, s.id]);
-      ping(payMode==="pass"?`Booked — covered by your ${classPass?.label}`:payMode==="credit"?`Booked — ${credits.classes-1} class credits left`:"Paid & booked. WhatsApp confirmation sent.");
+      if (s.date) setBookDates(bd=>({...bd, [s.id]:s.date}));
+      ping(payMode==="pass"?`Booked ${s.date||""} — covered by your ${classPass?.label}`:payMode==="credit"?`Booked ${s.date||""} — ${credits.classes-1} class credits left`:`Paid & booked${s.date?" for "+s.date:""}. WhatsApp confirmation sent.`);
     } else if (s.kind==="pt") {
       const locLabel = s.loc==="other" ? (otherPlace||"Other spot") : null;
       const pool = ptPool(s.trainer);
       if (payMode==="credit") setCredits(c=>({...c, [pool]:c[pool]-1}));
       else setLedger(l=>[{id:nid(), who:"Sam Lee", what:`PT · ${tName(s.trainer)}${isHead(s.trainer)?" (Head Coach)":""}`, amt:PT_PRICE[s.trainer], method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]);
-      const bk = {id:nid(), day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, otherLabel:locLabel, mode:payMode, pool};
+      const bk = {id:nid(), day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, otherLabel:locLabel, mode:payMode, pool, date:s.date, weekOff:bookWeek};
       setMyPT(p=>[...p, bk]);
-      if (s.loc!=="other") setPtBookings(pb=>[...pb, {id:bk.id, trainer:s.trainer, day:s.day, time:s.time, loc:s.loc, who:"Sam Lee"}]);
+      if (s.loc!=="other") setPtBookings(pb=>[...pb, {id:bk.id, trainer:s.trainer, day:s.day, time:s.time, loc:s.loc, who:"Sam Lee", date:s.date, weekOff:bookWeek}]);
       else setSuggestedLocs(sl=> sl.includes(locLabel) ? sl : [...sl, locLabel]);
       ping(payMode==="credit"?`PT booked — ${credits[pool]-1} ${isHead(s.trainer)?"head-coach":"coach"} PT credits left`:"Paid & booked. See you there!");
     }
@@ -794,10 +876,11 @@ export default function DannyFitnessDemo() {
           <div style={{...disp, fontWeight:700, letterSpacing:".04em", fontSize:11, color:T.muted}} className="mb-3">CHOOSE A DEMO LOGIN</div>
           {[
             ["client","Sam Lee","Member · class + PT credits", T.accent],
-            ["trainer","Dylan","Coach · trainer view", T.blue],
-            ["admin","Danny","Head Coach & Owner · admin", T.moss],
-          ].map(([role,name,sub,clr])=>(
-            <button key={role} onClick={()=>login(role)}
+            ["dylan","Dylan","Coach · trainer view", T.blue],
+            ["danny","Danny","Head Coach · trainer view", T.navy],
+            ["admin","Admin","Owner console · not a trainer", T.moss],
+          ].map(([acct,name,sub,clr])=>(
+            <button key={acct} onClick={()=>login(acct)}
               className="w-full text-left rounded-2xl p-4 mb-3 flex items-center gap-4"
               style={{background:T.card, border:`1.5px solid ${T.line}`, boxShadow:"0 6px 16px rgba(150,110,70,.06)"}}>
               <div className="w-11 h-11 rounded-2xl flex items-center justify-center"
@@ -809,18 +892,15 @@ export default function DannyFitnessDemo() {
               <div style={{color:clr, ...disp, fontWeight:700}} className="text-sm">Enter →</div>
             </button>
           ))}
-          <div className="text-xs mt-2" style={{color:T.muted}}>{locations.map(l=>l.name).join(" · ")}</div>
-          <div className="flex gap-2 mt-4 justify-center">
-            <Social label="Instagram" href="https://instagram.com/exercise.only" color="#E1306C"
-              path="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.26 2.2.43.6.2 1 .5 1.4 1 .5.4.8.8 1 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c0 1.2-.2 1.8-.4 2.2-.2.6-.5 1-1 1.4-.4.5-.8.8-1.4 1-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2 0-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-1-.5-.4-.8-.8-1-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c0-1.2.2-1.8.4-2.2.2-.6.5-1 1-1.4.4-.5.8-.8 1.4-1 .4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 1-1.5-1.5 1.5 1.5 0 0 1 1.5 1.5Z"/>
-            <Social label="Facebook" href="https://facebook.com/exercise.only" color="#1877F2"
-              path="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.2c-1.2 0-1.6.8-1.6 1.5V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z"/>
-            <Social label="WhatsApp" href="https://wa.me/6581006608" color="#25D366"
-              path="M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.6.1-.2.3-.7.9-.9 1-.1.2-.3.2-.6.1-1.6-.8-2.6-1.4-3.7-3.2-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.8-2-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1.1 2.7c.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3ZM12 3.5A8.5 8.5 0 0 0 4.6 16.3L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z"/>
-            <Social label="X" href="https://x.com/exercise.only" color="#111111"
-              path="M18.9 3H21l-6.5 7.4L22 21h-6l-4.7-6.1L5.9 21H3.8l7-8L2 3h6.1l4.2 5.6L18.9 3Zm-2.1 16.2h1.2L7.3 4.7H6l10.8 14.5Z"/>
+          <div className="text-xs mt-2 text-center" style={{color:T.muted}}>{locations.map(l=>l.name).join(" · ")}</div>
+
+          {/* Connect — visible before login so a prospective client can reach out with no account */}
+          <div className="mt-5 pt-4" style={{borderTop:`1.5px solid ${T.line}`}}>
+            <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-1 text-center">CONNECT WITH EXERCISEONLY</div>
+            <div className="text-xs mb-3 text-center" style={{color:T.muted}}>New here? Message us — no account needed.</div>
+            <ConnectRow/>
           </div>
-          <div className="text-center text-xs mt-4" style={{color:T.muted}}>Demo build — SMS OTP login in production. Data resets on refresh.</div>
+          <div className="text-center text-xs mt-5" style={{color:T.muted}}>Demo build — SMS OTP login in production. Data resets on refresh.</div>
         </div>
       </div>
     </div>
@@ -853,8 +933,9 @@ export default function DannyFitnessDemo() {
         {/* ==================== CLIENT: HOME (Solar Warm dashboard) ==================== */}
         {isClient && tab==="home" && (() => {
           const todayStr = new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}).toUpperCase().replace(',','');
-          const upC = myClassBookings.map(sid=>{const s=sessions.find(x=>x.id===sid); return {t:s.day*1440+toMin(s.time), time:s.time, day:s.day, title:CT[s.type].name, sub:`${locName(s.loc)} · Coach ${tName(s.trainer)}`};});
-          const upP = myPT.map(b=>({t:b.day*1440+toMin(b.time), time:b.time, day:b.day, title:"Personal Training", sub:`${b.loc==="other"?b.otherLabel:locName(b.loc)} · Coach ${tName(b.trainer)}`}));
+          const _hr=new Date().getHours(); const greet=_hr<12?"Good morning":_hr<18?"Good afternoon":"Good evening";
+          const upC = myClassBookings.map(sid=>{const s=sessions.find(x=>x.id===sid); return {t:s.day*1440+toMin(s.time), time:s.time, day:s.day, date:bookDates[sid], title:CT[s.type].name, sub:`${locName(s.loc)} · Coach ${tName(s.trainer)}`};});
+          const upP = myPT.map(b=>({t:b.day*1440+toMin(b.time), time:b.time, day:b.day, date:b.date, title:"Personal Training", sub:`${b.loc==="other"?b.otherLabel:locName(b.loc)} · Coach ${tName(b.trainer)}`}));
           const hero = [...upC,...upP].sort((a,b)=>a.t-b.t)[0];
           const bodyKg = measurements[measurements.length-1].weight;
           const weekWorkouts = strengthLogs(logs).filter(l=>(l.daysAgo??0)<=7).length;
@@ -869,7 +950,7 @@ export default function DannyFitnessDemo() {
             {/* greeting + activity ring */}
             <div className="flex items-start justify-between mb-3 mt-1">
               <div>
-                <div className="text-sm" style={{color:T.muted}}>Good morning,</div>
+                <div className="text-sm" style={{color:T.muted}}>{greet},</div>
                 <div style={{...disp,fontWeight:800,fontSize:24}}>{user.name}</div>
                 <div style={{...disp,fontWeight:700,letterSpacing:".1em",fontSize:10,color:T.accent,marginTop:3}}>{todayStr}</div>
               </div>
@@ -885,7 +966,7 @@ export default function DannyFitnessDemo() {
               <div style={{position:"relative",borderRadius:26,padding:18,overflow:"hidden",color:"#fff",marginBottom:12,
                 background:"linear-gradient(130deg,#FF5A3C 5%,#FFA53D 100%)",boxShadow:"0 18px 34px rgba(255,110,60,.28)"}}>
                 <div style={{position:"absolute",right:-30,bottom:-44,width:158,height:158,borderRadius:"50%",background:"rgba(255,255,255,.14)"}}/>
-                <span style={{...disp,fontWeight:700,fontSize:11,color:T.accent,background:"#fff",padding:"5px 11px",borderRadius:999}}>● NEXT UP · {DAYS[hero.day]} {hero.time}</span>
+                <span style={{...disp,fontWeight:700,fontSize:11,color:T.accent,background:"#fff",padding:"5px 11px",borderRadius:999}}>● NEXT UP · {hero.date||DAYS[hero.day]} · {hero.time}</span>
                 <div style={{...disp,fontWeight:800,fontSize:21,marginTop:10,position:"relative"}}>{hero.title}</div>
                 <div className="text-xs" style={{marginTop:3,opacity:.94,position:"relative"}}>{hero.sub}</div>
                 <div className="flex items-center gap-3" style={{marginTop:14,position:"relative"}}>
@@ -946,8 +1027,23 @@ export default function DannyFitnessDemo() {
                 <Chip key={k} active={seg===k} onClick={()=>setSeg(k)}>{l}</Chip>))}
             </div>
             {seg!=="camps" && seg!=="mine" && <>
-              <div className="px-5 flex gap-2 overflow-x-auto pt-1 pb-2">
-                {DAYS.map((d,i)=><Chip key={d} active={day===i} onClick={()=>setDay(i)}>{d}</Chip>)}
+              {/* week navigator — book beyond the current week */}
+              <div className="px-5 flex items-center justify-between pt-1 pb-2">
+                <button onClick={()=>setBookWeek(w=>Math.max(0,w-1))} disabled={bookWeek===0}
+                  className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:bookWeek===0?T.line:T.ink}}>‹</button>
+                <div className="text-sm font-bold" style={{...disp}}>{bookWeek===0?"This week":bookWeek===1?"Next week":weekLabel(bookWeek)}<span className="text-xs font-normal" style={{color:T.muted}}> · {weekLabel(bookWeek)}</span></div>
+                <button onClick={()=>setBookWeek(w=>Math.min(8,w+1))} disabled={bookWeek>=8}
+                  className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:bookWeek>=8?T.line:T.ink}}>›</button>
+              </div>
+              <div className="px-5 flex gap-2 overflow-x-auto pb-2">
+                {DAYS.map((d,i)=>{ const past=bookWeek===0 && i<TODAY; return (
+                  <button key={d} onClick={()=>!past&&setDay(i)} disabled={past}
+                    className="px-3 py-1.5 rounded-full text-center" style={{flex:"none",
+                      border:`1.5px solid ${day===i&&!past?T.ink:T.line}`, background:day===i&&!past?T.ink:T.card,
+                      color:past?T.line:day===i?T.card:T.ink, opacity:past?.5:1}}>
+                    <div className="text-xs font-bold leading-none">{d}</div>
+                    <div className="text-[10px] leading-none mt-0.5" style={{opacity:.8}}>{fmtDM(dateFor(bookWeek,i))}</div>
+                  </button>);})}
               </div>
               <div className="px-5 pb-3 flex items-center gap-2">
                 <span className="text-xs font-bold" style={{color:T.muted}}>LOCATION</span>
@@ -986,7 +1082,7 @@ export default function DannyFitnessDemo() {
                     {mine ? <span className="text-xs font-bold" style={{color:T.moss}}>BOOKED ✓</span> :
                      waited ? <span className="text-xs font-bold" style={{color:T.accent}}>WAITLISTED</span> :
                      full ? <Btn small kind="ghost" onClick={()=>joinWaitlist(s.id)}>Waitlist</Btn> :
-                     <Btn small onClick={()=>{setSheet({kind:"class",...s}); setPayMode(classPass?"pass":credits.classes>0?"credit":"paynow");}}>Book</Btn>}
+                     <Btn small onClick={()=>{setSheet({kind:"class",...s, date:fmtFull(dateFor(bookWeek,day))}); setPayMode(classPass?"pass":credits.classes>0?"credit":"paynow");}}>Book</Btn>}
                   </div>
                 </Card>);})}
             </div>}
@@ -1005,7 +1101,7 @@ export default function DannyFitnessDemo() {
                     <div className="text-sm mb-2" style={{color:T.muted}}>Ad-hoc spot — pick a coach, set the exact time at checkout.</div>
                     <div className="flex flex-col gap-2">
                       {ptTrainers.map(tid=>(
-                        <Btn key={tid} kind="ghost" onClick={()=>{setSheet({kind:"pt", trainer:tid, day, time:"10:00", loc:"other"}); setPayMode(credits[ptPool(tid)]>0?"credit":"paynow");}}
+                        <Btn key={tid} kind="ghost" onClick={()=>{setSheet({kind:"pt", trainer:tid, day, time:"10:00", loc:"other", date:fmtFull(dateFor(bookWeek,day))}); setPayMode(credits[ptPool(tid)]>0?"credit":"paynow");}}
                           disabled={!otherPlace}>{tName(tid)}{isHead(tid)?" ★":""}</Btn>))}
                     </div>
                     {!otherPlace && <div className="text-xs mt-2" style={{color:T.accent}}>Type a place name above first.</div>}
@@ -1023,7 +1119,7 @@ export default function DannyFitnessDemo() {
                     ) : (
                       <div className="flex gap-1.5 flex-wrap">
                         {row.slots.map((sl,i)=>(
-                          <button key={i} onClick={()=>{setSheet({kind:"pt",...sl}); setPayMode(credits[ptPool(sl.trainer)]>0?"credit":"paynow");}}
+                          <button key={i} onClick={()=>{setSheet({kind:"pt",...sl, date:fmtFull(dateFor(bookWeek, sl.day??day))}); setPayMode(credits[ptPool(sl.trainer)]>0?"credit":"paynow");}}
                             className="px-2.5 py-1.5 rounded-lg text-xs font-bold" style={{border:`1.5px solid ${sl.note?T.accent:T.line}`, color:sl.note?T.accent:T.ink}}
                             title={sl.note||""}>{sl.time}{sl.note?" ⏱":""}</button>))}
                       </div>)}
@@ -1069,14 +1165,14 @@ export default function DannyFitnessDemo() {
                 {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
                   <Card key={sid} className="flex items-center gap-3">
                     <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{s.time}</div>
-                    <div className="flex-1"><div className="font-semibold text-sm">{CT[s.type].name} · {DAYS[s.day]}</div>
+                    <div className="flex-1"><div className="font-semibold text-sm">{CT[s.type].name} · {bookDates[sid]||DAYS[s.day]}</div>
                       <div className="text-xs" style={{color:T.muted}}>{locName(s.loc)} · Coach {tName(s.trainer)}</div></div>
                     <Btn kind="ghost" small onClick={()=>cancelClass(sid)}>Cancel</Btn>
                   </Card>);})}
                 {myPT.map(b=>(
                   <Card key={b.id} className="flex items-center gap-3">
                     <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{b.time}</div>
-                    <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {DAYS[b.day]}</div>
+                    <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {b.date||DAYS[b.day]}</div>
                       <div className="text-xs" style={{color:T.muted}}>{b.loc==="other" ? b.otherLabel : locName(b.loc)} · Coach {tName(b.trainer)}</div></div>
                     <Btn kind="ghost" small onClick={()=>cancelPT(b.id)}>Cancel</Btn>
                   </Card>))}
@@ -1335,7 +1431,7 @@ export default function DannyFitnessDemo() {
               <div className="space-y-3">
                 {trainers.map(t=>(
                   <Card key={t.id} className="flex gap-3">
-                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{...disp,fontWeight:800,fontSize:18,background:t.admin?T.accent:T.blue,color:"#fff",flex:"none"}}>{t.name[0]}</div>
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{...disp,fontWeight:800,fontSize:18,background:t.head?T.accent:T.blue,color:"#fff",flex:"none"}}>{t.name[0]}</div>
                     <div className="flex-1">
                       <div className="font-bold text-sm">{t.name} <span className="text-xs font-normal" style={{color:T.muted}}>· {t.tag||"Coach"}</span></div>
                       <div className="text-xs mt-0.5" style={{color:T.muted}}>{t.bio || "Bio coming soon."}</div>
@@ -1399,22 +1495,13 @@ export default function DannyFitnessDemo() {
 
             {/* connect / follow */}
             <Card>
-              <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">CONNECT WITH EXERCISEONLY</div>
-              <div className="flex gap-2">
-                <Social label="Instagram" href="https://instagram.com/exercise.only" color="#E1306C"
-                  path="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.26 2.2.43.6.2 1 .5 1.4 1 .5.4.8.8 1 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c0 1.2-.2 1.8-.4 2.2-.2.6-.5 1-1 1.4-.4.5-.8.8-1.4 1-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2 0-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-1-.5-.4-.8-.8-1-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c0-1.2.2-1.8.4-2.2.2-.6.5-1 1-1.4.4-.5.8-.8 1.4-1 .4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 1-1.5-1.5 1.5 1.5 0 0 1 1.5 1.5Z"/>
-                <Social label="Facebook" href="https://facebook.com/exercise.only" color="#1877F2"
-                  path="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.2c-1.2 0-1.6.8-1.6 1.5V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z"/>
-                <Social label="WhatsApp" href="https://wa.me/6581006608" color="#25D366"
-                  path="M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.6.1-.2.3-.7.9-.9 1-.1.2-.3.2-.6.1-1.6-.8-2.6-1.4-3.7-3.2-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.8-2-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1.1 2.7c.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3ZM12 3.5A8.5 8.5 0 0 0 4.6 16.3L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z"/>
-                <Social label="X" href="https://x.com/exercise.only" color="#111111"
-                  path="M18.9 3H21l-6.5 7.4L22 21h-6l-4.7-6.1L5.9 21H3.8l7-8L2 3h6.1l4.2 5.6L18.9 3Zm-2.1 16.2h1.2L7.3 4.7H6l10.8 14.5Z"/>
-              </div>
-              <div className="text-xs mt-2" style={{color:T.muted}}>@exercise.only · 4exerciseonly@gmail.com</div>
+              <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2.5">CONNECT WITH EXERCISEONLY</div>
+              <ConnectRow/>
+              <div className="text-xs mt-2.5 text-center" style={{color:T.muted}}>@exercise.only · 4exerciseonly@gmail.com</div>
             </Card>
 
             {/* support */}
-            <a href="mailto:support@exerciseonly.app?subject=App%20issue%20report" className="block">
+            <a href="mailto:4exerciseonly@gmail.com?subject=App%20issue%20report" className="block">
               <Card className="flex items-center justify-between">
                 <div><div className="font-semibold text-sm">Report an issue</div>
                   <div className="text-xs" style={{color:T.muted}}>Something not working? Email the app team.</div></div>
@@ -1489,9 +1576,139 @@ export default function DannyFitnessDemo() {
           <main className="flex-1 pb-24 px-5">
             <H>{isAdmin?"Master schedule":"My week & availability"}</H>
             <div className="flex gap-2 pb-3">
-              {[["week","Week"],["coach",isAdmin?"By coach":"Availability"]].map(([k,l])=>(
+              {[["cal","Calendar"],["week","List"],["coach",isAdmin?"By coach":"Availability"]].map(([k,l])=>(
                 <Chip key={k} active={schedView===k} onClick={()=>setSchedView(k)}>{l}</Chip>))}
             </div>
+
+            {/* ---- CALENDAR: Google-Calendar-style time-grid — day or full-week ---- */}
+            {schedView==="cal" && (() => {
+              const toMin = (t)=>{ const [h,m]=t.split(":").map(Number); return h*60+m; };
+              const HSTART=6, HEND=22, PXH=52, GUT=40, HEADH=34;
+              const gridH=(HEND-HSTART)*PXH;
+              // events for a weekday, respecting role + admin trainer filter, with lane packing
+              const evsForDay = (d) => {
+                const inFilter = (tid)=> isAdmin ? (calTrainer==="all"||tid===calTrainer) : tid===user.id;
+                const cls = sessions.filter(s=>s.day===d && sessTrainers(s).some(inFilter));
+                const pts = ptBookings.filter(b=>b.day===d && b.status!=="cancelled" && inFilter(b.trainer));
+                const extras = weekExtras(calWeek).filter(x=>x.day===d && inFilter(x.trainer));
+                const evs = [
+                  ...cls.map(s=>({start:toMin(s.time), dur:CT[s.type].dur, color:CT[s.type].color, title:CT[s.type].name,
+                    time:s.time, code:s.type, who:null, locId:s.loc,
+                    sub:`${locName(s.loc)} · ${sessTrainers(s).map(tName).join(" + ")}`,
+                    move:{kind:"class", id:s.id, day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, label:CT[s.type].name}})),
+                  ...pts.map(b=>({start:toMin(b.time), dur:PT_DUR, color:b.byAdmin?T.plum:T.navy, title:`PT · ${b.who}`,
+                    time:b.time, code:"PT", who:b.who, locId:b.loc,
+                    sub:`${b.otherLabel||locName(b.loc)} · ${tName(b.trainer)}`,
+                    move:{kind:"pt", id:b.id, day:b.day, time:b.time, trainer:b.trainer, loc:b.loc, label:`PT · ${b.who}`}})),
+                  ...extras.map(x=>({start:toMin(x.time), dur:PT_DUR, color:"#8A7CC0", title:`PT · ${x.who}`,
+                    time:x.time, code:"PT", who:x.who, locId:x.loc, demo:true,
+                    sub:`${locName(x.loc)} · ${tName(x.trainer)}`, move:null})),
+                ].sort((a,b)=>a.start-b.start);
+                const laneEnds=[]; evs.forEach(e=>{ let i=0; for(;i<laneEnds.length;i++){ if(laneEnds[i]<=e.start) break; } e.lane=i; laneEnds[i]=e.start+e.dur; });
+                evs._lanes=Math.max(1,laneEnds.length);
+                return evs;
+              };
+              const bookAt = (d,hr) => {
+                const trainer = isAdmin ? (calTrainer!=="all"?calTrainer:trainers[0]?.id) : user.id;
+                setBookFor({trainer, day:d, time:`${String(hr).padStart(2,"0")}:00`, weekOff:calWeek, loc:locations[0]?.id, self:!isAdmin, who:"", nonClient:false});
+              };
+              const evClick = (e)=>{ if(e.demo) ping("Sample demo booking — illustrative data for this week"); else setMoveSheet(e.move); };
+              // one day's vertical grid. `wide` = roomy single-day; `compact` = narrow week column.
+              const DayGrid = ({d, wide, compact}) => { const evs=evsForDay(d); const lanes=evs._lanes; return (
+                <div style={{position:"relative", height:gridH, flex: wide?"1 1 auto":"1 1 0", width: wide?"auto":"auto", minWidth:0, borderLeft: wide?"none":`1px solid ${T.line}`}}>
+                  {Array.from({length:HEND-HSTART}).map((_,i)=>{ const hr=HSTART+i; return (
+                    <div key={hr} onClick={()=>bookAt(d,hr)}
+                      className="absolute left-0 right-0" style={{top:i*PXH, height:PXH, borderTop:`1px solid ${T.line}`, cursor:"pointer"}}/>);})}
+                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH; const h=Math.max(20,e.dur/60*PXH-2);
+                    const left=`${(e.lane/lanes)*100}%`; const w=`${100/lanes}%`;
+                    return compact ? (
+                    <div key={i} onClick={(ev)=>{ev.stopPropagation(); evClick(e);}}
+                      className="absolute rounded overflow-hidden" style={{top:top+1, height:h, left, width:w, padding:"1px 2px",
+                        background:e.color, color:"#fff", fontSize:8.5, lineHeight:1.08, boxShadow:"0 1px 2px rgba(0,0,0,.15)", cursor:"pointer"}}>
+                      <div style={{fontWeight:800}}>{e.time}</div>
+                      <div style={{fontWeight:700}}>{e.who ? firstName(e.who) : e.code}</div>
+                      {h>26 && <div style={{opacity:.85}}>{locAbbr(e.locId)}</div>}
+                    </div>) : (
+                    <div key={i} onClick={(ev)=>{ev.stopPropagation(); evClick(e);}}
+                      className="absolute rounded-md px-1 py-0.5 overflow-hidden" style={{top:top+1, height:h, left, width:w,
+                        background:e.color, color:"#fff", fontSize:10, lineHeight:1.1, boxShadow:"0 1px 3px rgba(0,0,0,.15)", cursor:"pointer"}}>
+                      <div style={{fontWeight:700}}>{e.time} {e.title}</div>
+                      {h>32 && <div style={{opacity:.9}}>{e.sub}</div>}
+                    </div>);})}
+                </div>);};
+              const TimeGutter = ({top}) => (
+                <div style={{width:GUT, flex:"none"}}>
+                  {top && <div style={{height:HEADH}}/>}
+                  <div style={{position:"relative", height:gridH}}>
+                    {Array.from({length:HEND-HSTART}).map((_,i)=>(
+                      <div key={i} className="absolute text-[10px]" style={{top:i*PXH-5, left:2, color:T.muted}}>{HSTART+i}:00</div>))}
+                  </div>
+                </div>);
+              const dayCount = (d)=>evsForDay(d).length;
+              return (
+              <div>
+                {/* controls: admin trainer filter, then day/week span toggle */}
+                {isAdmin && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold" style={{color:T.muted}}>COACH</span>
+                    <Select value={calTrainer} onChange={setCalTrainer} options={[["all","All coaches"], ...trainers.map(t=>[t.id,t.name+(isHead(t.id)?" ★":"")])]}/>
+                  </div>)}
+                <div className="flex gap-2 mb-2">
+                  {[["day","Day"],["week","Full week"]].map(([k,l])=>(
+                    <Chip key={k} active={calSpan===k} onClick={()=>setCalSpan(k)}>{l}</Chip>))}
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={()=>setCalWeek(w=>w-1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>‹</button>
+                  <div className="text-sm font-bold" style={disp}>{weekLabel(calWeek)}{calWeek===0?" · this week":""}</div>
+                  <button onClick={()=>setCalWeek(w=>w+1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
+                </div>
+
+                {calSpan==="day" ? (<>
+                  <div className="flex gap-1.5 pb-3 overflow-x-auto">
+                    {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(calWeek,d); const isToday=(calWeek===0&&d===TODAY); const on=calDay===d; return (
+                      <button key={d} onClick={()=>setCalDay(d)} className="rounded-xl py-1.5 text-center" style={{flex:"1 0 auto", minWidth:44,
+                        background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${isToday&&!on?T.accent:on?T.ink:T.line}`}}>
+                        <div className="text-[10px] font-bold leading-none" style={{opacity:.7}}>{DAYS[d]}</div>
+                        <div style={{...disp,fontWeight:700,fontSize:16,lineHeight:1.1}}>{dt.getDate()}</div>
+                      </button>);})}
+                  </div>
+                  <div className="text-xs mb-1.5" style={{color:T.muted}}>{FULLDAYS[calDay]} {fmtDM(dateFor(calWeek,calDay))} · {dayCount(calDay)} session{dayCount(calDay)!==1?"s":""} · tap a slot to book, tap a session to modify</div>
+                  <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
+                    <TimeGutter top={false}/>
+                    <DayGrid d={calDay} wide/>
+                  </div>
+                </>) : (<>
+                  <div className="text-xs mb-1.5" style={{color:T.muted}}>Whole week · tap a slot to book, tap a session to modify · blocks show time · type/client · location initials</div>
+                  <div className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
+                    <div className="flex">
+                      <TimeGutter top/>
+                      {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(calWeek,d); const isToday=(calWeek===0&&d===TODAY); return (
+                        <div key={d} className="flex flex-col" style={{flex:"1 1 0", minWidth:0}}>
+                          <div className="text-center" style={{height:HEADH, borderLeft:`1px solid ${T.line}`, background:isToday?"#FBF3EC":"transparent"}}>
+                            <div className="text-[9px] font-bold leading-none pt-1" style={{color:isToday?T.accent:T.muted}}>{DAYS[d]}</div>
+                            <div style={{...disp,fontWeight:700,fontSize:12,lineHeight:1.1,color:isToday?T.accent:T.ink}}>{dt.getDate()}/{dt.getMonth()+1}</div>
+                          </div>
+                          <DayGrid d={d} compact/>
+                        </div>);})}
+                    </div>
+                  </div>
+                  <div className="text-[10px] mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5" style={{color:T.muted}}>
+                    <span>Loc: {locations.map(l=>l.id).join(" · ")}</span>
+                    <span style={{color:"#8A7CC0"}}>■ sample data (future weeks)</span>
+                  </div>
+                </>)}
+
+                {(isAdmin || !isClient) && <div className="mt-3"><Btn small full kind="ghost"
+                  onClick={()=>{ const trainer=isAdmin?(calTrainer!=="all"?calTrainer:trainers[0]?.id):user.id;
+                    setBookFor({trainer, day:calDay, time:"09:00", weekOff:calWeek, loc:locations[0]?.id, self:!isAdmin, who:"", nonClient:false}); }}>
+                  ＋ {isAdmin?"Book on behalf of a coach":"Book a session"}</Btn></div>}
+                {isAdmin && audit.length>0 && (
+                  <Card className="!p-3 mt-3">
+                    <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>ADMIN ACTIVITY · audit trail</div>
+                    {audit.slice(0,5).map(a=>(
+                      <div key={a.id} className="text-xs py-0.5" style={{color:T.ink}}>{a.what} <span style={{color:T.muted}}>· {a.when}</span></div>))}
+                  </Card>)}
+              </div>);})()}
 
             {/* ---- WEEK: master calendar — who is booked when, across all coaches & locations ---- */}
             {schedView==="week" && (
@@ -1541,14 +1758,14 @@ export default function DannyFitnessDemo() {
                 <div className="space-y-2">
                   {staffSessions(t.id).sort((a,b)=>a.day-b.day||a.time.localeCompare(b.time)).map(s=>(
                     <Card key={s.id} className="flex items-center gap-3 !p-3">
-                      <span style={{...disp,fontWeight:700,fontSize:16,minWidth:70}}>{DAYS[s.day]} {s.time}</span>
+                      <span style={{...disp,minWidth:70}}><span style={{fontWeight:700,fontSize:16}}>{DAYS[s.day]} {s.time}</span><br/><span className="text-xs" style={{color:T.muted,fontWeight:500}}>{fmtDM(upcomingDate(s.day))}</span></span>
                       <span className="flex-1 text-sm">{CT[s.type].name} · {locName(s.loc)}
                         {sessTrainers(s).length>1 && <span className="text-xs" style={{color:T.navy}}> · +{sessTrainers(s).length-1} coach</span>}</span>
                       {(isAdmin || t.id===user.id) && <Btn small kind="ghost" onClick={()=>setMoveSheet({kind:"class", id:s.id, day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, label:CT[s.type].name})}>Move</Btn>}
                     </Card>))}
                   {myPtToday.length>0 && myPtToday.map(b=>(
                     <Card key={b.id} className="flex items-center gap-3 !p-3" style={{background:"#EEF1F6"}}>
-                      <span style={{...disp,fontWeight:700,fontSize:16,minWidth:70}}>{DAYS[b.day]} {b.time}</span>
+                      <span style={{...disp,minWidth:70}}><span style={{fontWeight:700,fontSize:16}}>{DAYS[b.day]} {b.time}</span><br/><span className="text-xs" style={{color:T.muted,fontWeight:500}}>{fmtDM(upcomingDate(b.day))}</span></span>
                       <span className="flex-1 text-sm">PT · {b.who} · {locName(b.loc)}</span>
                       {(isAdmin || t.id===user.id) && <Btn small kind="ghost" onClick={()=>setMoveSheet({kind:"pt", id:b.id, day:b.day, time:b.time, trainer:b.trainer, loc:b.loc, label:`PT · ${b.who}`})}>Move</Btn>}
                     </Card>))}
@@ -1795,12 +2012,17 @@ export default function DannyFitnessDemo() {
                     className="text-xs font-bold px-1.5 py-1 rounded" style={{color:T.accent,border:`1.5px solid ${T.line}`}}>Delete</button>
                 </Card>))}
               <div className="text-xs" style={{color:T.muted}}>Deactivate hides a pack from the shop but keeps already-purchased ones valid. Delete removes it entirely.</div>
-              <div className="text-xs font-bold pt-2" style={{color:T.muted}}>COUPONS</div>
-              {Object.entries(COUPONS).map(([code,c])=>(
+              <div className="flex items-center justify-between pt-2">
+                <div className="text-xs font-bold" style={{color:T.muted}}>COUPONS</div>
+                <Btn small kind="ghost" onClick={()=>setCouponForm({code:"", mode:"pct", val:"", label:""})}>+ Add</Btn>
+              </div>
+              {Object.entries(coupons).length===0 && <div className="text-xs" style={{color:T.muted}}>No coupons. Add one with + Add.</div>}
+              {Object.entries(coupons).map(([code,c])=>(
                 <Card key={code} className="flex items-center gap-3 !p-3">
                   <div className="flex-1"><div className="font-semibold text-sm">{code}</div>
                     <div className="text-xs" style={{color:T.muted}}>{c.label}</div></div>
-                  <span className="text-xs font-bold" style={{color:T.moss}}>ACTIVE ●</span>
+                  <button onClick={()=>{ setCoupons(cs=>{ const n={...cs}; delete n[code]; return n; }); ping(`Coupon ${code} deleted`); }}
+                    className="text-xs font-bold px-1.5 py-1 rounded" style={{color:T.accent,border:`1.5px solid ${T.line}`}}>Delete</button>
                 </Card>))}
               <div className="text-xs font-bold pt-2" style={{color:T.muted}}>REFERRAL REWARD</div>
               <Card className="!p-3"><div className="text-sm">1 free class credit — both referrer & referee, on referee's first paid booking.</div></Card>
@@ -1956,6 +2178,7 @@ export default function DannyFitnessDemo() {
                 </div>
               ) : null}
               <div className="text-sm mb-3" style={{color:T.muted}}>
+                {sheet.date && <span style={{color:T.ink, fontWeight:600}}>{sheet.date} · {sheet.time} · </span>}
                 {sheet.kind==="class" ? locName(sheet.loc) : (sheet.loc==="other" ? (otherPlace||"Other spot") : locName(sheet.loc))} · ${sheet.kind==="class"?CT[sheet.type].price:PT_PRICE[sheet.trainer]}</div>
               {sheet.note && <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>⏱ {sheet.note}</div>}
               <div className="space-y-2 mb-3">
@@ -2271,6 +2494,93 @@ export default function DannyFitnessDemo() {
                 const nm=(walkSheet.name||"").trim()||"Guest";
                 setSessions(ss=>ss.map(s=>s.id!==walkSheet.sid?s:{...s, attendees:[...s.attendees,{name:nm,status:"attended",walkin:true}]}));
                 ping(`${nm} added as walk-in · attendance marked`); setWalkSheet(null);}}>Add & mark attended</Btn>
+            </div>
+          </div>)}
+
+        {/* book a session — admin books on behalf of any coach; a trainer books their own.
+            Client is picked from the registered list, or marked as a non-client (unregistered). */}
+        {bookFor && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setBookFor(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>{bookFor.self?"Book a session":"Book for a coach"}</div>
+                <button onClick={()=>setBookFor(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-sm mb-3" style={{color:T.ink,fontWeight:600}}>{fmtFull(dateFor(bookFor.weekOff,bookFor.day))} · PT session</div>
+              <div className="space-y-2.5">
+                {bookFor.self ? (
+                  <div><div className="text-xs font-bold mb-1" style={{color:T.muted}}>COACH</div>
+                    <div className="px-3 py-2.5 rounded-lg text-sm" style={{border:`1.5px solid ${T.line}`,background:T.line}}>{tName(bookFor.trainer)} (you)</div></div>
+                ) : (
+                  <div><div className="text-xs font-bold mb-1" style={{color:T.muted}}>COACH</div>
+                    <Select value={bookFor.trainer} onChange={v=>setBookFor(b=>({...b,trainer:v}))} options={trainers.map(t=>[t.id,t.name+(isHead(t.id)?" ★":"")])}/></div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="text-xs font-bold" style={{color:T.muted}}>CLIENT</div>
+                    <button onClick={()=>setBookFor(b=>({...b, nonClient:!b.nonClient, who:""}))} className="text-xs font-bold" style={{color:T.accent}}>
+                      {bookFor.nonClient?"↩ Pick registered client":"+ Non-client (not registered)"}</button>
+                  </div>
+                  {bookFor.nonClient ? (
+                    <input value={bookFor.who||""} onChange={e=>setBookFor(b=>({...b,who:e.target.value}))} placeholder="Name (walk-in / not yet a member)" autoFocus
+                      className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.accent}`,background:T.card}}/>
+                  ) : (
+                    <Select value={bookFor.who||""} onChange={v=>setBookFor(b=>({...b,who:v}))} options={[["","Select a client…"], ...CLIENTS.map(c=>[c,c])]}/>
+                  )}
+                  {bookFor.nonClient && <div className="text-xs mt-1" style={{color:T.accent}}>Marked non-client — booked for attendance; not linked to a member account.</div>}
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>TIME</div>
+                    <input value={bookFor.time} onChange={e=>setBookFor(b=>({...b,time:e.target.value}))} placeholder="HH:MM"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                  <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>LOCATION</div>
+                    <Select value={bookFor.loc} onChange={v=>setBookFor(b=>({...b,loc:v}))} options={[...locations.map(l=>[l.id,l.name]), ["other","Other (type a place)"]]}/></div>
+                </div>
+                {bookFor.loc==="other" && (
+                  <div><input value={bookFor.otherPlace||""} onChange={e=>setBookFor(b=>({...b,otherPlace:e.target.value}))} placeholder="e.g. Poolside, East Coast Park" autoFocus
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.accent}`,background:T.card}}/>
+                    <div className="text-xs mt-1" style={{color:T.muted}}>Ad-hoc spot — Danny can save it as a real location later.</div></div>)}
+              </div>
+              <div className="text-xs my-3" style={{color:T.muted}}>{isAdmin?"Recorded to the audit trail — who booked what, for which coach, and when.":"Added to your schedule. Payment handled at checkout / outside the app for walk-ins."}</div>
+              <Btn full disabled={!(bookFor.who||"").trim() || (bookFor.loc==="other" && !(bookFor.otherPlace||"").trim())} onClick={()=>{
+                const who=(bookFor.who||"").trim(); const date=fmtFull(dateFor(bookFor.weekOff,bookFor.day));
+                const otherLabel = bookFor.loc==="other" ? (bookFor.otherPlace||"Other spot").trim() : null;
+                const locShown = otherLabel || locName(bookFor.loc);
+                setPtBookings(pb=>[...pb,{id:nid(), trainer:bookFor.trainer, day:bookFor.day, time:bookFor.time, loc:bookFor.loc, otherLabel, who:who+(bookFor.nonClient?" (non-client)":""), date, weekOff:bookFor.weekOff, byAdmin:isAdmin, nonClient:bookFor.nonClient}]);
+                if (isAdmin) logAudit(`Booked PT · ${who}${bookFor.nonClient?" (non-client)":""} with ${tName(bookFor.trainer)} · ${date} ${bookFor.time} · ${locShown}`);
+                ping(`Booked ${who} · ${tName(bookFor.trainer)}${isAdmin?" · audit-logged":""}`); setBookFor(null);}}>Confirm booking</Btn>
+            </div>
+          </div>)}
+
+        {/* admin: add a coupon */}
+        {couponForm && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setCouponForm(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Add coupon</div>
+                <button onClick={()=>setCouponForm(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="space-y-2.5">
+                <div><div className="text-xs font-bold mb-1" style={{color:T.muted}}>CODE</div>
+                  <input value={couponForm.code} onChange={e=>setCouponForm(f=>({...f,code:e.target.value.toUpperCase().replace(/\s/g,"")}))} placeholder="e.g. SEP20"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none uppercase" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                <div className="flex gap-2">
+                  <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>TYPE</div>
+                    <Select value={couponForm.mode} onChange={v=>setCouponForm(f=>({...f,mode:v}))} options={[["pct","% off"],["flat","$ off"]]}/></div>
+                  <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>{couponForm.mode==="pct"?"PERCENT":"AMOUNT $"}</div>
+                    <input value={couponForm.val} onChange={e=>setCouponForm(f=>({...f,val:e.target.value}))} type="number" placeholder={couponForm.mode==="pct"?"10":"5"}
+                      className="w-full px-3 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                </div>
+                <div><div className="text-xs font-bold mb-1" style={{color:T.muted}}>LABEL</div>
+                  <input value={couponForm.label} onChange={e=>setCouponForm(f=>({...f,label:e.target.value}))} placeholder="e.g. 20% off — September promo"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+              </div>
+              <div className="mt-4"><Btn full disabled={!couponForm.code.trim()||!(+couponForm.val>0)} onClick={()=>{
+                const code=couponForm.code.trim(); const v=+couponForm.val;
+                setCoupons(cs=>({...cs, [code]: couponForm.mode==="pct" ? {pct:v, label:couponForm.label||`${v}% off`} : {flat:v, label:couponForm.label||`$${v} off`}}));
+                ping(`Coupon ${code} added`); setCouponForm(null);}}>Add coupon</Btn></div>
             </div>
           </div>)}
 
