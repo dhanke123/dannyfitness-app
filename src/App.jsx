@@ -11,11 +11,28 @@ import { useState, useMemo, useEffect, useRef } from "react";
    In-memory demo state only — swap for Supabase in production.
    ============================================================ */
 
-const T = { paper:"#F7F5F0", ink:"#17150F", accent:"#E8500A", moss:"#1F7A4D",
-  line:"#E3DFD4", muted:"#8A867B", card:"#FFFFFF", navy:"#2B4C7E", plum:"#7B4B94" };
-const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap');`;
-const disp = { fontFamily:"'Barlow Condensed', sans-serif", textTransform:"uppercase", letterSpacing:"0.02em" };
-const body = { fontFamily:"'Barlow', sans-serif" };
+/* ExerciseOnly — "Solar Warm" theme: cream canvas, coral→amber energy, brand blue as a
+   secondary accent (from the logo). Fonts: Bricolage Grotesque headlines + Hanken Grotesk body. */
+const T = { paper:"#FBF7F0", ink:"#241C16", accent:"#FF5A3C", amber:"#FFA53D",
+  moss:"#12B39C", line:"#EEE7DB", muted:"#93897C", card:"#FFFFFF", navy:"#1E50A0", blue:"#1E50A0",
+  orange:"#F0812F", plum:"#7B4B94" };
+const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap');`;
+const disp = { fontFamily:"'Bricolage Grotesque', sans-serif", letterSpacing:"-0.01em" };
+const body = { fontFamily:"'Hanken Grotesk', sans-serif" };
+
+/* ExerciseOnly logo mark (real asset, inlined) + wordmark */
+const LOGO_URI = "data:image/png;base64,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";
+const LogoMark = ({ size=30 }) => (
+  <img src={LOGO_URI} alt="ExerciseOnly" style={{height:size, width:"auto", display:"block"}} />);
+const Wordmark = ({ size=18, onDark=false }) => (
+  <span style={{...disp, fontWeight:800, fontSize:size, color:onDark?"#fff":T.ink}}>
+    Exercise<span style={{color:T.accent}}>Only</span></span>);
+/* social / contact icon link */
+const Social = ({ label, href, color, path }) => (
+  <a href={href} target="_blank" rel="noreferrer" title={label}
+    style={{width:42, height:42, borderRadius:14, background:color, display:"grid", placeItems:"center", flex:"none"}}>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff"><path d={path}/></svg>
+  </a>);
 
 /* ---------- locations (dynamic — this is the whole point of req.1) ---------- */
 // ExerciseOnly's real training locations (Gardens by the Bay = Danny's base at 11 Rhu Cross).
@@ -172,7 +189,18 @@ const seedClassTemplates = [
   ] },
 ];
 
-const COUPONS = { WELCOME10:{ pct:10, label:"10% off — new client" }, IPPT5: { flat:5, label:"$5 off NS/IPPT Prep" } };
+const COUPONS = { WELCOME10:{ pct:10, label:"10% off — new client" }, IPPT5: { flat:5, label:"$5 off NS/IPPT Prep" },
+  EO88:{ flat:8.8, label:"$8.80 off — 8.8 flash" }, MONTH10:{ pct:10, label:"10% off — regular this month" } };
+// Client-facing "About" copy (admin-editable) + promotional offers.
+const seedAbout = {
+  classes:"Small-group sessions across strength, HIIT, boot camp, NS/IPPT prep and cardio. A class pack is a bundle of credits — one credit books one class, use them anytime before they expire. Prefer unlimited? Grab a day, weekly or monthly pass instead.",
+  pt:"One-to-one coaching built around your goals — technique, injury rehab, IPPT prep or general fitness. PT packs come in head-coach (Danny) and coach tiers; book any coach at any location that fits your schedule.",
+};
+const seedOffers = [
+  { id:"o1", kind:"Referral", title:"Bring a friend", blurb:"Share your code — when your friend books their first session, you BOTH get a free class credit.", code:null, color:"#12B39C" },
+  { id:"o2", kind:"This month", title:"Regular reward", blurb:"Book 8+ classes this month and unlock 10% off your next pack.", code:"MONTH10", color:"#1E50A0" },
+  { id:"o3", kind:"8.8 Flash", title:"8.8 Sale", blurb:"$8.80 off any pack this week only. Tap to grab the code, then use it at checkout.", code:"EO88", color:"#FF5A3C" },
+];
 const seedLedger = [
   { id:nid(), who:"Priya", what:"10 Class Pack", amt:300, method:"PayNow", status:"paid", d:"Mon 09:12" },
   { id:nid(), who:"Ben", what:"5 PT Pack", amt:425, method:"Card", status:"paid", d:"Mon 08:47" },
@@ -429,6 +457,12 @@ export default function DannyFitnessDemo() {
   const [credits, setCredits] = useState({classes:5, ptHead:1, ptCoach:2});
   const [classPass, setClassPass] = useState(null); // {label, period, expires} — active unlimited-class pass
   const [shopSheet, setShopSheet] = useState(null);  // {product} — checkout modal for a shop purchase
+  const [shopTab, setShopTab] = useState("buy");     // Shop sub-view: buy | about | offers
+  const [aboutCopy, setAboutCopy] = useState(seedAbout);
+  const [offers, setOffers] = useState(seedOffers);
+  const [aboutEdit, setAboutEdit] = useState(null);  // admin: edit About copy
+  const [bioEdit, setBioEdit] = useState(null);      // admin: edit a coach bio {id, bio}
+  const [offerSheet, setOfferSheet] = useState(null);// admin: add/edit an offer
   const [myClassBookings, setMyClassBookings] = useState([]);
   const [myPT, setMyPT] = useState([]);
   const [myWaitlist, setMyWaitlist] = useState([]);
@@ -520,10 +554,11 @@ export default function DannyFitnessDemo() {
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setRateSheet(null); setNoteSheet(null); setAddLead(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet||addLead||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||rateSheet||noteSheet||addLead||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -730,35 +765,57 @@ export default function DannyFitnessDemo() {
   const staffTimeOff = (tid)=>timeOff.filter(t=>t.trainer===tid && t.active!==false);
   const revenue = ledger.filter(l=>l.status==="paid").reduce((a,b)=>a+Math.max(0,b.amt),0);
 
-  /* ============================ LOGIN ============================ */
+  /* ============================ LANDING / LOGIN ============================ */
   if (!user) return (
-    <div className="min-h-screen flex items-center justify-center px-5" style={{background:T.ink, ...body}}>
+    <div className="min-h-screen flex justify-center" style={{background:"#E6DFD3", ...body, color:T.ink}}>
       <style>{FONTS}</style>
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div style={{...disp,fontWeight:700,fontSize:52,lineHeight:1,color:T.paper}}>EXERCISE<span style={{color:T.accent}}>ONLY</span></div>
-          <div className="text-xs mt-2 italic" style={{color:T.accent}}>Sore today, strong tomorrow.</div>
-          <div className="text-sm mt-1" style={{color:"#B9B5A9"}}>{locations.map(l=>l.name).join(" · ")}</div>
+      <div className="w-full max-w-md min-h-screen flex flex-col" style={{background:T.paper}}>
+        {/* warm hero */}
+        <div style={{background:"linear-gradient(140deg,#FF5A3C 0%,#FFA53D 100%)", color:"#fff",
+          padding:"46px 26px 54px", borderRadius:"0 0 36px 36px", position:"relative", overflow:"hidden"}}>
+          <div style={{position:"absolute", right:-40, bottom:-60, width:200, height:200, borderRadius:"50%", background:"rgba(255,255,255,.14)"}}/>
+          <div style={{position:"absolute", right:40, top:-30, width:80, height:80, borderRadius:"50%", background:"rgba(255,255,255,.12)"}}/>
+          <div className="flex items-center gap-2 mb-8" style={{position:"relative"}}>
+            <div style={{background:"#fff", borderRadius:12, padding:6, display:"flex"}}><LogoMark size={26}/></div>
+            <span style={{...disp, fontWeight:800, fontSize:19, color:"#fff"}}>ExerciseOnly</span>
+          </div>
+          <h1 style={{...disp, fontWeight:800, fontSize:38, lineHeight:1.02, position:"relative"}}>Sore today,<br/>strong tomorrow.</h1>
+          <p style={{fontSize:14, marginTop:12, opacity:.95, position:"relative"}}>One app for your training — book classes, PT &amp; camps, and log every workout.</p>
         </div>
-        {[
-          ["client","Sam Lee","Client · class + PT credits"],
-          ["trainer","Dylan","Trainer · Coach"],
-          ["admin","Danny","Admin · Head Coach & Owner"],
-        ].map(([role,name,sub])=>(
-          <button key={role} onClick={()=>login(role)}
-            className="w-full text-left rounded-2xl p-4 mb-3 flex items-center gap-4"
-            style={{background:"#221F17", border:"1.5px solid #3A362B"}}>
-            <div className="w-11 h-11 rounded-full flex items-center justify-center font-bold"
-              style={{...disp, fontSize:20, background:role==="admin"?T.accent:role==="trainer"?T.navy:T.moss, color:"#fff"}}>
-              {name[0]}</div>
-            <div className="flex-1">
-              <div className="font-bold" style={{color:T.paper}}>{name}</div>
-              <div className="text-xs" style={{color:"#B9B5A9"}}>{sub}</div>
-            </div>
-            <div style={{color:T.accent}} className="font-bold text-sm">LOG IN →</div>
-          </button>
-        ))}
-        <div className="text-center text-xs mt-4" style={{color:"#6B675C"}}>Demo build — OTP login in production. Data resets on refresh.</div>
+
+        {/* body */}
+        <div className="flex-1 px-6 pt-6 pb-8">
+          <div style={{...disp, fontWeight:700, letterSpacing:".04em", fontSize:11, color:T.muted}} className="mb-3">CHOOSE A DEMO LOGIN</div>
+          {[
+            ["client","Sam Lee","Member · class + PT credits", T.accent],
+            ["trainer","Dylan","Coach · trainer view", T.blue],
+            ["admin","Danny","Head Coach & Owner · admin", T.moss],
+          ].map(([role,name,sub,clr])=>(
+            <button key={role} onClick={()=>login(role)}
+              className="w-full text-left rounded-2xl p-4 mb-3 flex items-center gap-4"
+              style={{background:T.card, border:`1.5px solid ${T.line}`, boxShadow:"0 6px 16px rgba(150,110,70,.06)"}}>
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center"
+                style={{...disp, fontWeight:800, fontSize:19, background:clr, color:"#fff"}}>{name[0]}</div>
+              <div className="flex-1">
+                <div style={{...disp, fontWeight:700, fontSize:16}}>{name}</div>
+                <div className="text-xs" style={{color:T.muted}}>{sub}</div>
+              </div>
+              <div style={{color:clr, ...disp, fontWeight:700}} className="text-sm">Enter →</div>
+            </button>
+          ))}
+          <div className="text-xs mt-2" style={{color:T.muted}}>{locations.map(l=>l.name).join(" · ")}</div>
+          <div className="flex gap-2 mt-4 justify-center">
+            <Social label="Instagram" href="https://instagram.com/exercise.only" color="#E1306C"
+              path="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.26 2.2.43.6.2 1 .5 1.4 1 .5.4.8.8 1 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c0 1.2-.2 1.8-.4 2.2-.2.6-.5 1-1 1.4-.4.5-.8.8-1.4 1-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2 0-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-1-.5-.4-.8-.8-1-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c0-1.2.2-1.8.4-2.2.2-.6.5-1 1-1.4.4-.5.8-.8 1.4-1 .4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 1-1.5-1.5 1.5 1.5 0 0 1 1.5 1.5Z"/>
+            <Social label="Facebook" href="https://facebook.com/exercise.only" color="#1877F2"
+              path="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.2c-1.2 0-1.6.8-1.6 1.5V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z"/>
+            <Social label="WhatsApp" href="https://wa.me/6581006608" color="#25D366"
+              path="M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.6.1-.2.3-.7.9-.9 1-.1.2-.3.2-.6.1-1.6-.8-2.6-1.4-3.7-3.2-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.8-2-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1.1 2.7c.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3ZM12 3.5A8.5 8.5 0 0 0 4.6 16.3L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z"/>
+            <Social label="X" href="https://x.com/exercise.only" color="#111111"
+              path="M18.9 3H21l-6.5 7.4L22 21h-6l-4.7-6.1L5.9 21H3.8l7-8L2 3h6.1l4.2 5.6L18.9 3Zm-2.1 16.2h1.2L7.3 4.7H6l10.8 14.5Z"/>
+          </div>
+          <div className="text-center text-xs mt-4" style={{color:T.muted}}>Demo build — SMS OTP login in production. Data resets on refresh.</div>
+        </div>
       </div>
     </div>
   );
@@ -776,29 +833,105 @@ export default function DannyFitnessDemo() {
       <style>{FONTS}</style>
       <div className="w-full max-w-md min-h-screen flex flex-col relative" style={{background:T.paper}}>
         <header className="px-5 pt-5 pb-3 flex items-center justify-between">
-          <div>
-            <div style={{...disp,fontWeight:700,fontSize:21,lineHeight:1}}>EXERCISE<span style={{color:T.accent}}>ONLY</span></div>
-            <div className="text-xs" style={{color:T.muted}}>{user.name} · {isAdmin?"Admin":isClient?"Member":"Coach"} · Mon (demo)</div>
+          <div className="flex items-center gap-2.5">
+            <LogoMark size={28}/>
+            <div>
+              <Wordmark size={19}/>
+              <div className="text-xs" style={{color:T.muted}}>{user.name} · {isAdmin?"Admin":isClient?"Member":"Coach"}</div>
+            </div>
           </div>
           <button onClick={()=>setUser(null)} className="text-xs font-bold px-3 py-2 rounded-lg"
-            style={{border:`1.5px solid ${T.line}`, color:T.muted}}>LOG OUT</button>
+            style={{...disp, border:`1.5px solid ${T.line}`, color:T.muted}}>Log out</button>
         </header>
 
-        {/* ==================== CLIENT: HOME ==================== */}
-        {isClient && tab==="home" && (
-          <main className="flex-1 pb-24 px-5 space-y-3">
-            <Card style={{background:T.ink, color:T.paper, border:"none"}}>
-              <div className="text-xs" style={{color:"#B9B5A9"}}>PACK BALANCE</div>
-              <div className="flex gap-5 mt-1 flex-wrap">
-                <div><span style={{...disp,fontWeight:700,fontSize:34,color:T.accent}}>{credits.classes}</span> <span className="text-xs" style={{color:"#B9B5A9"}}>class credits</span></div>
-                <div><span style={{...disp,fontWeight:700,fontSize:34,color:T.accent}}>{credits.ptHead}</span> <span className="text-xs" style={{color:"#B9B5A9"}}>PT · head coach</span></div>
-                <div><span style={{...disp,fontWeight:700,fontSize:34,color:T.accent}}>{credits.ptCoach}</span> <span className="text-xs" style={{color:"#B9B5A9"}}>PT · coach</span></div>
+        {/* ==================== CLIENT: HOME (Solar Warm dashboard) ==================== */}
+        {isClient && tab==="home" && (() => {
+          const todayStr = new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}).toUpperCase().replace(',','');
+          const upC = myClassBookings.map(sid=>{const s=sessions.find(x=>x.id===sid); return {t:s.day*1440+toMin(s.time), time:s.time, day:s.day, title:CT[s.type].name, sub:`${locName(s.loc)} · Coach ${tName(s.trainer)}`};});
+          const upP = myPT.map(b=>({t:b.day*1440+toMin(b.time), time:b.time, day:b.day, title:"Personal Training", sub:`${b.loc==="other"?b.otherLabel:locName(b.loc)} · Coach ${tName(b.trainer)}`}));
+          const hero = [...upC,...upP].sort((a,b)=>a.t-b.t)[0];
+          const bodyKg = measurements[measurements.length-1].weight;
+          const weekWorkouts = strengthLogs(logs).filter(l=>(l.daysAgo??0)<=7).length;
+          const weekKcal = logs.filter(l=>(l.daysAgo??0)<=7).reduce((a,l)=>a+(estKcal(l,bodyKg)||0),0);
+          const prsN = prShelf(logs).length;
+          const ringPct = Math.min(100, Math.round(weekWorkouts/4*100));
+          const nothing = myClassBookings.length===0 && myPT.length===0 && myCamps.length===0 && myWaitlist.length===0;
+          return (
+          <main className="flex-1 pb-24 px-5">
+            {/* greeting + activity ring */}
+            <div className="flex items-start justify-between mb-3 mt-1">
+              <div>
+                <div className="text-sm" style={{color:T.muted}}>Good morning,</div>
+                <div style={{...disp,fontWeight:800,fontSize:24}}>{user.name}</div>
+                <div style={{...disp,fontWeight:700,letterSpacing:".1em",fontSize:10,color:T.accent,marginTop:3}}>{todayStr}</div>
               </div>
-              {classPass && <div className="text-xs mt-2 font-semibold" style={{color:"#8FD9B6"}}>✓ {classPass.label} active — classes covered</div>}
-            </Card>
-            <H>Upcoming</H>
-            {myClassBookings.length===0 && myPT.length===0 && myCamps.length===0 && myWaitlist.length===0 && (
-              <Card className="text-center"><div className="text-sm py-4" style={{color:T.muted}}>Nothing booked yet.</div>
+              <div style={{width:66,height:66,borderRadius:"50%",display:"grid",placeItems:"center",position:"relative",
+                background:`conic-gradient(${T.accent} ${ringPct}%, #f0e7d8 0)`}}>
+                <span style={{position:"absolute",inset:7,borderRadius:"50%",background:T.paper}}/>
+                <b style={{position:"relative",zIndex:2,...disp,fontWeight:800,fontSize:16}}>{ringPct}%</b>
+              </div>
+            </div>
+
+            {/* Next up hero */}
+            {hero ? (
+              <div style={{position:"relative",borderRadius:26,padding:18,overflow:"hidden",color:"#fff",marginBottom:12,
+                background:"linear-gradient(130deg,#FF5A3C 5%,#FFA53D 100%)",boxShadow:"0 18px 34px rgba(255,110,60,.28)"}}>
+                <div style={{position:"absolute",right:-30,bottom:-44,width:158,height:158,borderRadius:"50%",background:"rgba(255,255,255,.14)"}}/>
+                <span style={{...disp,fontWeight:700,fontSize:11,color:T.accent,background:"#fff",padding:"5px 11px",borderRadius:999}}>● NEXT UP · {DAYS[hero.day]} {hero.time}</span>
+                <div style={{...disp,fontWeight:800,fontSize:21,marginTop:10,position:"relative"}}>{hero.title}</div>
+                <div className="text-xs" style={{marginTop:3,opacity:.94,position:"relative"}}>{hero.sub}</div>
+                <div className="flex gap-2" style={{marginTop:14,position:"relative"}}>
+                  <button onClick={()=>ping("Checked in — see you there! 💪")} style={{flex:1,...disp,fontWeight:700,fontSize:14,padding:12,borderRadius:14,border:"none",background:"#fff",color:T.accent}}>Check in</button>
+                  <button onClick={()=>setTab("book")} style={{flex:1,...disp,fontWeight:700,fontSize:14,padding:12,borderRadius:14,border:"none",background:"rgba(255,255,255,.2)",color:"#fff"}}>Manage</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{position:"relative",borderRadius:26,padding:20,overflow:"hidden",color:"#fff",marginBottom:12,
+                background:"linear-gradient(130deg,#FF5A3C 5%,#FFA53D 100%)"}}>
+                <div style={{...disp,fontWeight:800,fontSize:20}}>Ready to move?</div>
+                <div className="text-xs" style={{opacity:.94,marginTop:2}}>Nothing booked yet — grab a class, PT or camp.</div>
+                <button onClick={()=>setTab("book")} style={{...disp,fontWeight:700,fontSize:14,padding:"11px 16px",borderRadius:14,border:"none",background:"#fff",color:T.accent,marginTop:12}}>Book a session</button>
+              </div>
+            )}
+
+            {/* quick stats */}
+            <div className="flex gap-2.5 mb-3">
+              <div className="flex-1 text-center" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:"12px 6px"}}>
+                <div style={{...disp,fontWeight:800,fontSize:26,color:T.accent}}>{weekWorkouts}</div><div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>WORKOUTS/WK</div></div>
+              <div className="flex-1 text-center" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:"12px 6px"}}>
+                <div style={{...disp,fontWeight:800,fontSize:26,color:T.blue}}>{prsN}</div><div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>PRS</div></div>
+              <div className="flex-1 text-center" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:"12px 6px"}}>
+                <div style={{...disp,fontWeight:800,fontSize:26,color:T.amber}}>{weekKcal>=1000?(weekKcal/1000).toFixed(1)+"k":weekKcal}</div><div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>KCAL/WK</div></div>
+            </div>
+
+            {/* quick start */}
+            <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">JUMP BACK IN</div>
+            <div className="flex gap-2.5 mb-4">
+              <button onClick={()=>{setTab("log"); setLogView("train"); startBlank();}} className="flex-1 flex items-center gap-2.5" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:12,textAlign:"left"}}>
+                <div style={{width:34,height:34,borderRadius:12,background:T.accent,color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:16}}>＋</div>
+                <div><div style={{...disp,fontWeight:700,fontSize:13}}>Start workout</div><div className="text-xs" style={{color:T.muted}}>Log &amp; beat PRs</div></div>
+              </button>
+              <button onClick={()=>setTab("book")} className="flex-1 flex items-center gap-2.5" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:12,textAlign:"left"}}>
+                <div style={{width:34,height:34,borderRadius:12,background:T.blue,color:"#fff",display:"grid",placeItems:"center",fontWeight:800,fontSize:16}}>↻</div>
+                <div><div style={{...disp,fontWeight:700,fontSize:13}}>Book class</div><div className="text-xs" style={{color:T.muted}}>This week</div></div>
+              </button>
+            </div>
+
+            {/* pack balance strip */}
+            <div style={{background:T.ink,color:"#fff",borderRadius:20,padding:14,marginBottom:14}}>
+              <div style={{...disp,fontWeight:700,fontSize:10,letterSpacing:".06em",color:"#C9BEB0"}}>MY BALANCE</div>
+              <div className="flex gap-5 mt-1 flex-wrap">
+                <div><span style={{...disp,fontWeight:800,fontSize:26,color:T.amber}}>{credits.classes}</span> <span className="text-xs" style={{color:"#C9BEB0"}}>class</span></div>
+                <div><span style={{...disp,fontWeight:800,fontSize:26,color:T.amber}}>{credits.ptHead}</span> <span className="text-xs" style={{color:"#C9BEB0"}}>PT · head</span></div>
+                <div><span style={{...disp,fontWeight:800,fontSize:26,color:T.amber}}>{credits.ptCoach}</span> <span className="text-xs" style={{color:"#C9BEB0"}}>PT · coach</span></div>
+              </div>
+              {classPass && <div className="text-xs mt-2 font-semibold" style={{color:T.moss}}>✓ {classPass.label} active — classes covered</div>}
+            </div>
+
+            <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">UPCOMING</div>
+            <div className="space-y-3">
+            {nothing && (
+              <Card className="text-center"><div className="text-sm py-3" style={{color:T.muted}}>Nothing booked yet.</div>
                 <Btn full onClick={()=>setTab("book")}>Book a session</Btn></Card>)}
             {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid);
               return (
@@ -828,8 +961,9 @@ export default function DannyFitnessDemo() {
                 <div className="flex-1"><div className="font-semibold text-sm">Waitlisted · {CT[s.type].name} · {DAYS[s.day]} {s.time}</div>
                   <div className="text-xs" style={{color:T.accent}}>We'll WhatsApp you if a spot opens</div></div>
               </Card>);})}
-            <div className="text-xs text-center pt-1" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>
-          </main>)}
+            </div>
+            <div className="text-xs text-center pt-3" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>
+          </main>);})()}
 
         {/* ==================== CLIENT: BOOK ==================== */}
         {isClient && tab==="book" && (
@@ -1112,39 +1246,97 @@ export default function DannyFitnessDemo() {
             </>)}
           </main>);})()}
 
-        {/* ==================== CLIENT: SHOP ==================== */}
+        {/* ==================== CLIENT: SHOP (Buy · About · Offers) ==================== */}
         {isClient && tab==="shop" && (
           <main className="flex-1 pb-24 px-5">
-            <H>Packages & offers</H>
-            {(() => {
-              const groups = [
-                ["Class credit packs", products.filter(p=>p.active&&p.kind==="classes")],
-                ["Class passes — unlimited within the period", products.filter(p=>p.active&&p.kind==="classpass")],
-                ["Personal training", products.filter(p=>p.active&&(p.kind==="pthead"||p.kind==="ptcoach"))],
-              ];
-              return groups.map(([label, list]) => list.length===0 ? null : (
-                <div key={label} className="mb-4">
-                  <Sub>{label.toUpperCase()}</Sub>
-                  <div className="space-y-3">
-                    {list.map(p=>(
-                      <Card key={p.id} className="flex items-center gap-3">
-                        <div className="flex-1">
-                          <div className="font-bold text-sm">{p.name}</div>
-                          <div className="text-xs" style={{color:T.muted}}>
-                            {p.kind==="classpass"
-                              ? `Unlimited classes for ${p.validity===1?"1 day":p.validity===7?"7 days":"30 days"}`
-                              : `${p.sessions} sessions · valid ${p.validity} days`}
-                            {p.kind==="pthead" ? " · head coach only" : p.kind==="ptcoach" ? " · any coach (not Danny)" : ""}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-bold">${p.price}</div>
-                          <Btn small onClick={()=>{setShopSheet({product:p}); setPayMode("paynow"); setCoupon(""); setCouponMsg(null);}}>Buy</Btn>
-                        </div>
-                      </Card>))}
-                  </div>
-                </div>));
-            })()}
-            <div className="text-xs" style={{color:T.muted}}>Coupon codes are applied at checkout. Price changes never affect packs you've already bought.</div>
+            <H>Shop</H>
+            <div className="flex gap-2 mb-3 overflow-x-auto">
+              {[["buy","Packages"],["about","About"],["offers","Offers"]].map(([k,l])=>(
+                <Chip key={k} active={shopTab===k} onClick={()=>setShopTab(k)}>{l}</Chip>))}
+            </div>
+
+            {/* ---- BUY ---- */}
+            {shopTab==="buy" && (<>
+              {(() => {
+                const groups = [
+                  ["Class credit packs", products.filter(p=>p.active&&p.kind==="classes")],
+                  ["Class passes — unlimited within the period", products.filter(p=>p.active&&p.kind==="classpass")],
+                  ["Personal training", products.filter(p=>p.active&&(p.kind==="pthead"||p.kind==="ptcoach"))],
+                ];
+                return groups.map(([label, list]) => list.length===0 ? null : (
+                  <div key={label} className="mb-4">
+                    <Sub>{label.toUpperCase()}</Sub>
+                    <div className="space-y-3">
+                      {list.map(p=>(
+                        <Card key={p.id} className="flex items-center gap-3">
+                          <div className="flex-1">
+                            <div className="font-bold text-sm">{p.name}</div>
+                            <div className="text-xs" style={{color:T.muted}}>
+                              {p.kind==="classpass"
+                                ? `Unlimited classes for ${p.validity===1?"1 day":p.validity===7?"7 days":"30 days"}`
+                                : `${p.sessions} sessions · valid ${p.validity} days`}
+                              {p.kind==="pthead" ? " · head coach only" : p.kind==="ptcoach" ? " · any coach (not Danny)" : ""}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold">${p.price}</div>
+                            <Btn small onClick={()=>{setShopSheet({product:p}); setPayMode("paynow"); setCoupon(""); setCouponMsg(null);}}>Buy</Btn>
+                          </div>
+                        </Card>))}
+                    </div>
+                  </div>));
+              })()}
+              <div className="text-xs" style={{color:T.muted}}>Got a coupon from Offers? Apply it at checkout. Price changes never affect packs you've already bought.</div>
+            </>)}
+
+            {/* ---- ABOUT (explains classes + PT, coach bios) ---- */}
+            {shopTab==="about" && (<>
+              <Card className="mb-3">
+                <div className="flex items-center justify-between">
+                  <div style={{...disp,fontWeight:800,fontSize:16}}>Group classes</div>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:T.accent,color:"#fff"}}>Classes</span>
+                </div>
+                <div className="text-sm mt-1.5" style={{color:T.muted}}>{aboutCopy.classes}</div>
+              </Card>
+              <Card className="mb-3">
+                <div className="flex items-center justify-between">
+                  <div style={{...disp,fontWeight:800,fontSize:16}}>Personal training</div>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:T.blue,color:"#fff"}}>1-to-1</span>
+                </div>
+                <div className="text-sm mt-1.5" style={{color:T.muted}}>{aboutCopy.pt}</div>
+              </Card>
+              <Sub>YOUR COACHES</Sub>
+              <div className="space-y-3">
+                {trainers.map(t=>(
+                  <Card key={t.id} className="flex gap-3">
+                    <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{...disp,fontWeight:800,fontSize:18,background:t.admin?T.accent:T.blue,color:"#fff",flex:"none"}}>{t.name[0]}</div>
+                    <div className="flex-1">
+                      <div className="font-bold text-sm">{t.name} <span className="text-xs font-normal" style={{color:T.muted}}>· {t.tag||"Coach"}</span></div>
+                      <div className="text-xs mt-0.5" style={{color:T.muted}}>{t.bio || "Bio coming soon."}</div>
+                    </div>
+                  </Card>))}
+              </div>
+              <div className="text-xs mt-3" style={{color:T.muted}}>Danny keeps this page and coach write-ups up to date from his admin login.</div>
+            </>)}
+
+            {/* ---- OFFERS ---- */}
+            {shopTab==="offers" && (<>
+              <div className="space-y-3">
+                {offers.map(o=>(
+                  <Card key={o.id} style={{borderColor:o.color, borderWidth:1.5}}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:o.color,color:"#fff"}}>{o.kind}</span>
+                      <div style={{...disp,fontWeight:800,fontSize:16}}>{o.title}</div>
+                    </div>
+                    <div className="text-sm" style={{color:T.muted}}>{o.blurb}</div>
+                    <div className="mt-2">
+                      {o.kind==="Referral"
+                        ? <Btn small onClick={()=>ping("Referral link copied — share on WhatsApp / Instagram")}>Share my code</Btn>
+                        : <Btn small onClick={()=>{setShopTab("buy"); setCoupon(o.code); ping(`Coupon ${o.code} ready — buy a pack and it's applied at checkout`);}}>Get code · {o.code}</Btn>}
+                    </div>
+                  </Card>))}
+              </div>
+              <div className="text-xs mt-3" style={{color:T.muted}}>Coupons apply at checkout on the Packages tab. One offer per purchase.</div>
+            </>)}
           </main>)}
 
         {/* ==================== CLIENT: ACCOUNT ==================== */}
@@ -1177,7 +1369,33 @@ export default function DannyFitnessDemo() {
                 <div className="text-xs" style={{color:T.muted}}>In-app chat · or WhatsApp +65 8100 6608</div></div>
               <Btn small kind="dark" onClick={()=>setChatOpen(true)}>Chat</Btn>
             </Card>
-            <div className="text-xs text-center" style={{color:T.muted}}>Privacy policy · Request account deletion</div>
+
+            {/* connect / follow */}
+            <Card>
+              <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2">CONNECT WITH EXERCISEONLY</div>
+              <div className="flex gap-2">
+                <Social label="Instagram" href="https://instagram.com/exercise.only" color="#E1306C"
+                  path="M12 2.2c3.2 0 3.6 0 4.9.07 1.2.06 1.8.26 2.2.43.6.2 1 .5 1.4 1 .5.4.8.8 1 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c0 1.2-.2 1.8-.4 2.2-.2.6-.5 1-1 1.4-.4.5-.8.8-1.4 1-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2 0-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-1-.5-.4-.8-.8-1-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c0-1.2.2-1.8.4-2.2.2-.6.5-1 1-1.4.4-.5.8-.8 1.4-1 .4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 3.2A6.6 6.6 0 1 0 18.6 12 6.6 6.6 0 0 0 12 5.4Zm0 10.9A4.3 4.3 0 1 1 16.3 12 4.3 4.3 0 0 1 12 16.3Zm6.8-11.2a1.5 1.5 0 1 1-1.5-1.5 1.5 1.5 0 0 1 1.5 1.5Z"/>
+                <Social label="Facebook" href="https://facebook.com/exercise.only" color="#1877F2"
+                  path="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.2c-1.2 0-1.6.8-1.6 1.5V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12Z"/>
+                <Social label="WhatsApp" href="https://wa.me/6581006608" color="#25D366"
+                  path="M17.5 14.4c-.3-.1-1.7-.8-1.9-.9-.3-.1-.5-.1-.6.1-.2.3-.7.9-.9 1-.1.2-.3.2-.6.1-1.6-.8-2.6-1.4-3.7-3.2-.3-.5.3-.5.8-1.5.1-.2 0-.4 0-.5 0-.1-.6-1.5-.8-2-.2-.5-.4-.5-.6-.5h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s.9 2.5 1.1 2.7c.1.2 1.9 2.9 4.6 4 .6.3 1.1.4 1.5.6.6.2 1.2.2 1.6.1.5-.1 1.7-.7 1.9-1.3.2-.7.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3ZM12 3.5A8.5 8.5 0 0 0 4.6 16.3L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Z"/>
+                <Social label="X" href="https://x.com/exercise.only" color="#111111"
+                  path="M18.9 3H21l-6.5 7.4L22 21h-6l-4.7-6.1L5.9 21H3.8l7-8L2 3h6.1l4.2 5.6L18.9 3Zm-2.1 16.2h1.2L7.3 4.7H6l10.8 14.5Z"/>
+              </div>
+              <div className="text-xs mt-2" style={{color:T.muted}}>@exercise.only · 4exerciseonly@gmail.com</div>
+            </Card>
+
+            {/* support */}
+            <a href="mailto:support@exerciseonly.app?subject=App%20issue%20report" className="block">
+              <Card className="flex items-center justify-between">
+                <div><div className="font-semibold text-sm">Report an issue</div>
+                  <div className="text-xs" style={{color:T.muted}}>Something not working? Email the app team.</div></div>
+                <span style={{...disp,fontWeight:700,color:T.accent}} className="text-sm">Contact →</span>
+              </Card>
+            </a>
+
+            <div className="text-xs text-center" style={{color:T.muted}}>Privacy policy · Request account deletion · v0 demo</div>
           </main>)}
 
         {/* ==================== TRAINER / ADMIN: TODAY ==================== */}
@@ -1365,8 +1583,9 @@ export default function DannyFitnessDemo() {
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
           <main className="flex-1 pb-24 px-5">
-            <div className="flex gap-2 overflow-x-auto pb-3">
-              {[["dash","Dashboard"],["people","People"],["products","Products"],["money","Money"],["settings","Settings"]].map(([k,l])=>(
+            <div className="flex gap-2 pb-3">
+              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],
+                ["settings",<svg key="g" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>]].map(([k,l])=>(
                 <Chip key={k} active={adminSec===k} onClick={()=>setAdminSec(k)}>{l}</Chip>))}
             </div>
 
@@ -1456,7 +1675,7 @@ export default function DannyFitnessDemo() {
                     <div><div className="font-semibold text-sm">{t.name}</div>
                       <div className="text-xs" style={{color:T.muted}}>{t.tag} · {rt ? (rt.type==="salary" ? `$${rt.monthly}/mo salary` : `$${rt.perClass}/class · $${rt.perPt}/PT`) : "rate not set"}</div></div>
                     <div className="flex gap-1.5">
-                      <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
+                      <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", bio:t.bio||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
                       <Btn small kind="ghost" onClick={()=>setPermOpen(permOpen===t.id?null:t.id)}>Perms</Btn>
                       <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — their sessions need reassignment`)}>Deactivate</Btn>
                     </div>
@@ -1496,6 +1715,17 @@ export default function DannyFitnessDemo() {
                 </Card>))}
               <div className="text-xs font-bold pt-2" style={{color:T.muted}}>REFERRAL REWARD</div>
               <Card className="!p-3"><div className="text-sm">1 free class credit — both referrer & referee, on referee's first paid booking.</div></Card>
+
+              <div className="flex items-center justify-between pt-2">
+                <div className="text-xs font-bold" style={{color:T.muted}}>OFFERS &amp; PROMOS · shown in Shop → Offers</div>
+                <Btn small kind="ghost" onClick={()=>setOfferSheet({kind:"This month", title:"", blurb:"", code:"", color:"#1E50A0"})}>+ Add</Btn>
+              </div>
+              {offers.map(o=>(
+                <Card key={o.id} className="!p-3 flex items-center gap-3">
+                  <div className="flex-1"><div className="font-semibold text-sm">{o.title} <span className="text-xs font-normal" style={{color:T.muted}}>· {o.kind}{o.code?` · ${o.code}`:""}</span></div>
+                    <div className="text-xs" style={{color:T.muted}}>{o.blurb}</div></div>
+                  <button onClick={()=>{setOffers(os=>os.filter(x=>x.id!==o.id)); ping("Offer removed");}} className="text-xs font-bold px-1.5 py-1 rounded" style={{color:T.accent,border:`1.5px solid ${T.line}`}}>Delete</button>
+                </Card>))}
 
               <div className="flex items-center justify-between pt-3">
                 <div className="text-xs font-bold" style={{color:T.muted}}>CLASS TEMPLATES · reusable weekly timetables</div>
@@ -1570,14 +1800,12 @@ export default function DannyFitnessDemo() {
             </div>}
 
             {adminSec==="settings" && <div className="space-y-3">
-              <div className="text-xs font-bold" style={{color:T.muted}}>BUSINESS PROFILE</div>
-              <Card style={{background:T.ink,color:T.paper,border:"none"}}>
-                <div style={{...disp,fontWeight:700,fontSize:18}}>EXERCISE<span style={{color:T.accent}}>ONLY</span></div>
-                <div className="text-xs italic mt-0.5" style={{color:T.accent}}>Sore today, strong tomorrow.</div>
-                <div className="text-xs mt-2" style={{color:"#B9B5A9"}}>{TRAINERS.find(t=>t.id==="danny").bio}</div>
-                <div className="text-xs mt-2" style={{color:"#B9B5A9"}}>WhatsApp +65 8100 6608 · @exercise.only · 4exerciseonly@gmail.com</div>
-                <div className="text-xs" style={{color:"#B9B5A9"}}>11 Rhu Cross, Singapore 437440 (Gardens by the Bay)</div>
+              <Card className="!p-3 flex items-center justify-between">
+                <div><div className="font-semibold text-sm">Shop “About” page copy</div>
+                  <div className="text-xs" style={{color:T.muted}}>Class + PT explainers clients read in Shop → About</div></div>
+                <Btn small kind="ghost" onClick={()=>setAboutEdit({...aboutCopy})}>Edit</Btn>
               </Card>
+              <div className="text-xs" style={{color:T.muted}}>Coach write-ups are edited per trainer under People → Edit.</div>
               <div className="text-xs font-bold" style={{color:T.muted}}>LOCATIONS</div>
               {locations.map(l=>(
                 <Card key={l.id} className="!p-3 flex items-center justify-between">
@@ -1797,6 +2025,48 @@ export default function DannyFitnessDemo() {
             </div>
           </div>)}
 
+        {/* admin: edit Shop “About” copy */}
+        {aboutEdit && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setAboutEdit(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:800,fontSize:20}}>Shop “About” copy</div>
+                <button onClick={()=>setAboutEdit(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-xs font-bold mt-3 mb-1" style={{color:T.muted}}>ABOUT CLASSES</div>
+              <textarea value={aboutEdit.classes} onChange={e=>setAboutEdit(a=>({...a,classes:e.target.value}))} rows={4}
+                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              <div className="text-xs font-bold mt-3 mb-1" style={{color:T.muted}}>ABOUT PERSONAL TRAINING</div>
+              <textarea value={aboutEdit.pt} onChange={e=>setAboutEdit(a=>({...a,pt:e.target.value}))} rows={4}
+                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              <div className="mt-3"><Btn full onClick={()=>{setAboutCopy(aboutEdit); setAboutEdit(null); ping("About page updated");}}>Save</Btn></div>
+            </div>
+          </div>)}
+
+        {/* admin: add an offer */}
+        {offerSheet && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setOfferSheet(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <div style={{...disp,fontWeight:800,fontSize:20}}>New offer</div>
+                <button onClick={()=>setOfferSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="space-y-2 my-3">
+                <Select value={offerSheet.kind} onChange={v=>setOfferSheet(o=>({...o,kind:v, color:v==="Referral"?"#12B39C":v==="8.8 Flash"?"#FF5A3C":"#1E50A0"}))}
+                  options={[["This month","This month"],["8.8 Flash","Flash sale"],["Referral","Referral"],["New client","New client"]]} />
+                <input value={offerSheet.title} onChange={e=>setOfferSheet(o=>({...o,title:e.target.value}))} placeholder="Title (e.g. 8.8 Sale)"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <textarea value={offerSheet.blurb} onChange={e=>setOfferSheet(o=>({...o,blurb:e.target.value}))} placeholder="Short description" rows={2}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                {offerSheet.kind!=="Referral" && <input value={offerSheet.code} onChange={e=>setOfferSheet(o=>({...o,code:e.target.value.toUpperCase()}))} placeholder="Coupon code (must exist in Coupons)"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none uppercase" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>}
+              </div>
+              <Btn full disabled={!offerSheet.title.trim()} onClick={()=>{
+                setOffers(os=>[...os,{...offerSheet, id:nid(), code:offerSheet.kind==="Referral"?null:offerSheet.code}]);
+                ping("Offer published to Shop → Offers"); setOfferSheet(null);}}>Publish offer</Btn>
+            </div>
+          </div>)}
+
         {/* time off sheet */}
         {timeOffSheet && (
           <TimeOffForm trainer={timeOffSheet.trainer} tName={tName} onCancel={()=>setTimeOffSheet(null)} onSave={addTimeOff} />
@@ -1806,7 +2076,7 @@ export default function DannyFitnessDemo() {
         {moveSheet && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setMoveSheet(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>Move · {moveSheet.label}</div>
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Move · {moveSheet.label}</div><button onClick={()=>setMoveSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
               <div className="text-xs mb-3" style={{color:T.muted}}>{DAYS[moveSheet.day]} · currently {moveSheet.time} · {locName(moveSheet.loc)}</div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-sm font-semibold">New start time</span>
@@ -1844,7 +2114,7 @@ export default function DannyFitnessDemo() {
           return (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setMoveDay(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>Running late — {tName(moveDay.trainer)}</div>
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Running late — {tName(moveDay.trainer)}</div><button onClick={()=>setMoveDay(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
               <div className="text-xs mb-3" style={{color:T.muted}}>Push today's remaining sessions back together. Clients are notified; conflicts with other coaches' sessions are flagged.</div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-sm font-semibold">Delay everything by</span>
@@ -1902,7 +2172,7 @@ export default function DannyFitnessDemo() {
           return (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setShiftEditor(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>Shift hours — {tName(tid)}</div>
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Shift hours — {tName(tid)}</div><button onClick={()=>setShiftEditor(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
               <div className="text-xs mb-3" style={{color:T.muted}}>Set on-shift hours per weekday (weekends can differ). Repeats every week until you change it. Toggle a day off to remove it.</div>
               <div className="space-y-2">
                 {DAYS.map((d,di)=>{ const on=!!sh[di]; return (
@@ -1936,6 +2206,8 @@ export default function DannyFitnessDemo() {
                   className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                 <input value={addTrainer.phone} onChange={e=>setAddTrainer(a=>({...a,phone:e.target.value}))} placeholder="Mobile"
                   className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <textarea value={addTrainer.bio||""} onChange={e=>setAddTrainer(a=>({...a,bio:e.target.value}))} placeholder="Coach bio / about (shown to clients on Shop → About)" rows={2}
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                 <div className="flex gap-2">
                   {[["per_class","Per class/PT"],["salary","Monthly salary"]].map(([k,l])=>(
                     <button key={k} onClick={()=>setAddTrainer(a=>({...a,payType:k}))} className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold"
@@ -1957,12 +2229,12 @@ export default function DannyFitnessDemo() {
                 const rateObj = {type:addTrainer.payType, perClass:+addTrainer.perClass||0, perPt:+addTrainer.perPt||0, monthly:+addTrainer.monthly||0};
                 if (addTrainer.editId) {
                   const id = addTrainer.editId;
-                  setTrainers(ts=>ts.map(t=>t.id!==id?t:{...t,name:nm,phone:addTrainer.phone}));
+                  setTrainers(ts=>ts.map(t=>t.id!==id?t:{...t,name:nm,phone:addTrainer.phone,bio:addTrainer.bio}));
                   setRates(r=>({...r,[id]:rateObj}));
                   ping(`${nm} updated`);
                 } else {
                   const id = nm.toLowerCase().replace(/[^a-z]/g,"").slice(0,8)+nid();
-                  setTrainers(ts=>[...ts,{id,name:nm,tag:"Coach",phone:addTrainer.phone}]);
+                  setTrainers(ts=>[...ts,{id,name:nm,tag:"Coach",phone:addTrainer.phone,bio:addTrainer.bio}]);
                   setRates(r=>({...r,[id]:rateObj}));
                   setShifts(s=>({...s,[id]:{0:["09:00","17:00"],1:["09:00","17:00"],2:["09:00","17:00"],3:["09:00","17:00"],4:["09:00","17:00"]}}));
                   setPerm(p=>({...p,[id]:{editDesc:false,cancel:false,earnings:false,manageLocations:false}}));
@@ -1996,7 +2268,7 @@ export default function DannyFitnessDemo() {
         {measForm && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setMeasForm(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>Stats · {measForm.who}</div>
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Stats · {measForm.who}</div><button onClick={()=>setMeasForm(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
               <div className="flex gap-2 my-3">
                 <input value={measForm.weight} onChange={e=>setMeasForm({...measForm,weight:e.target.value})} placeholder="Weight kg"
                   className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
@@ -2058,7 +2330,7 @@ export default function DannyFitnessDemo() {
                   className="font-bold text-lg outline-none w-full" style={{...disp}}/>
                 <div className="text-xs" style={{color:T.muted}}>{active.exercises.length} exercises · tap the ○ to complete a set</div>
               </div>
-              <button onClick={()=>setActive(null)} className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>Discard</button>
+              <button onClick={()=>setActive(null)} className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕ Cancel</button>
             </div>
             <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4">
               {active.exercises.length===0 && <div className="text-center text-sm py-10" style={{color:T.muted}}>No exercises yet — add one below.</div>}
@@ -2122,7 +2394,7 @@ export default function DannyFitnessDemo() {
         {customEx && (
           <div className="fixed inset-0 z-50 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setCustomEx(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>New exercise</div>
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>New exercise</div><button onClick={()=>setCustomEx(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
               <div className="space-y-2 my-3">
                 <input value={customEx.name} onChange={e=>setCustomEx(c=>({...c,name:e.target.value}))} placeholder="Exercise name"
                   className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
@@ -2180,7 +2452,7 @@ export default function DannyFitnessDemo() {
         {intakeForm && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setIntakeForm(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div style={{...disp,fontWeight:700,fontSize:22}}>New client intake · {intakeForm.who}</div>
+              <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>New client intake · {intakeForm.who}</div><button onClick={()=>setIntakeForm(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
               <div className="text-xs mb-3" style={{color:T.muted}}>One-time deeper assessment — separate from the ongoing weight/fat log.</div>
               <div className="space-y-2 mb-3">
                 {["Goals","Injury / medical history","Mobility notes","Waist / chest / arm measurements (cm)"].map(f=>(
@@ -2268,7 +2540,7 @@ function TimeOffForm({ trainer, tName, onCancel, onSave }) {
   return (
     <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={onCancel}>
       <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-        <div style={{...disp,fontWeight:700,fontSize:22}}>Time off · {tName(trainer)}</div>
+        <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>Time off · {tName(trainer)}</div><button onClick={onCancel} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
         <div className="text-xs mb-3" style={{color:T.muted}}>Blocks these slots from being offered. Remove anytime to restore availability.</div>
         <div className="flex gap-2 mb-3">
           <Chip active={scope==="single"} onClick={()=>setScope("single")}>One-off date</Chip>
