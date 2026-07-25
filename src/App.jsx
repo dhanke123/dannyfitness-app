@@ -74,8 +74,10 @@ const CT = {
   BC: { name:"Boot Camp", dur:60, price:30, color:"#2B4C7E", desc:"Weekly outdoor group camp for overall fitness and muscle endurance." },
   NS: { name:"NS / IPPT Prep", dur:60, price:40, color:"#7B4B94", desc:"Targeted IPPT preparation from a coach who's trained many NS soldiers." },
   CAR:{ name:"Cardio", dur:45, price:28, color:"#B8860B", desc:"All-round conditioning to keep you fit and moving." },
+  SWM:{ name:"Swimming", dur:45, price:38, color:"#0FA6C4", desc:"Coached swim sessions — technique & fitness, kids and adults." },
 };
 const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const FULLDAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 const TODAY = 0;
 let _id = 0; const nid = () => "x" + ++_id;
 // `trainer` may be a single id or an array — a class/camp can need more than one coach.
@@ -98,6 +100,7 @@ const seedSessions = [
   mkS(3,"07:30","BC","GBB","danny",8,["Ben","Ivan","Kumar"]),
   mkS(3,"18:30","HIT","MP","marcus",10,["Kavitha","Elaine","Jun Kai","Farah"]),
   mkS(4,"06:30","STR","GBB","dylan",8,["Gireesh","Priya","Wen Jie"]),
+  mkS(4,"17:30","SWM","CDS","danny",6,["Cheryl","Nadia"]),
   mkS(5,"09:00","NS","GBB","danny",10,["Ben","Cheryl","Ivan","Nadia","Grace","Jaiveer"]),
   mkS(5,"10:30","STR","MP","marcus",8,["Sarah T","Elaine"]),
   mkS(6,"09:00","CAR","CDS","wei",10,["Kumar","Dominic","Jun Kai"]),
@@ -519,6 +522,9 @@ export default function DannyFitnessDemo() {
   const [shiftEditor, setShiftEditor] = useState(null); // {trainer}
   const [moveDay, setMoveDay] = useState(null); // running-late cascade sheet {trainer}
   const [doneSheet, setDoneSheet] = useState(null); // complete-session sheet {session/pt}
+  const [schedView, setSchedView] = useState("week"); // schedule tab: 'week' master-calendar | 'coach' list
+  const [receiptSheet, setReceiptSheet] = useState(null); // reliable receipt-upload flow {step,file,amt,note,pct}
+  const [walkSheet, setWalkSheet] = useState(null);  // class walk-in (attendance only, no payment) {sid,name}
   const [addLead, setAddLead] = useState(null);     // manual lead capture (walk-in / IG DM)
   const [incidentals, setIncidentals] = useState([  // trainer-logged extras awaiting Danny's approval
     { id:nid(), trainer:"wei", label:"Parking at Costa Del Sol", amt:8, note:"Sat NS class", status:"pending" },
@@ -553,12 +559,12 @@ export default function DannyFitnessDemo() {
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setNoteSheet(null); setAddLead(null);
+    setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null);
     setAboutEdit(null); setBioEdit(null); setOfferSheet(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -1422,7 +1428,10 @@ export default function DannyFitnessDemo() {
         {/* ==================== TRAINER / ADMIN: TODAY ==================== */}
         {!isClient && tab==="today" && (
           <main className="flex-1 pb-24 px-5">
-            <H>{isAdmin?"Today — all coaches":"Today — my sessions"}</H>
+            <div className="flex items-center justify-between">
+              <H>{isAdmin?"Today — all coaches":"Today — my sessions"}</H>
+              <Btn small kind="ghost" onClick={()=>setReceiptSheet({step:"form", file:null, amt:"", note:"", pct:0})}>+ Receipt</Btn>
+            </div>
             <div className="space-y-3">
               {sessions.filter(s=>s.day===TODAY && (isAdmin || sessTrainers(s).includes(user.id))).sort((a,b)=>a.time.localeCompare(b.time)).map(s=>{
                 const ct=CT[s.type]; const n=booked(s);
@@ -1452,9 +1461,26 @@ export default function DannyFitnessDemo() {
                             <button onClick={()=>mark(s.id,a.name,"no_show")} className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{background:"#F7EEE9",color:T.accent}}>✗</button>
                           </div>}
                         </div>))}
-                      <div className="mt-2"><Btn small full kind="dark" onClick={()=>markAll(s.id)}>Mark all attended</Btn></div>
+                      <div className="mt-2 flex gap-2">
+                        <Btn small kind="ghost" onClick={()=>setWalkSheet({sid:s.id, name:""})}>+ Walk-in</Btn>
+                        <Btn small full kind="dark" onClick={()=>markAll(s.id)}>Mark all attended</Btn>
+                      </div>
+                      <div className="text-xs mt-1.5" style={{color:T.muted}}>Walk-in = attendance only. Cash/other payment handled outside the app.</div>
                     </div>)}
                 </Card>);})}
+              {/* PT sessions today — completing a PT is the trigger that feeds the client log */}
+              {ptBookings.filter(b=>b.day===TODAY && b.status!=="cancelled" && (isAdmin || b.trainer===user.id))
+                .sort((a,b)=>a.time.localeCompare(b.time)).map(b=>(
+                <Card key={b.id} style={{background:"#EEF1F6"}}>
+                  <div className="flex items-center gap-3">
+                    <div style={{...disp,fontWeight:700,fontSize:24,minWidth:56}} className="text-right">{b.time}</div>
+                    <div style={{width:3,height:34,borderRadius:2,background:T.navy}}/>
+                    <div className="flex-1">
+                      <div className="font-semibold text-sm">PT · {b.who} {b.status==="done" && <span className="text-xs" style={{color:T.moss}}>· DONE ✓</span>}</div>
+                      <div className="text-xs" style={{color:T.muted}}>Coach {tName(b.trainer)} · {locName(b.loc)}</div></div>
+                    {b.status!=="done" && <Btn small kind="dark" onClick={()=>setDoneSheet({kind:"pt", id:b.id, trainer:b.trainer, label:`PT · ${b.who} · ${locName(b.loc)}`, incLabel:"", incAmt:""})}>Complete</Btn>}
+                  </div>
+                </Card>))}
             </div>
           </main>)}
 
@@ -1462,7 +1488,49 @@ export default function DannyFitnessDemo() {
         {!isClient && tab==="schedule" && (
           <main className="flex-1 pb-24 px-5">
             <H>{isAdmin?"Master schedule":"My week & availability"}</H>
-            {(isAdmin?trainers:trainers.filter(t=>t.id===user.id)).map(t=>{
+            <div className="flex gap-2 pb-3">
+              {[["week","Week"],["coach",isAdmin?"By coach":"Availability"]].map(([k,l])=>(
+                <Chip key={k} active={schedView===k} onClick={()=>setSchedView(k)}>{l}</Chip>))}
+            </div>
+
+            {/* ---- WEEK: master calendar — who is booked when, across all coaches & locations ---- */}
+            {schedView==="week" && (
+              <div className="space-y-2.5">
+                {[0,1,2,3,4,5,6].map(d=>{
+                  const cls = sessions.filter(s=>s.day===d && (isAdmin || sessTrainers(s).includes(user.id)));
+                  const pts = ptBookings.filter(b=>b.day===d && b.status!=="cancelled" && (isAdmin || b.trainer===user.id));
+                  const rows = [
+                    ...cls.map(s=>({time:s.time, color:CT[s.type].color, label:CT[s.type].name, loc:s.loc, who:sessTrainers(s).map(tName).join(" + ")})),
+                    ...pts.map(b=>({time:b.time, color:T.navy, label:`PT · ${b.who}`, loc:b.loc, who:tName(b.trainer)})),
+                  ].sort((a,b)=>a.time.localeCompare(b.time));
+                  const off = !isAdmin ? staffTimeOff(user.id).filter(to=>to.day===d) : [];
+                  const shiftDay = !isAdmin && shifts[user.id]?.[d];
+                  return (
+                    <Card key={d} className="!p-3" style={d===TODAY?{border:`1.5px solid ${T.accent}`}:undefined}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="text-xs font-bold" style={{color:d===TODAY?T.accent:T.muted}}>{FULLDAYS?.[d]||DAYS[d]}{d===TODAY?" · TODAY":""}</div>
+                        <div className="text-xs" style={{color:T.muted}}>{rows.length} session{rows.length!==1?"s":""}</div>
+                      </div>
+                      {!isAdmin && (
+                        <div className="text-xs mb-1.5" style={{color:T.muted}}>
+                          {shiftDay?`PT shift ${shiftDay[0]}–${shiftDay[1]}`:"No PT shift"}
+                          {off.map(o=>` · off ${o.allDay?"all day":`${o.start}–${o.end}`}`).join("")}
+                        </div>)}
+                      {rows.length===0 ? <div className="text-sm" style={{color:T.muted}}>—</div> :
+                        <div className="space-y-1">
+                          {rows.map((r,i)=>(
+                            <div key={i} className="flex items-center gap-2 text-sm">
+                              <span style={{...disp,fontWeight:700,minWidth:46}}>{r.time}</span>
+                              <span style={{width:3,height:16,borderRadius:2,background:r.color}}/>
+                              <span className="flex-1">{r.label} · {locName(r.loc)}</span>
+                              {isAdmin && <span className="text-xs" style={{color:T.navy}}>{r.who}</span>}
+                            </div>))}
+                        </div>}
+                    </Card>);})}
+              </div>)}
+
+            {/* ---- BY COACH: per-trainer sessions + editable shifts / time off ---- */}
+            {schedView==="coach" && (isAdmin?trainers:trainers.filter(t=>t.id===user.id)).map(t=>{
               const myPtToday = ptBookings.filter(b=>b.trainer===t.id && b.day===TODAY && b.status!=="cancelled");
               return (
               <div key={t.id} className="mb-4">
@@ -2178,7 +2246,8 @@ export default function DannyFitnessDemo() {
               </div>
               <div className="text-xs mb-3" style={{color:T.muted}}>Recorded against this session for money & revenue analysis once Danny approves.</div>
               <Btn full onClick={()=>{
-                setSessions(ss=>ss.map(s=>s.id!==doneSheet.id?s:{...s,done:true}));
+                if (doneSheet.kind==="pt") setPtBookings(bs=>bs.map(b=>b.id!==doneSheet.id?b:{...b,status:"done"}));
+                else setSessions(ss=>ss.map(s=>s.id!==doneSheet.id?s:{...s,done:true}));
                 if (doneSheet.incLabel && +doneSheet.incAmt>0) {
                   setIncidentals(inc=>[...inc,{id:nid(), trainer:doneSheet.trainer, label:doneSheet.incLabel, amt:+doneSheet.incAmt, note:doneSheet.label, status:"pending"}]);
                   ping("Session completed · incidental sent to Danny for approval");
@@ -2186,6 +2255,92 @@ export default function DannyFitnessDemo() {
                 setDoneSheet(null);}}>Mark complete{doneSheet.incLabel&&+doneSheet.incAmt>0?" & submit incidental":""}</Btn>
             </div>
           </div>)}
+
+        {/* class walk-in — attendance only, no payment (cash handled outside the app) */}
+        {walkSheet && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setWalkSheet(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Add walk-in</div>
+                <button onClick={()=>setWalkSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-xs mb-3" style={{color:T.muted}}>Records attendance only — no payment step. Take cash/other payment outside the app.</div>
+              <input value={walkSheet.name} onChange={e=>setWalkSheet(w=>({...w,name:e.target.value}))} placeholder="Name (or 'Guest')" autoFocus
+                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-3" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              <Btn full onClick={()=>{
+                const nm=(walkSheet.name||"").trim()||"Guest";
+                setSessions(ss=>ss.map(s=>s.id!==walkSheet.sid?s:{...s, attendees:[...s.attendees,{name:nm,status:"attended",walkin:true}]}));
+                ping(`${nm} added as walk-in · attendance marked`); setWalkSheet(null);}}>Add & mark attended</Btn>
+            </div>
+          </div>)}
+
+        {/* receipt upload — deliberate reliability test: progress, explicit saved/failed, retry */}
+        {receiptSheet && (() => {
+          const rs = receiptSheet;
+          const startUpload = (force) => {
+            setReceiptSheet(s=>({...s, step:"uploading", pct:0, _fail:!!force}));
+            let p=0;
+            const iv=setInterval(()=>{
+              p+=Math.round(12+Math.random()*16);
+              if (p>=100){ clearInterval(iv);
+                setReceiptSheet(s=>{ if(!s) return s;
+                  if (s._fail){ return {...s, step:"failed", pct:100}; }
+                  setIncidentals(inc=>[...inc,{id:nid(), trainer:user.id, label:s.note||"Receipt", amt:+s.amt||0, note:"Receipt uploaded", status:"pending", receipt:true}]);
+                  return {...s, step:"saved", pct:100};
+                });
+              } else setReceiptSheet(s=> s?{...s,pct:Math.min(p,99)}:s);
+            }, 260);
+          };
+          return (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}}
+            onClick={()=>{ if(rs.step!=="uploading") setReceiptSheet(null); }}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Upload receipt</div>
+                {rs.step!=="uploading" && <button onClick={()=>setReceiptSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>}
+              </div>
+
+              {rs.step==="form" && (<>
+                <div className="text-xs mb-3" style={{color:T.muted}}>Attach a photo of the receipt with the amount and a note. Goes to Danny for approval.</div>
+                <button onClick={()=>setReceiptSheet(s=>({...s, file:s.file?null:"receipt_"+Date.now()+".jpg"}))}
+                  className="w-full rounded-xl px-3 py-6 mb-3 text-sm font-semibold" style={{border:`1.5px dashed ${rs.file?T.moss:T.line}`, background:rs.file?"#EFF3EE":T.card, color:rs.file?T.moss:T.muted}}>
+                  {rs.file ? `✓ ${rs.file} — tap to replace` : "📷 Tap to choose photo / file"}
+                </button>
+                <div className="flex gap-2 mb-3">
+                  <input value={rs.amt} onChange={e=>setReceiptSheet(s=>({...s,amt:e.target.value}))} placeholder="Amount $" type="number"
+                    className="w-28 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                  <input value={rs.note} onChange={e=>setReceiptSheet(s=>({...s,note:e.target.value}))} placeholder="What for? e.g. Parking at CDS"
+                    className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                </div>
+                <Btn full onClick={()=>{ if(!rs.file){ping("Choose a photo first");return;} if(!(+rs.amt>0)){ping("Enter an amount");return;} startUpload(false); }}>Upload receipt</Btn>
+                <button onClick={()=>{ if(!rs.file){ping("Choose a photo first");return;} if(!(+rs.amt>0)){ping("Enter an amount");return;} startUpload(true); }}
+                  className="w-full text-center text-xs mt-2 font-semibold" style={{color:T.muted}}>Simulate a dropped connection (demo)</button>
+              </>)}
+
+              {rs.step==="uploading" && (<div className="py-4">
+                <div className="text-sm font-semibold mb-2">Uploading… {rs.pct}%</div>
+                <div className="h-2.5 rounded-full overflow-hidden" style={{background:T.line}}>
+                  <div style={{width:`${rs.pct}%`, height:"100%", background:T.accent, transition:"width .2s"}}/>
+                </div>
+                <div className="text-xs mt-2" style={{color:T.muted}}>Keep this open until it confirms saved. We never assume success silently.</div>
+              </div>)}
+
+              {rs.step==="saved" && (<div className="py-4 text-center">
+                <div style={{...disp,fontWeight:700,fontSize:34,color:T.moss}}>✓</div>
+                <div className="font-semibold mb-1">Saved &amp; synced</div>
+                <div className="text-xs mb-4" style={{color:T.muted}}>${(+rs.amt).toFixed(2)} · {rs.note||"Receipt"} — sent to Danny for approval.</div>
+                <Btn full onClick={()=>setReceiptSheet(null)}>Done</Btn>
+              </div>)}
+
+              {rs.step==="failed" && (<div className="py-4 text-center">
+                <div style={{...disp,fontWeight:700,fontSize:34,color:T.accent}}>!</div>
+                <div className="font-semibold mb-1">Upload didn't complete</div>
+                <div className="text-xs mb-4" style={{color:T.muted}}>Nothing was saved. Your photo and details are still here — retry when you have signal.</div>
+                <Btn full onClick={()=>startUpload(false)}>Retry upload</Btn>
+                <button onClick={()=>setReceiptSheet(s=>({...s,step:"form"}))} className="w-full text-center text-xs mt-2 font-semibold" style={{color:T.muted}}>Edit details</button>
+              </div>)}
+            </div>
+          </div>);})()}
 
         {/* shift-hours editor — per-weekday, weekly recurring */}
         {shiftEditor && (() => {
