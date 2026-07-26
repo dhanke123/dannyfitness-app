@@ -34,8 +34,10 @@ export default function CampBuilderForm({ camp, locations, trainers, onCancel, o
   const dupDay = (i) => setC(x=>({...x, days:[...x.days.slice(0,i+1),
     {...JSON.parse(JSON.stringify(x.days[i])), label:`Day ${x.days.length+1}`}, ...x.days.slice(i+1)]}));
   const removeDay = (i) => setC(x=>({...x, days:x.days.filter((_,j)=>j!==i)}));
+  // New blocks inherit the camp's lead coach — Danny by default — so the common
+  // case needs no clicks and the picker is visible from the start.
   const addSession = (i) => setC(x=>({...x, days:x.days.map((d,j)=>j!==i?d:{...d,
-    sessions:[...d.sessions,{activity:"", trainers:[], start:"09:00", hours:1}]})}));
+    sessions:[...d.sessions,{activity:"", trainers: x.leadCoach ? [x.leadCoach] : [], start:"09:00", hours:2}]})}));
   const updSession = (i,k,field,val) => setC(x=>({...x, days:x.days.map((d,j)=>j!==i?d:{...d,
     sessions:d.sessions.map((s,l)=>l!==k?s:{...s,[field]:val})})}));
   const removeSession = (i,k) => setC(x=>({...x, days:x.days.map((d,j)=>j!==i?d:{...d,
@@ -113,6 +115,23 @@ export default function CampBuilderForm({ camp, locations, trainers, onCancel, o
               </div>)}
           </div>
 
+          {/* Camp-level lead coach. Most camps are Danny's, so it defaults to him
+              and pre-fills every new block; per-block coaches can still differ. */}
+          <div className="col-span-2">
+            <div className="text-xs font-bold mb-1" style={{color:T.muted}}>LEAD COACH</div>
+            <div className="flex gap-1.5 flex-wrap">
+              {trainers.filter(t=>!t.admin && t.active!==false).map(t=>{
+                const on = c.leadCoach===t.id;
+                return (
+                  <button key={t.id} onClick={()=>setC(x=>({...x, leadCoach:t.id}))}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold"
+                    style={{background:on?T.ink:"transparent", color:on?T.paper:T.ink,
+                            border:`1.5px solid ${on?T.ink:T.line}`}}>{t.name}</button>);})}
+            </div>
+            <div className="text-[11px] mt-1" style={{color:T.muted}}>
+              Pre-fills each new activity block. Change any block individually below.</div>
+          </div>
+
           <input value={c.price} onChange={e=>setC({...c,price:e.target.value})} placeholder="Price $" type="number"
             className="px-3 py-2.5 rounded-lg text-sm outline-none" style={inp}/>
           <input value={c.cap} onChange={e=>setC({...c,cap:e.target.value})} placeholder="Capacity" type="number"
@@ -142,14 +161,29 @@ export default function CampBuilderForm({ camp, locations, trainers, onCancel, o
                 const conf = blockConflicts(i,s);
                 return (
                 <div key={k} className="rounded-lg p-2 mb-2" style={{background:"#FBF3EC"}}>
-                  <div className="flex gap-1.5 mb-1.5">
-                    <input value={s.activity} onChange={e=>updSession(i,k,"activity",e.target.value)} placeholder="Activity"
-                      className="flex-1 px-2 py-1.5 rounded-lg text-xs outline-none" style={inp}/>
-                    <TimeInput value={s.start} onChange={v=>updSession(i,k,"start",v)} style={{width:104,fontSize:12}}/>
-                    <input value={s.hours} onChange={e=>updSession(i,k,"hours",+e.target.value||0)} type="number" step="0.5"
-                      className="px-1 py-1.5 rounded-lg text-xs text-center outline-none" style={{...inp,width:48}}/>
-                    <button className="text-xs px-1" style={{color:T.accent}} onClick={()=>removeSession(i,k)}>✗</button>
+                  <div className="flex items-end gap-1.5 mb-1.5">
+                    <div className="flex-1">
+                      <div className="text-[10px] font-bold" style={{color:T.muted}}>ACTIVITY</div>
+                      <input value={s.activity} onChange={e=>updSession(i,k,"activity",e.target.value)} placeholder="e.g. Muay Thai basics"
+                        className="w-full px-2 py-1.5 rounded-lg text-xs outline-none" style={inp}/>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold" style={{color:T.muted}}>START</div>
+                      <TimeInput value={s.start} onChange={v=>updSession(i,k,"start",v)} style={{width:96,fontSize:12}}/>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-bold" style={{color:T.muted}}>HRS</div>
+                      <input value={s.hours} onChange={e=>updSession(i,k,"hours",+e.target.value||0)} type="number" step="0.5" min="0.5"
+                        className="px-1 py-1.5 rounded-lg text-xs text-center outline-none" style={{...inp,width:46}}/>
+                    </div>
+                    <button className="text-xs px-1 pb-2" style={{color:T.accent}} onClick={()=>removeSession(i,k)}>✗</button>
                   </div>
+                  {s.start && s.hours>0 && (
+                    <div className="text-[11px] mb-1" style={{color:T.muted}}>
+                      Runs {s.start}–{(()=>{const [h,m]=s.start.split(":").map(Number);
+                        const t=h*60+m+Math.round(s.hours*60);
+                        return `${String(Math.floor(t/60)%24).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`;})()} · {s.hours}h
+                    </div>)}
                   {/* multi-coach per block */}
                   <div className="flex gap-1 flex-wrap">
                     {trainers.filter(t=>!t.admin && t.active!==false).map(t=>{

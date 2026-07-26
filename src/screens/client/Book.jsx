@@ -198,7 +198,7 @@ export default function ClientBook() {
                 evs._lanes = Math.max(1, laneEnds.length);
                 return evs;
               };
-              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=48, GUT=38, HEADH=32;
+              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=48, GUT=44, HEADH=32;
               const gridH=(HEND-HSTART)*PXH;
               const evClick = (e) => {
                 if (e.kind==="pt") { const hrs=hoursUntil(e.pt.weekOff, e.pt.day, e.pt.time);
@@ -209,7 +209,13 @@ export default function ClientBook() {
                 <div style={{position:"relative", height:gridH, flex: wide?"1 1 auto":"1 1 0", minWidth:0, borderLeft: wide?"none":`1px solid ${T.line}`}}>
                   {Array.from({length:HEND-HSTART}).map((_,i)=>(
                     <div key={i} className="absolute left-0 right-0" style={{top:i*PXH, height:PXH, borderTop:`1px solid ${T.line}`}}/>))}
-                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH; const h=Math.max(20, e.dur/60*PXH-2);
+                  <div className="absolute left-0 right-0" style={{top:gridH, borderTop:`1px solid ${T.line}`}}/>
+                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH;
+                    /* Clamp to the grid bottom. A 45-min PT starting 22:30 runs to 23:15,
+                       past CAL_HEND, and would be clipped by the wrapper's overflow-hidden
+                       — the block simply wouldn't be there. Better to show it slightly
+                       short than to lose it. */
+                    const h=Math.max(20, Math.min(e.dur/60*PXH-2, gridH-top-2));
                     const left=`${(e.lane/lanes)*100}%`; const wd=`${100/lanes}%`;
                     return compact ? (
                     <div key={i} onClick={()=>evClick(e)} className="absolute rounded overflow-hidden"
@@ -238,7 +244,8 @@ export default function ClientBook() {
                       const last = i===HEND-HSTART;
                       return (
                       <div key={i} className="absolute text-[10px]"
-                        style={{top: last ? gridH-9 : Math.max(0, i*PXH-5), left:2, color:T.muted}}>{HSTART+i}:00</div>);})}
+                        style={{top: last ? gridH-11 : Math.max(0, i*PXH-5), left:2,
+                                color:T.muted, whiteSpace:"nowrap"}}>{HSTART+i}:00</div>);})}
                   </div>
                 </div>);
               return (
@@ -362,7 +369,8 @@ export default function ClientBook() {
                         </button>);})}
                     </div>
                     <div className="text-xs mb-1.5" style={{color:T.muted}}>{FULLDAYS[myCalDay]} {fmtDM(dateFor(myWeek,myCalDay))} · {evsFor(myWeek,myCalDay).length} booking{evsFor(myWeek,myCalDay).length!==1?"s":""} · tap a PT block to modify</div>
-                    <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
+                    {/* see Schedule.jsx: the last hour label overflowed and was clipped */}
+                    <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card, paddingBottom:6}}>
                       <TimeGutter top={false}/>
                       <DayGrid w={myWeek} d={myCalDay} wide/>
                     </div>

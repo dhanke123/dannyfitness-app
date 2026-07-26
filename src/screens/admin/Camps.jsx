@@ -12,7 +12,12 @@ export default function CampsSection() {
     <div>
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-bold" style={{color:T.muted}}>CAMPS · day-by-day builder</div>
-        <Btn small onClick={()=>setCampBuilder({name:"", type:"Kids", loc:locations[0]?.id, price:"", cap:"", dates:"", days:[]})}>+ New camp</Btn>
+        <Btn small onClick={()=>setCampBuilder({name:"", type:"Kids", loc:locations[0]?.id, price:"", cap:"", dates:"", startDate:"",
+          // Start with Day 1 and one block already there. Opening on an empty shell
+          // hid the coach picker entirely — it only exists inside a block, so you had
+          // to add a day AND a block before you could see there was a coach option.
+          leadCoach:"danny",
+          days:[{label:"Day 1", sessions:[{activity:"", trainers:["danny"], start:"09:00", hours:2}]}]})}>+ New camp</Btn>
       </div>
       <div className="text-xs mb-3" style={{color:T.muted}}>Build day by day — each day can hold more than one activity block, with its own coach, start time and duration. Assigned coaches see these in their normal Today/Schedule view.</div>
       <div className="space-y-3">

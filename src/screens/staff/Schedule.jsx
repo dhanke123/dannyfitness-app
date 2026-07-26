@@ -51,7 +51,7 @@ export default function StaffSchedule() {
             {/* ---- CALENDAR: Google-Calendar-style time-grid — day or full-week ---- */}
             {schedView==="cal" && (() => {
               const toMin = (t)=>{ const [h,m]=t.split(":").map(Number); return h*60+m; };
-              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=52, GUT=40, HEADH=34;
+              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=52, GUT=46, HEADH=34;
               const gridH=(HEND-HSTART)*PXH;
               // events for a weekday, respecting role + admin trainer filter, with lane packing
               const evsForDay = (d) => {
@@ -89,6 +89,8 @@ export default function StaffSchedule() {
                   {Array.from({length:HEND-HSTART}).map((_,i)=>{ const hr=HSTART+i; return (
                     <div key={hr} onClick={()=>bookAt(d,hr)}
                       className="absolute left-0 right-0" style={{top:i*PXH, height:PXH, borderTop:`1px solid ${T.line}`, cursor:"pointer"}}/>);})}
+                  {/* closes the final hour so 22:00–23:00 reads as a full row, not an open edge */}
+                  <div className="absolute left-0 right-0" style={{top:gridH, borderTop:`1px solid ${T.line}`}}/>
                   {/* "now" line — the single most useful thing Google Calendar puts on a
                       day grid: it tells you where you are without reading any labels. */}
                   {calWeek===0 && d===TODAY && (() => {
@@ -99,7 +101,12 @@ export default function StaffSchedule() {
                       <div style={{height:2, background:T.accent}}/>
                       <div style={{position:"absolute", left:-3, top:-3, width:8, height:8, borderRadius:4, background:T.accent}}/>
                     </div>);})()}
-                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH; const h=Math.max(20,e.dur/60*PXH-2);
+                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH;
+                    /* Clamp to the grid bottom. A 45-min PT starting 22:30 runs to 23:15,
+                       past CAL_HEND, and would be clipped by the wrapper's overflow-hidden
+                       — the block simply wouldn't be there. Better to show it slightly
+                       short than to lose it. */
+                    const h=Math.max(20, Math.min(e.dur/60*PXH-2, gridH-top-2));
                     const left=`${(e.lane/lanes)*100}%`; const w=`${100/lanes}%`;
                     /* A cancelled class stays on the grid, struck through and faded,
                        rather than disappearing. Removing it erases the reason a coach's
@@ -136,7 +143,8 @@ export default function StaffSchedule() {
                       const last = i===HEND-HSTART;
                       return (
                       <div key={i} className="absolute text-[10px]"
-                        style={{top: last ? gridH-9 : Math.max(0, i*PXH-5), left:2, color:T.muted}}>{HSTART+i}:00</div>);})}
+                        style={{top: last ? gridH-11 : Math.max(0, i*PXH-5), left:2,
+                                color:T.muted, whiteSpace:"nowrap"}}>{HSTART+i}:00</div>);})}
                   </div>
                 </div>);
               const dayCount = (d)=>evsForDay(d).length;
@@ -168,7 +176,10 @@ export default function StaffSchedule() {
                       </button>);})}
                   </div>
                   <div className="text-xs mb-1.5" style={{color:T.muted}}>{FULLDAYS[calDay]} {fmtDM(dateFor(calWeek,calDay))} · {dayCount(calDay)} session{dayCount(calDay)!==1?"s":""} · tap a slot to book, tap a session to modify</div>
-                  <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
+                  {/* paddingBottom: the final hour label sits a few px below gridH and
+                      was being clipped by the wrapper's overflow-hidden, so the last
+                      hour looked missing. */}
+                  <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card, paddingBottom:6}}>
                     <TimeGutter top={false}/>
                     <DayGrid d={calDay} wide/>
                   </div>
