@@ -1,6 +1,7 @@
 import { useApp } from "../state/AppState.jsx";
 import CampBuilderForm from "../components/CampBuilderForm.jsx";
 import TemplateBuilderForm from "../components/TemplateBuilderForm.jsx";
+import ClassBuilderForm from "../components/ClassBuilderForm.jsx";
 import { CT } from "../data/seed.js";
 import { DAYS } from "../lib/dates.js";
 import { nid } from "../lib/util.js";
@@ -10,6 +11,7 @@ import { Btn, Select } from "../ui/kit.jsx";
 export default function AdminSheets() {
   const { productForm, setProductForm, addProduct, addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, receiptSheet, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setMeasForm, setMeasurements, setPerm, setRates, setReceiptSheet, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
   return (<>
+        <ClassBuilderForm/>
         {/* Adding a pack used to be a toast that created nothing. */}
         {productForm && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setProductForm(null)}>

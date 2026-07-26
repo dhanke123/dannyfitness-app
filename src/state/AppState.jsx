@@ -9,6 +9,7 @@ import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../li
 import { nid } from "../lib/util.js";
 import { fetchProfile, isConfigured, looksLikeSgMobile, supabase, toAppUser, toE164 } from "../lib/supabase.js";
 import { buildNotifications } from "../lib/notifications.js";
+import { allConflicts, hasBlocking } from "../lib/conflicts.js";
 import { EVENTS, startUsageSession, track } from "../lib/usage.js";
 import { Card } from "../ui/kit.jsx";
 
@@ -68,6 +69,63 @@ export function AppProvider({ children }) {
   const [deletionRequests, setDeletionRequests] = useState([]);
   const [checkedIn, setCheckedIn] = useState([]);          // booking keys the member has checked into
   const [productForm, setProductForm] = useState(null);    // add a pack/pass properly
+  const [classBuilder, setClassBuilder] = useState(null);  // create/edit a class
+  const [showCancelled, setShowCancelled] = useState(true);// calendar: keep cancelled visible
+
+  const openClassBuilder = (seed) => setClassBuilder({
+    editId:null, type:"STR", day:TODAY, time:"07:00", loc:seedLocations[0]?.id,
+    cap:10, trainers:[], repeat:1, ...seed });
+
+  /* Save re-runs the conflict check. The form checks live, but state can move
+     between opening the form and pressing save — another admin books the coach,
+     or a member takes a PT slot. Validating only in the UI is validating nowhere. */
+  const saveClass = (cb) => {
+    const dur = CT[cb.type]?.dur || 60;
+    const ctx = { sessions, ptBookings, timeOff, camps, travel };
+    const found = allConflicts({trainers:cb.trainers, day:cb.day, time:cb.time, durMin:dur, loc:cb.loc},
+                               ctx, tName, locName, cb.editId);
+    if (hasBlocking(found)) { ping(found.find(f=>f.severity==="block").message); return; }
+
+    if (cb.editId) {
+      setSessions(ss => ss.map(x => x.id!==cb.editId ? x : {
+        ...x, type:cb.type, day:cb.day, time:cb.time, loc:cb.loc, cap:+cb.cap||8,
+        trainers:[...cb.trainers], trainer:cb.trainers[0] }));
+      logAudit(`Class edited · ${CT[cb.type].name} ${DAYS[cb.day]} ${cb.time}`);
+      ping(`${CT[cb.type].name} updated`);
+    } else {
+      const n = Math.max(1, +cb.repeat || 1);
+      const made = Array.from({length:n}).map(() => ({
+        id:nid(), type:cb.type, day:cb.day, time:cb.time, loc:cb.loc, cap:+cb.cap||8,
+        trainer:cb.trainers[0], trainers:[...cb.trainers], attendees:[], status:"scheduled" }));
+      setSessions(ss => [...ss, ...made]);
+      logAudit(`Class created · ${CT[cb.type].name} ${DAYS[cb.day]} ${cb.time} · ${cb.trainers.map(tName).join(" + ")}`);
+      ping(n>1 ? `${n} weekly ${CT[cb.type].name} classes created` : `${CT[cb.type].name} created — live in the timetable`);
+    }
+    setClassBuilder(null);
+  };
+
+  /* Cancelling keeps the row. Deleting it would erase the fact that it was ever
+     scheduled — and with it the reason a coach's week looks light, why members
+     got credits back, and any chance of spotting a pattern of cancellations. */
+  const cancelSession = (sid, reason) => {
+    const s0 = sessions.find(x=>x.id===sid); if (!s0) return;
+    const n = (s0.attendees||[]).length;
+    setSessions(ss => ss.map(x => x.id!==sid ? x : {
+      ...x, status:"cancelled", cancelledAt:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),
+      cancelReason: reason || "" }));
+    // members holding a spot get their credit back automatically
+    if (myClassBookings.includes(sid)) {
+      setMyClassBookings(b=>b.filter(x=>x!==sid));
+      setCredits(c=>({...c, classes:c.classes+1}));
+    }
+    logAudit(`Class cancelled · ${CT[s0.type].name} ${DAYS[s0.day]} ${s0.time}${reason?` · "${reason}"`:""} · ${n} booked`);
+    ping(n>0 ? `Cancelled — ${n} member${n===1?"":"s"} notified and credited back`
+             : "Cancelled — kept on the calendar, struck through, for the record");
+  };
+  const restoreSession = (sid) => {
+    setSessions(ss => ss.map(x => x.id!==sid ? x : {...x, status:"scheduled", cancelledAt:null, cancelReason:null}));
+    ping("Class restored — members are not re-booked automatically");
+  };
 
   // Clipboard with a truthful fallback — navigator.clipboard is unavailable on
   // insecure origins and in some in-app browsers, and silently failing there is
@@ -318,11 +376,11 @@ export function AppProvider({ children }) {
     setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null); setBookFor(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -830,7 +888,7 @@ export function AppProvider({ children }) {
     ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["reports","Reports"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+  const store = { classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };

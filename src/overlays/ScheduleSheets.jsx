@@ -8,7 +8,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Card, Select } from "../ui/kit.jsx";
 
 export default function ScheduleSheets() {
-  const { addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, resolveIncidental, commitClientMove, day, doneSheet, hoursUntil, incidentals, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setIncidentals, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
+  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, resolveIncidental, commitClientMove, day, doneSheet, hoursUntil, incidentals, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setIncidentals, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
   return (<>
         {/* time off sheet */}
         {timeOffSheet && (
@@ -29,10 +29,13 @@ export default function ScheduleSheets() {
           const conflict = others.find(b => ns < b.end && ne > b.start);
           const moved = nd!==moveSheet.day || nt!==moveSheet.time || nl!==moveSheet.loc;
           const doCancel = () => {
-            if (isPt) setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,status:"cancelled"}));
-            else setSessions(ss=>ss.filter(s=>s.id!==moveSheet.id));
-            if (isAdmin) logAudit(`Cancelled ${moveSheet.label} · was ${DAYS[moveSheet.day]} ${moveSheet.time} · ${locName(moveSheet.loc)}`);
-            ping("Cancelled — booked clients notified (audited)"); setMoveSheet(null);
+            if (isPt) { setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,status:"cancelled"}));
+              if (isAdmin) logAudit(`Cancelled ${moveSheet.label} · was ${DAYS[moveSheet.day]} ${moveSheet.time}`);
+              ping("Cancelled — booked clients notified (audited)"); }
+            // A class is CANCELLED, never deleted: it stays on the calendar struck
+            // through so the record of what was scheduled survives.
+            else cancelSession(moveSheet.id, moveSheet.cancelReason);
+            setMoveSheet(null);
           };
           return (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setMoveSheet(null)}>
@@ -41,7 +44,15 @@ export default function ScheduleSheets() {
               <div className="text-xs mb-3" style={{color:T.muted}}>Currently {DAYS[moveSheet.day]} · {moveSheet.time} · {locName(moveSheet.loc)}</div>
 
               {moveSheet.confirmingCancel ? (<>
-                <div className="text-sm mb-4">Cancel this {isPt?"session":"class"}? Booked clients are notified. This can't be undone in the demo.</div>
+                <div className="text-sm mb-3">Cancel this {isPt?"session":"class"}? Booked clients are notified and credited back.</div>
+                {!isPt && <>
+                  <input value={moveSheet.cancelReason||""} onChange={e=>setMoveSheet(m=>({...m,cancelReason:e.target.value}))}
+                    placeholder="Reason (weather, coach ill, low numbers…)"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-2" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                  <div className="text-xs mb-3" style={{color:T.muted}}>
+                    The class stays on the calendar, struck through, with the reason — so you can see
+                    later why a week looked light, and spot a pattern.</div>
+                </>}
                 <button onClick={doCancel} className="w-full font-bold rounded-xl py-3 mb-2" style={{background:T.accent,color:"#fff"}}>Yes, cancel it</button>
                 <button onClick={()=>setMoveSheet(m=>({...m,confirmingCancel:false}))} className="w-full text-sm font-bold" style={{color:T.muted}}>Keep it</button>
               </>) : (<>

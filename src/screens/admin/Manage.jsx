@@ -1,6 +1,7 @@
 import { useApp } from "../../state/AppState.jsx";
-import { COUPONS, TRAINERS } from "../../data/seed.js";
+import { COUPONS, CT, TRAINERS } from "../../data/seed.js";
 import { DEFAULT_TRAVEL, PT_DUR, travelKey } from "../../lib/scheduling.js";
+import { DAYS } from "../../lib/dates.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import CampsSection from "./Camps.jsx";
 import { nid } from "../../lib/util.js";
@@ -8,7 +9,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip } from "../../ui/kit.jsx";
 
 export default function AdminManage() {
-  const { applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, incidentals, isAdmin, leads, ledger, openLeads, setLeadStatus, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
+  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, incidentals, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
@@ -19,7 +20,7 @@ export default function AdminManage() {
                 visible — a hidden tab is a tab that never gets used. Settings gains a
                 text label too; a lone gear icon in a full-width cell read as a mistake. */}
             <div className="grid grid-cols-4 gap-1.5 pb-3">
-              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],["camps","Camps"],
+              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],
                 ["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
@@ -348,9 +349,40 @@ export default function AdminManage() {
 
             {/* Camps moved here from the bottom nav — set up occasionally, so a
                 permanent slot in a five-item nav was expensive. */}
-            {adminSec==="camps" && <CampsSection/>}
 
             {adminSec==="settings" && <div className="space-y-3">
+              {/* Timetable lives here: creating classes and camps is setup, done
+                  occasionally, not day-to-day running. */}
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold" style={{color:T.muted}}>CLASSES · the weekly timetable</div>
+                <Btn small onClick={()=>openClassBuilder({})}>+ New class</Btn>
+              </div>
+              <div className="text-xs" style={{color:T.muted}}>
+                {sessions.filter(x=>x.status!=="cancelled").length} live · {sessions.filter(x=>x.status==="cancelled").length} cancelled.
+                Assign more than one coach and the pay splits between them.
+              </div>
+              {[...sessions].sort((a,b)=>a.day-b.day||a.time.localeCompare(b.time)).slice(0,12).map(x=>(
+                <Card key={x.id} className="!p-3 flex items-center gap-3"
+                  style={x.status==="cancelled"?{opacity:.6}:undefined}>
+                  <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:CT[x.type].color}}/>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm" style={x.status==="cancelled"?{textDecoration:"line-through"}:undefined}>
+                      {CT[x.type].name} · {DAYS[x.day]} {x.time}</div>
+                    <div className="text-xs" style={{color:T.muted}}>
+                      {locName(x.loc)} · cap {x.cap} · {(x.trainers||[x.trainer]).map(tName).join(" + ")}
+                      {(x.trainers||[x.trainer]).length>1 && <span style={{color:T.blue}}> · split pay</span>}
+                      {x.status==="cancelled" && <span style={{color:T.accent}}> · cancelled{x.cancelReason?` — ${x.cancelReason}`:""}</span>}
+                    </div>
+                  </div>
+                  {x.status==="cancelled"
+                    ? <Btn small kind="ghost" onClick={()=>restoreSession(x.id)}>Restore</Btn>
+                    : <Btn small kind="ghost" onClick={()=>openClassBuilder({editId:x.id, type:x.type, day:x.day,
+                        time:x.time, loc:x.loc, cap:x.cap, trainers:x.trainers||[x.trainer], repeat:1})}>Edit</Btn>}
+                </Card>))}
+
+              <div className="pt-2"><CampsSection/></div>
+              <div className="pt-2" style={{borderTop:`1.5px solid ${T.line}`}}/>
+
               <Card className="!p-3 flex items-center justify-between">
                 <div><div className="font-semibold text-sm">Shop “About” page copy</div>
                   <div className="text-xs" style={{color:T.muted}}>Class + PT explainers clients read in Shop → About</div></div>

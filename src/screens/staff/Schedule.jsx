@@ -7,7 +7,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, H, Select } from "../../ui/kit.jsx";
 
 export default function StaffSchedule() {
-  const { active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
+  const { cancelSession, restoreSession, showCancelled, setShowCancelled, openClassBuilder, setClassBuilder, active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
   return (<>
         {/* ==================== TRAINER / ADMIN: SCHEDULE ==================== */}
         {!isClient && tab==="schedule" && (
@@ -32,10 +32,21 @@ export default function StaffSchedule() {
                   approveLabel="Approve" denyLabel="Deny" />
               </div>)}
 
-            <div className="flex gap-2 pb-3">
+            <div className="flex gap-2 pb-2 items-center flex-wrap">
               {[["cal","Calendar"],["week","List"],["coach",isAdmin?"By coach":"Availability"]].map(([k,l])=>(
                 <Chip key={k} active={schedView===k} onClick={()=>setSchedView(k)}>{l}</Chip>))}
+              {isAdmin && <Btn small onClick={()=>openClassBuilder({})}>+ Class</Btn>}
             </div>
+            {schedView==="cal" && (
+              <div className="flex items-center justify-between pb-2">
+                <button onClick={()=>setShowCancelled(v=>!v)} className="text-xs font-bold"
+                  style={{color: showCancelled ? T.ink : T.muted}}>
+                  {showCancelled ? "☑" : "☐"} Show cancelled
+                </button>
+                <div className="text-[11px]" style={{color:T.muted}}>
+                  Cancelled classes stay struck through — kept for the record.
+                </div>
+              </div>)}
 
             {/* ---- CALENDAR: Google-Calendar-style time-grid — day or full-week ---- */}
             {schedView==="cal" && (() => {
@@ -45,12 +56,14 @@ export default function StaffSchedule() {
               // events for a weekday, respecting role + admin trainer filter, with lane packing
               const evsForDay = (d) => {
                 const inFilter = (tid)=> isAdmin ? (calTrainer==="all"||tid===calTrainer) : tid===user.id;
-                const cls = sessions.filter(s=>s.day===d && sessTrainers(s).some(inFilter));
+                const cls = sessions.filter(s=>s.day===d && sessTrainers(s).some(inFilter))
+                                    .filter(s=>showCancelled || s.status!=="cancelled");
                 const pts = ptBookings.filter(b=>b.day===d && b.status!=="cancelled" && inFilter(b.trainer));
                 const extras = weekExtras(calWeek).filter(x=>x.day===d && inFilter(x.trainer));
                 const evs = [
                   ...cls.map(s=>({start:toMin(s.time), dur:CT[s.type].dur, color:CT[s.type].color, title:CT[s.type].name,
                     time:s.time, code:s.type, who:null, locId:s.loc,
+                    cancelled:s.status==="cancelled", coaches:sessTrainers(s).length, sid:s.id,
                     sub:`${locName(s.loc)} · ${sessTrainers(s).map(tName).join(" + ")}`,
                     move:{kind:"class", id:s.id, day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, label:CT[s.type].name}})),
                   ...pts.map(b=>({start:toMin(b.time), dur:PT_DUR, color:b.byAdmin?T.plum:T.navy, title:`PT · ${b.who}`,
@@ -76,21 +89,39 @@ export default function StaffSchedule() {
                   {Array.from({length:HEND-HSTART}).map((_,i)=>{ const hr=HSTART+i; return (
                     <div key={hr} onClick={()=>bookAt(d,hr)}
                       className="absolute left-0 right-0" style={{top:i*PXH, height:PXH, borderTop:`1px solid ${T.line}`, cursor:"pointer"}}/>);})}
+                  {/* "now" line — the single most useful thing Google Calendar puts on a
+                      day grid: it tells you where you are without reading any labels. */}
+                  {calWeek===0 && d===TODAY && (() => {
+                    const now=new Date(); const mins=now.getHours()*60+now.getMinutes();
+                    if (mins < HSTART*60 || mins > HEND*60) return null;
+                    const top=(mins-HSTART*60)/60*PXH;
+                    return (<div className="absolute left-0 right-0" style={{top, zIndex:3, pointerEvents:"none"}}>
+                      <div style={{height:2, background:T.accent}}/>
+                      <div style={{position:"absolute", left:-3, top:-3, width:8, height:8, borderRadius:4, background:T.accent}}/>
+                    </div>);})()}
                   {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH; const h=Math.max(20,e.dur/60*PXH-2);
                     const left=`${(e.lane/lanes)*100}%`; const w=`${100/lanes}%`;
+                    /* A cancelled class stays on the grid, struck through and faded,
+                       rather than disappearing. Removing it erases the reason a coach's
+                       week looks light and hides a pattern of cancellations. */
+                    const strike = e.cancelled ? {textDecoration:"line-through"} : null;
+                    const blockStyle = e.cancelled
+                      ? {background:"transparent", color:e.color, border:`1.5px dashed ${e.color}`, opacity:.75}
+                      : {background:e.color, color:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,.15)"};
                     return compact ? (
                     <div key={i} onClick={(ev)=>{ev.stopPropagation(); evClick(e);}}
                       className="absolute rounded overflow-hidden" style={{top:top+1, height:h, left, width:w, padding:"1px 2px",
-                        background:e.color, color:"#fff", fontSize:8.5, lineHeight:1.08, boxShadow:"0 1px 2px rgba(0,0,0,.15)", cursor:"pointer"}}>
-                      <div style={{fontWeight:800}}>{e.time}</div>
-                      <div style={{fontWeight:700}}>{e.who ? firstName(e.who) : e.code}</div>
-                      {h>26 && <div style={{opacity:.85}}>{locAbbr(e.locId)}</div>}
+                        fontSize:8.5, lineHeight:1.08, cursor:"pointer", ...blockStyle}}>
+                      <div style={{fontWeight:800, ...strike}}>{e.time}</div>
+                      <div style={{fontWeight:700, ...strike}}>{e.who ? firstName(e.who) : e.code}</div>
+                      {h>26 && <div style={{opacity:.85}}>{e.coaches>1 ? `👥${e.coaches}` : locAbbr(e.locId)}</div>}
                     </div>) : (
                     <div key={i} onClick={(ev)=>{ev.stopPropagation(); evClick(e);}}
                       className="absolute rounded-md px-1 py-0.5 overflow-hidden" style={{top:top+1, height:h, left, width:w,
-                        background:e.color, color:"#fff", fontSize:10, lineHeight:1.1, boxShadow:"0 1px 3px rgba(0,0,0,.15)", cursor:"pointer"}}>
-                      <div style={{fontWeight:700}}>{e.time} {e.title}</div>
-                      {h>32 && <div style={{opacity:.9}}>{e.sub}</div>}
+                        fontSize:10, lineHeight:1.1, cursor:"pointer", ...blockStyle}}>
+                      <div style={{fontWeight:700, ...strike}}>
+                        {e.time} {e.title}{e.coaches>1 ? ` · ${e.coaches} coaches` : ""}</div>
+                      {h>32 && <div style={{opacity:.9}}>{e.cancelled ? "CANCELLED" : e.sub}</div>}
                     </div>);})}
                 </div>);};
               // Hour labels CAL_HSTART:00 … CAL_HEND:00 (5:00 … 23:00). First and last are

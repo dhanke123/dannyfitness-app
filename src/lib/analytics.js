@@ -46,9 +46,14 @@ export function profitAndLoss(s) {
     const rt = rates[tid]; if (!rt) return 0;
     if (rt.type === "salary") return round((rt.monthly || 0) / 4.33); // weekly slice
     const delivered = sessions.filter(x => sessTrainers(x).includes(tid) && x.done);
+    /* SHARED CLASSES: a class with two coaches pays each a SHARE, not the full
+       rate. Paying both in full doubles the cost of a class that earns the same
+       money — the quickest way to make co-coaching look unaffordable when it
+       isn't. Split is equal; the lead/assistant weighting is a Danny decision. */
     const classPay = rt.type === "per_head"
-      ? sum(delivered, x => (x.attendees || []).filter(a => a.status === "attended").length * (rt.perHead || 0))
-      : delivered.length * (rt.perClass || 0);
+      ? sum(delivered, x => ((x.attendees || []).filter(a => a.status === "attended").length
+                             * (rt.perHead || 0)) / sessTrainers(x).length)
+      : sum(delivered, x => (rt.perClass || 0) / sessTrainers(x).length);
     const pts = ptBookings.filter(b => b.trainer === tid && b.status === "done").length;
     return round(classPay + pts * (rt.perPt || 0));
   };
@@ -167,14 +172,21 @@ export function trainerScorecards(s) {
     }
 
     const rt = rates[t.id] || {};
+    // Same share rule as profitAndLoss — a co-coached class divides between the
+    // coaches on it. These two must agree or the P&L and the scorecards disagree
+    // about what the same class cost, which is the sort of discrepancy that
+    // destroys confidence in every other number on the page.
     const payout = rt.type === "salary" ? round((rt.monthly || 0) / 4.33)
       : round((rt.type === "per_head"
-          ? sum(delivered, x => (x.attendees || []).filter(a => a.status === "attended").length * (rt.perHead || 0))
-          : delivered.length * (rt.perClass || 0))
+          ? sum(delivered, x => ((x.attendees || []).filter(a => a.status === "attended").length
+                                 * (rt.perHead || 0)) / sessTrainers(x).length)
+          : sum(delivered, x => (rt.perClass || 0) / sessTrainers(x).length))
         + ptDone.length * (rt.perPt || 0));
 
     // B3 — revenue attributable to this coach, for margin.
-    const classRev = sum(delivered, x => (x.attendees || []).filter(a => a.status === "attended").length * CT[x.type].price);
+    // revenue attributed the same way, so margin per coach stays comparable
+    const classRev = sum(delivered, x => ((x.attendees || []).filter(a => a.status === "attended").length
+                                          * CT[x.type].price) / sessTrainers(x).length);
     const ptRev = round(ptDone.length * (PT_PRICE[t.id] || 0));
     const revenue = round(classRev + ptRev);
 
@@ -235,8 +247,9 @@ export function clientInsights(s) {
 
 export function capacity(s) {
   const { sessions, locations, locName, myWaitlist } = s;
+  const live = sessions.filter(x => x.status !== "cancelled");
   const byLoc = locations.map(l => {
-    const here = sessions.filter(x => x.loc === l.id);
+    const here = live.filter(x => x.loc === l.id);
     const seats = sum(here, x => x.cap);
     const booked = sum(here, x => (x.attendees || []).length);
     const revenue = round(sum(here, x => (x.attendees || []).length * CT[x.type].price));
@@ -245,7 +258,7 @@ export function capacity(s) {
   }).filter(l => l.sessions > 0).sort((a, b) => b.revenue - a.revenue);
 
   const byType = Object.keys(CT).map(code => {
-    const here = sessions.filter(x => x.type === code);
+    const here = live.filter(x => x.type === code);
     const seats = sum(here, x => x.cap);
     const booked = sum(here, x => (x.attendees || []).length);
     return { code, name: CT[code].name, sessions: here.length, seats, booked, fillRate: pct(booked, seats) };
@@ -253,14 +266,14 @@ export function capacity(s) {
 
   // D5 — demand heatmap, day × session count.
   const byDay = DAYS.map((d, i) => {
-    const here = sessions.filter(x => x.day === i);
+    const here = live.filter(x => x.day === i);
     return { day: d, sessions: here.length, booked: sum(here, x => (x.attendees || []).length) };
   });
 
-  const full = sessions.filter(x => (x.attendees || []).length >= x.cap);
+  const full = live.filter(x => (x.attendees || []).length >= x.cap);
   return {
     byLoc, byType, byDay,
-    overallFill: pct(sum(sessions, x => (x.attendees || []).length), sum(sessions, x => x.cap)),
+    overallFill: pct(sum(live, x => (x.attendees || []).length), sum(live, x => x.cap)),
     fullSessions: full.length,
     waitlisted: myWaitlist.length,
     // D3 — unmet demand is the clearest signal for where to add a class
@@ -276,7 +289,7 @@ export function integrityAudit(s) {
   const { sessions, ptBookings, ledger, incidentals, credits } = s;
   const findings = [];
 
-  const unmarked = sessions.filter(x => x.day < TODAY && !x.done);
+  const unmarked = sessions.filter(x => x.day < TODAY && !x.done && x.status !== "cancelled");
   if (unmarked.length) findings.push({
     severity: "high", code: "UNMARKED_ATTENDANCE",
     title: `${unmarked.length} past session${unmarked.length === 1 ? "" : "s"} with no attendance marked`,

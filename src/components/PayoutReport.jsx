@@ -42,16 +42,17 @@ export default function PayoutReport() {
     // --- classes: only those actually delivered (attendance marked) ---
     sessions
       .filter(s => sessTrainers(s).includes(tid))
+      .filter(s => s.status !== "cancelled")          // a cancelled class isn't delivered work
       .filter(s => basis === "booked" ? true : s.done === true)
       .forEach(s => {
         const attended = (s.attendees || []).filter(a => a.status === "attended").length;
-        const heads = attended;
+        const share = sessTrainers(s).length;         // co-coached classes split the fee
         let pay = 0, rateLabel = "—";
-        if (rt.type === "per_head") { pay = heads * (rt.perHead || 0); rateLabel = `${heads} × ${money(rt.perHead || 0)}`; }
-        else if (rt.type === "per_class") { pay = rt.perClass || 0; rateLabel = money(rt.perClass || 0); }
+        if (rt.type === "per_head") { pay = (attended * (rt.perHead || 0)) / share; rateLabel = `${attended} × ${money(rt.perHead || 0)}${share>1?` ÷ ${share}`:""}`; }
+        else if (rt.type === "per_class") { pay = (rt.perClass || 0) / share; rateLabel = `${money(rt.perClass || 0)}${share>1?` ÷ ${share}`:""}`; }
         else { rateLabel = "salary"; }
         lines.push({
-          kind: "class", when: DAYS[s.day], item: `${CT[s.type].name} (class)`,
+          kind: "class", when: DAYS[s.day], item: `${CT[s.type].name} (class)${share>1?` · with ${sessTrainers(s).filter(x=>x!==tid).map(tName).join(", ")}`:""}`,
           where: locName(s.loc), detail: `${attended} attended`, rateLabel, pay,
         });
       });
