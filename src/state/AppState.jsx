@@ -609,11 +609,14 @@ export function AppProvider({ children }) {
     return out;
   };
   // returns the clashing commitment, or null
-  const memberClash = (weekOff, dayIdx, time, dur, ignoreId) => {
+  /* NOTE: no `ignoreId` parameter. An earlier version had one and filtered with
+     `b.id !== ignoreId` — but memberBusy items carry no id, so that compared
+     `undefined !== undefined`, which is false, and silently discarded EVERY item.
+     The function always returned null and the whole check was dead code. The one
+     caller that needs to exclude a booking (commitClientMove) filters explicitly. */
+  const memberClash = (weekOff, dayIdx, time, dur) => {
     const st = toMin(time), en = st + dur;
-    return memberBusy(weekOff, dayIdx)
-      .filter(b => b.id !== ignoreId)
-      .find(b => st < b.end && en > b.start) || null;
+    return memberBusy(weekOff, dayIdx).find(b => st < b.end && en > b.start) || null;
   };
 
   const ptCtx = { sessions, ptBookings, timeOff, shifts };
