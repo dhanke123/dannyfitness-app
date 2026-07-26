@@ -34,7 +34,13 @@ export const firstName = (n) => String(n||"").split(" ")[0];
    never drift apart. Column width and row height stay per-view (the client grid is
    narrower); only the hour range is common. */
 export const CAL_HSTART = 5;   // grid starts 5:00 am
-export const CAL_HEND   = 22;  // grid ends 10:00 pm
+export const CAL_HEND   = 23;  // grid ends 11:00 pm
+/* CAL_HEND is the hour the grid STOPS at, so the last drawn row is (CAL_HEND - 1):00
+   to CAL_HEND:00. At 22 the grid ended at 10pm and anything from 22:00 onward was
+   positioned past `gridH` — rendered outside the box and clipped by its
+   overflow-hidden, so a late session simply wasn't there. 23 gives a full evening.
+   Raising this costs vertical space on every calendar; both grids are scrollable,
+   so the trade is height, not clipping. */
 
 /* ---------- time helpers ---------- */
 export const toMin = (t) => { const [h,m] = t.split(":").map(Number); return h*60+m; };

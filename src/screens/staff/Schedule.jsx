@@ -93,9 +93,10 @@ export default function StaffSchedule() {
                       {h>32 && <div style={{opacity:.9}}>{e.sub}</div>}
                     </div>);})}
                 </div>);};
-              // Hour labels 6:00 … 22:00. First and last nudged inside the box — at top:-5
-              // the 6:00 label was clipped by the wrapper's overflow-hidden, and 22:00 was
-              // never drawn, so the grid appeared to stop at 21:00.
+              // Hour labels CAL_HSTART:00 … CAL_HEND:00 (5:00 … 23:00). First and last are
+              // nudged inside the box — at top:-5 the first label was clipped by the
+              // wrapper's overflow-hidden, and the last was never drawn, so the grid
+              // appeared to stop an hour early.
               const TimeGutter = ({top}) => (
                 <div style={{width:GUT, flex:"none"}}>
                   {top && <div style={{height:HEADH}}/>}

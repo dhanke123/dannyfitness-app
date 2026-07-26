@@ -60,14 +60,27 @@ export default function ClientHome() {
               </div>
             )}
 
-            {/* quick stats */}
+            {/* Quick stats — every one of these is a summary of something that lives on
+                Log → Progress, so tapping a number should take you to the detail behind
+                it. They were static divs, which reads as "this is just a readout" and
+                leaves the user hunting through the bottom nav for the chart. */}
             <div className="flex gap-2.5 mb-3">
-              <div className="flex-1 text-center" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:"12px 6px"}}>
-                <div style={{...disp,fontWeight:800,fontSize:26,color:T.accent}}>{weekWorkouts}</div><div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>WORKOUTS/WK</div></div>
-              <div className="flex-1 text-center" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:"12px 6px"}}>
-                <div style={{...disp,fontWeight:800,fontSize:26,color:T.blue}}>{prsN}</div><div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>PRS</div></div>
-              <div className="flex-1 text-center" style={{background:T.card,border:`1.5px solid ${T.line}`,borderRadius:20,padding:"12px 6px"}}>
-                <div style={{...disp,fontWeight:800,fontSize:26,color:T.amber}}>{weekKcal>=1000?(weekKcal/1000).toFixed(1)+"k":weekKcal}</div><div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>KCAL/WK</div></div>
+              {[[weekWorkouts, "WORKOUTS/WK", T.accent, "weekly workout goal"],
+                [prsN, "PRS", T.blue, "personal records"],
+                [weekKcal>=1000 ? (weekKcal/1000).toFixed(1)+"k" : weekKcal, "KCAL/WK", T.amber, "weekly calorie goal"]
+               ].map(([value, label, color, what]) => (
+                <button key={label}
+                  onClick={()=>{ setTab("log"); setLogView("progress"); }}
+                  aria-label={`${label.replace("/"," per ").toLowerCase()} — open Progress to see your ${what}`}
+                  className="flex-1 text-center"
+                  style={{background:T.card, border:`1.5px solid ${T.line}`, borderRadius:20,
+                          padding:"12px 6px", position:"relative", cursor:"pointer"}}>
+                  {/* small affordance: without it these still look like read-only cards */}
+                  <span aria-hidden="true" style={{position:"absolute", top:8, right:9, fontSize:11,
+                        lineHeight:1, color:T.line, fontWeight:800}}>›</span>
+                  <div style={{...disp,fontWeight:800,fontSize:26,color}}>{value}</div>
+                  <div style={{...disp,fontWeight:700,fontSize:9,color:T.muted,letterSpacing:".04em"}}>{label}</div>
+                </button>))}
             </div>
 
             {/* quick start */}
