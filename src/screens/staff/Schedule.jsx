@@ -3,6 +3,7 @@ import { CT, isHead, weekExtras } from "../../data/seed.js";
 import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, firstName, fmtDM, locAbbr, toMin, upcomingDate, weekLabel } from "../../lib/dates.js";
 import { PT_DUR, sessTrainers } from "../../lib/scheduling.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
+import WeekGrid from "../../components/WeekGrid.jsx";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, H, Select } from "../../ui/kit.jsx";
 
@@ -184,24 +185,20 @@ export default function StaffSchedule() {
                     <DayGrid d={calDay} wide/>
                   </div>
                 </>) : (<>
-                  <div className="text-xs mb-1.5" style={{color:T.muted}}>Whole week · tap a slot to book, tap a session to modify · blocks show time · type/client · location initials</div>
-                  <div className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
-                    <div className="flex">
-                      <TimeGutter top/>
-                      {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(calWeek,d); const isToday=(calWeek===0&&d===TODAY); return (
-                        <div key={d} className="flex flex-col" style={{flex:"1 1 0", minWidth:0}}>
-                          <div className="text-center" style={{height:HEADH, borderLeft:`1px solid ${T.line}`, background:isToday?"#FBF3EC":"transparent"}}>
-                            <div className="text-[9px] font-bold leading-none pt-1" style={{color:isToday?T.accent:T.muted}}>{DAYS[d]}</div>
-                            <div style={{...disp,fontWeight:700,fontSize:12,lineHeight:1.1,color:isToday?T.accent:T.ink}}>{dt.getDate()}/{dt.getMonth()+1}</div>
-                          </div>
-                          <DayGrid d={d} compact/>
-                        </div>);})}
-                    </div>
-                  </div>
-                  <div className="text-[10px] mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5" style={{color:T.muted}}>
-                    <span>Loc: {locations.map(l=>l.id).join(" · ")}</span>
-                    <span style={{color:"#8A7CC0"}}>■ sample data (future weeks)</span>
-                  </div>
+                  {/* Design A — one shared grid so the client and staff calendars can't
+                      drift apart the way the two hand-rolled copies did. Tapping a day
+                      expands it in place: readable, without leaving the week. */}
+                  <WeekGrid
+                    weekOff={calWeek}
+                    events={[0,1,2,3,4,5,6].flatMap(d => evsForDay(d).map((e,i) => ({
+                      id:`${d}-${i}-${e.time}-${e.code}`,
+                      day:d, start:e.start, dur:e.dur, color:e.color, code:e.code,
+                      title:e.title, sub:e.sub, cancelled:!!e.cancelled,
+                      coaches:e.coaches||1, _src:e })))}
+                    onSlotClick={(d,hr)=>bookAt(d,hr)}
+                    onEventClick={(e)=>evClick(e._src)}
+                    emptyNote="No sessions this week."
+                  />
                 </>)}
 
                 {(isAdmin || !isClient) && <div className="mt-3"><Btn small full kind="ghost"

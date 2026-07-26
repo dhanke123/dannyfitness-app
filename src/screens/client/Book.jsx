@@ -4,11 +4,12 @@ import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, fmtDM, fmtFull, l
 import { downloadIcs, eventStart, googleCalUrl } from "../../lib/calendar.js";
 import { PT_DUR } from "../../lib/scheduling.js";
 import { AddToCalendar } from "../../components/ApprovalQueue.jsx";
+import WeekGrid from "../../components/WeekGrid.jsx";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Select, Ticks } from "../../ui/kit.jsx";
 
 export default function ClientBook() {
-  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, otherPlace, ping, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
+  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, otherPlace, ping, setBookingDetail, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
 
   /* One place that turns any booking into a calendar event (Decision 14). Both the .ics
      download and the Google URL are built from the same object, so they can never drift. */
@@ -180,6 +181,11 @@ export default function ClientBook() {
                     color:T.plum, time:s.start, code:"CAMP", title:c.name,
                     sub:`${s.activity} · ${locName(c.loc)}`, kind:"camp" }); }); }); });
               // every booking the client owns, for one (week, weekday), lane-packed like the coach grid
+              // WeekGrid wants one flat list for the week, tagged with its weekday
+              const evsWeek = (w) => [0,1,2,3,4,5,6].flatMap(d => evsFor(w,d).map((e,i) => ({
+                id:`${d}-${i}-${e.time}-${e.code}`, day:d, start:e.start, dur:e.dur,
+                color:e.color, code:e.code, title:e.title, sub:e.sub,
+                cancelled:!!e.cancelled, coaches:e.coaches||1, _src:e })));
               const evsFor = (w,d) => {
                 const evs = [];
                 myClassBookings.forEach(sid=>{ const s=sessions.find(x=>x.id===sid); if(!s) return;
@@ -200,11 +206,8 @@ export default function ClientBook() {
               };
               const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=48, GUT=44, HEADH=32;
               const gridH=(HEND-HSTART)*PXH;
-              const evClick = (e) => {
-                if (e.kind==="pt") { const hrs=hoursUntil(e.pt.weekOff, e.pt.day, e.pt.time);
-                  setClientMove({...e.pt, newWeek:e.pt.weekOff??0, newDay:e.pt.day, newTime:e.pt.time, locked:hrs<policy.ptHrs}); }
-                else ping(`${e.title} · ${e.time} · ${e.sub}`);
-              };
+              // Every booking opens a sheet with the same actions the list offers.
+              const evClick = (e) => setBookingDetail({ ...e, weekOff: myWeek });
               const DayGrid = ({w, d, wide, compact}) => { const evs=evsFor(w,d); const lanes=evs._lanes; return (
                 <div style={{position:"relative", height:gridH, flex: wide?"1 1 auto":"1 1 0", minWidth:0, borderLeft: wide?"none":`1px solid ${T.line}`}}>
                   {Array.from({length:HEND-HSTART}).map((_,i)=>(
@@ -357,39 +360,13 @@ export default function ClientBook() {
                     <div className="text-sm font-bold" style={disp}>{weekLabel(myWeek)}{myWeek===0?" · this week":""}</div>
                     <button onClick={()=>setMyWeek(w=>w+1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
                   </div>
-                  {mySpan==="day" ? (<>
-                    <div className="grid gap-1 pb-2" style={{gridTemplateColumns:"repeat(7,minmax(0,1fr))"}}>
-                      {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(myWeek,d); const isToday=(myWeek===0&&d===TODAY); const on=myCalDay===d;
-                        const n=evsFor(myWeek,d).length; return (
-                        <button key={d} onClick={()=>setMyCalDay(d)} className="rounded-xl py-1.5 text-center" style={{minWidth:0,
-                          background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${isToday&&!on?T.accent:on?T.ink:T.line}`}}>
-                          <div className="text-[10px] font-bold leading-none" style={{opacity:.7}}>{DAYS[d]}</div>
-                          <div style={{...disp,fontWeight:700,fontSize:15,lineHeight:1.15}}>{dt.getDate()}</div>
-                          <div className="text-[8px] leading-none" style={{color:on?T.amber:n?T.accent:"transparent"}}>●{n>1?n:""}</div>
-                        </button>);})}
-                    </div>
-                    <div className="text-xs mb-1.5" style={{color:T.muted}}>{FULLDAYS[myCalDay]} {fmtDM(dateFor(myWeek,myCalDay))} · {evsFor(myWeek,myCalDay).length} booking{evsFor(myWeek,myCalDay).length!==1?"s":""} · tap a PT block to modify</div>
-                    {/* see Schedule.jsx: the last hour label overflowed and was clipped */}
-                    <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card, paddingBottom:6}}>
-                      <TimeGutter top={false}/>
-                      <DayGrid w={myWeek} d={myCalDay} wide/>
-                    </div>
-                  </>) : (<>
-                    <div className="text-xs mb-1.5" style={{color:T.muted}}>Your week · classes, PT and camp days · tap a PT block to modify</div>
-                    <div className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
-                      <div className="flex">
-                        <TimeGutter top/>
-                        {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(myWeek,d); const isToday=(myWeek===0&&d===TODAY); return (
-                          <div key={d} className="flex flex-col" style={{flex:"1 1 0", minWidth:0}}>
-                            <div className="text-center" style={{height:HEADH, borderLeft:`1px solid ${T.line}`, background:isToday?"#FBF3EC":"transparent"}}>
-                              <div className="text-[9px] font-bold leading-none pt-1" style={{color:isToday?T.accent:T.muted}}>{DAYS[d]}</div>
-                              <div style={{...disp,fontWeight:700,fontSize:12,lineHeight:1.1,color:isToday?T.accent:T.ink}}>{dt.getDate()}/{dt.getMonth()+1}</div>
-                            </div>
-                            <DayGrid w={myWeek} d={d} compact/>
-                          </div>);})}
-                      </div>
-                    </div>
-                  </>)}
+                  {/* Design A, same shared component as the staff Schedule. */}
+                  <WeekGrid
+                    weekOff={myWeek}
+                    events={evsWeek(myWeek)}
+                    onEventClick={(e)=>evClick(e._src)}
+                    emptyNote="Nothing booked this week — browse Classes, PT or Camps above."
+                  />
                   <div className="text-[10px] mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5" style={{color:T.muted}}>
                     <span style={{color:T.navy}}>■ PT</span><span style={{color:T.plum}}>■ Camp</span><span>■ Class (type colour)</span>
                   </div>

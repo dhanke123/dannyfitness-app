@@ -23,6 +23,7 @@ import AdminSheets from "./overlays/AdminSheets.jsx";
 import LogSheets from "./overlays/LogSheets.jsx";
 import { NotificationBell, NotificationPanel } from "./components/Notifications.jsx";
 import LegalSheets from "./components/LegalSheets.jsx";
+import BookingDetailSheet from "./components/BookingDetailSheet.jsx";
 
 function Shell() {
   const { user, logout, tab, setTab, isClient, isAdmin, navItems, pendingCounts, toast } = useApp();
@@ -65,7 +66,7 @@ function Shell() {
         </nav>
 
         {/* ---- modal sheets ---- */}
-        <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/><NotificationPanel/><LegalSheets/>
+        <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/><NotificationPanel/><LegalSheets/><BookingDetailSheet/>
 
         {toast && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl text-sm font-semibold text-center"
           style={{background:T.ink,color:T.paper,maxWidth:"90%"}}>{toast}</div>}
