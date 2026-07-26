@@ -32,7 +32,23 @@ export const CONTACTS = [
     path:"M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z M3.5 6.5 12 12l8.5-5.5" },
 ];
 
-export const ConnectRow = ({ size }) => (
+/* Same 44px footprint as Social, but a button — it opens the enquiry form rather
+   than leaving the app. Sits alongside the social icons because to a prospective
+   client it's the same thing: a way to reach ExerciseOnly. */
+export const EnquiryIcon = ({ onClick }) => (
+  <button onClick={onClick} title="Send an enquiry" aria-label="Send an enquiry"
+    style={{width:44, height:44, borderRadius:14, background:T.ink, display:"grid",
+            placeItems:"center", flex:"none", border:"none", cursor:"pointer"}}>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.8-.9L3 21l2-4.9A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z"/>
+      <path d="M9 10.5h6M9 13.5h4"/>
+    </svg>
+  </button>);
+
+/* `onEnquire` is optional so the row still renders where there's no form to open. */
+export const ConnectRow = ({ size, onEnquire }) => (
   <div className="flex gap-2.5 justify-center">
     {CONTACTS.map(c=><Social key={c.label} {...c}/>)}
+    {onEnquire && <EnquiryIcon onClick={onEnquire}/>}
   </div>);

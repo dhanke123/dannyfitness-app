@@ -1,4 +1,5 @@
 import { useApp } from "../state/AppState.jsx";
+import EnquirySheet from "../components/EnquirySheet.jsx";
 import { nid } from "../lib/util.js";
 import { T, disp } from "../theme.js";
 import { Btn, Select } from "../ui/kit.jsx";
@@ -99,6 +100,8 @@ export default function ChatAndLeads() {
             </div>
           </div>)}
 
+        {/* also reachable once signed in, from Account → Connect */}
+        <EnquirySheet/>
   </>);
 }
 

@@ -96,11 +96,22 @@ export default function AdminManage() {
               </div>
               {leads.map(l=>{ const wa = (l.phone||"").replace(/\D/g,""); return (
                 <Card key={l.id} className="!p-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-2">
                     <div className="font-semibold text-sm">{l.name} {l.phone && <span className="text-xs font-normal" style={{color:T.muted}}>· +65 {l.phone}</span>}</div>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{background:T.line}}>{l.source}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                      style={{background:l.source==="Enquiry form"?T.ink:T.line, color:l.source==="Enquiry form"?T.paper:T.ink}}>{l.source}</span>
                   </div>
-                  <div className="text-xs mt-0.5" style={{color:T.muted}}>{l.note}</div>
+                  {/* enquiry-form leads carry more than a note — show it all, or the
+                      admin has to guess what they asked and where they want to train */}
+                  {(l.email || l.location || l.at) && (
+                    <div className="text-xs mt-0.5" style={{color:T.muted}}>
+                      {l.email && <span>{l.email}</span>}
+                      {l.email && (l.location || l.at) && <span> · </span>}
+                      {l.location && <span>prefers {l.location}</span>}
+                      {l.location && l.at && <span> · </span>}
+                      {l.at && <span>{l.at}</span>}
+                    </div>)}
+                  {l.note && <div className="text-xs mt-1 rounded-lg p-2" style={{background:"#FBF3EC", color:T.ink}}>{l.note}</div>}
                   {/* one-tap contact-back */}
                   <div className="flex gap-1.5 mt-2">
                     <button disabled={!wa} onClick={()=>{ if(l.status==="new") setLeads(ls=>ls.map(x=>x.id!==l.id?x:{...x,status:"contacted"})); ping(wa?`Opening WhatsApp to +65 ${l.phone} (deep-link in production)`:"No number on file"); }}

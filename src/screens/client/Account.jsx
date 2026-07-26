@@ -4,7 +4,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, H } from "../../ui/kit.jsx";
 
 export default function ClientAccount() {
-  const { active, classPass, credits, isClient, ledger, login, marketingOptIn, offers, optInAt, ping, referralCode, referralReward, referralUses, reminderChannel, setChatOpen, setCredits, setMarketingOptIn, setOptInAt, setReferralReward, setReminderChannel, tab } = useApp();
+  const { active, classPass, credits, isClient, ledger, login, marketingOptIn, offers, openEnquiry, optInAt, ping, referralCode, referralReward, referralUses, reminderChannel, setChatOpen, setCredits, setMarketingOptIn, setOptInAt, setReferralReward, setReminderChannel, tab } = useApp();
   return (<>
         {/* ==================== CLIENT: ACCOUNT ==================== */}
         {isClient && tab==="account" && (
@@ -95,7 +95,7 @@ export default function ClientAccount() {
             {/* connect / follow */}
             <Card>
               <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-2.5">CONNECT WITH EXERCISEONLY</div>
-              <ConnectRow/>
+              <ConnectRow onEnquire={openEnquiry}/>
               <div className="text-xs mt-2.5 text-center" style={{color:T.muted}}>@exercise.only · 4exerciseonly@gmail.com</div>
             </Card>
 

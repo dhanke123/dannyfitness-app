@@ -17,13 +17,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useApp } from "../state/AppState.jsx";
 import { ConnectRow, LogoMark } from "../brand.jsx";
+import EnquirySheet from "../components/EnquirySheet.jsx";
 import { DEMO_LOGINS, isConfigured } from "../lib/supabase.js";
 import { FONTS, T, body, disp } from "../theme.js";
 
 const RESEND_SECONDS = 45;
 
 export default function Login() {
-  const { locations, login, sendOtp, verifyOtp } = useApp();
+  const { locations, login, openEnquiry, sendOtp, verifyOtp } = useApp();
 
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
@@ -159,13 +160,21 @@ export default function Login() {
           {/* Connect — visible before login so a prospective client can reach out with no account */}
           <div className="mt-5 pt-4" style={{borderTop:`1.5px solid ${T.line}`}}>
             <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-1 text-center">CONNECT WITH EXERCISEONLY</div>
-            <div className="text-xs mb-3 text-center" style={{color:T.muted}}>New here? Message us — no account needed.</div>
-            <ConnectRow/>
+            <div className="text-xs mb-3 text-center" style={{color:T.muted}}>New here? Message us or send an enquiry — no account needed.</div>
+            <ConnectRow onEnquire={openEnquiry}/>
+            <div className="text-[11px] mt-2 text-center" style={{color:T.muted}}>
+              Instagram · Facebook · WhatsApp · Email · <b style={{color:T.ink}}>Enquiry form</b>
+            </div>
           </div>
           <div className="text-center text-xs mt-5" style={{color:T.muted}}>
             {isConfigured ? "Signed-in data is saved to your account." : "Demo build — data resets on refresh."}</div>
         </div>
       </div>
+
+      {/* Rendered here, not with the other overlays: the app shell (and every
+          overlay in it) only mounts once someone is signed in, and the whole
+          point of this form is that you don't have to be. */}
+      <EnquirySheet/>
     </div>
   );
 }
