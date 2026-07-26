@@ -582,11 +582,13 @@ export default function DannyFitnessDemo() {
   const [campSheet, setCampSheet] = useState(null);   // camp checkout {camp, waiver?}
   const [chatOpen, setChatOpen] = useState(false);    // in-app coach chat
   const [chatMsgs, setChatMsgs] = useState([
-    { from:"coach", text:"Hi Sam! Great work in Monday's session 💪 Let me know if you want to add a PT slot this week." },
+    { from:"coach", text:"Hi Sam — ExerciseOnly here. Ask us anything about bookings, credits or schedules and we'll sort it out with your coach." },
   ]);
   const [chatInput, setChatInput] = useState("");
   const [addTrainer, setAddTrainer] = useState(null); // Add/Edit Trainer form (has .editId when editing)
   const [shiftEditor, setShiftEditor] = useState(null); // {trainer}
+  const [referralReward, setReferralReward] = useState(1); // earned class credits, claimable into the class pool
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [moveDay, setMoveDay] = useState(null); // running-late cascade sheet {trainer}
   const [doneSheet, setDoneSheet] = useState(null); // complete-session sheet {session/pt}
   const [schedView, setSchedView] = useState("cal"); // schedule tab: 'cal' google-grid | 'week' list | 'coach'
@@ -606,6 +608,15 @@ export default function DannyFitnessDemo() {
   const [bookWeek, setBookWeek] = useState(0);   // client: which week is being browsed/booked (0 = this week)
   const [calWeek, setCalWeek] = useState(0);     // trainer/admin google-calendar grid: week offset
   const [bookDates, setBookDates] = useState({}); // {bookingKey: "Mon 28 Jul"} — human date per booking (demo)
+  const [bookWeeks, setBookWeeks] = useState({}); // {sessionId: weekOffset} — which week a class booking sits in
+  // client "Booked" tab: list vs calendar, and the calendar's own week/day/span state
+  const [myView, setMyView] = useState("list");   // list | cal
+  const [mySpan, setMySpan] = useState("week");   // day | week
+  const [myWeek, setMyWeek] = useState(0);
+  const [myCalDay, setMyCalDay] = useState(TODAY);
+  const [clientMove, setClientMove] = useState(null); // client-side PT reschedule sheet
+  // policy: cancellation / change window in hours — admin setting (not hard-coded in copy)
+  const [cancelHrs] = useState(24);
   const [loc, setLoc] = useState("all");
   const [ptLoc, setPtLoc] = useState(seedLocations[0].id); // PT needs a real place (coach is available anywhere); supports "other"
   const [otherPlace, setOtherPlace] = useState("");
@@ -633,14 +644,14 @@ export default function DannyFitnessDemo() {
   // ---- Android/browser back handling: back closes an open sheet, else returns to the home
   // tab, and never drops the user out of the app. ----
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
-    setTimeOffSheet(null); setMoveSheet(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
+    setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null); setBookFor(null);
     setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -695,6 +706,7 @@ export default function DannyFitnessDemo() {
         setLedger(l=>[{id:nid(), who:"Sam Lee", what:`Drop-in · ${CT[s.type].name}${coupon?` (${coupon.toUpperCase()})`:""}`, amt:Math.round(price), method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]); }
       setMyClassBookings(b=>[...b, s.id]);
       if (s.date) setBookDates(bd=>({...bd, [s.id]:s.date}));
+      setBookWeeks(bw=>({...bw, [s.id]:bookWeek}));
       ping(payMode==="pass"?`Booked ${s.date||""} — covered by your ${classPass?.label}`:payMode==="credit"?`Booked ${s.date||""} — ${credits.classes-1} class credits left`:`Paid & booked${s.date?" for "+s.date:""}. WhatsApp confirmation sent.`);
     } else if (s.kind==="pt") {
       const locLabel = s.loc==="other" ? (otherPlace||"Other spot") : null;
@@ -710,6 +722,22 @@ export default function DannyFitnessDemo() {
     setSheet(null); setCoupon(""); setCouponMsg(null); setOtherPlace("");
   };
   const cancelClass = (sid) => { setMyClassBookings(b=>b.filter(x=>x!==sid)); setCredits(c=>({...c, classes:c.classes+1})); ping("Cancelled — credit returned"); };
+  // hours between now and a (weekOffset, weekday, "HH:MM") booking — drives the change/cancel window
+  const hoursUntil = (weekOff, d, time) => {
+    const dt = dateFor(weekOff??0, d); const [h,m] = String(time||"00:00").split(":").map(Number);
+    dt.setHours(h||0, m||0, 0, 0);
+    return (dt.getTime() - Date.now()) / 3600000;
+  };
+  // client-side PT reschedule — only inside the policy window and onto a slot the coach actually has free
+  const commitClientMove = () => {
+    const mv = clientMove; if (!mv) return;
+    const nw = mv.newWeek ?? mv.weekOff ?? 0, nd = mv.newDay ?? mv.day, nt = mv.newTime || mv.time;
+    const nDate = fmtFull(dateFor(nw, nd));
+    setMyPT(p=>p.map(b=>b.id!==mv.id ? b : {...b, day:nd, time:nt, weekOff:nw, date:nDate}));
+    setPtBookings(pb=>pb.map(b=>b.id!==mv.id ? b : {...b, day:nd, time:nt, weekOff:nw, date:nDate}));
+    setClientMove(null);
+    ping(`Moved to ${nDate} · ${nt} — Coach ${tName(mv.trainer)} notified`);
+  };
   const cancelPT = (id) => {
     const b = myPT.find(x=>x.id===id);
     setMyPT(p=>p.filter(x=>x.id!==id));
@@ -1035,14 +1063,17 @@ export default function DannyFitnessDemo() {
                 <button onClick={()=>setBookWeek(w=>Math.min(8,w+1))} disabled={bookWeek>=8}
                   className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:bookWeek>=8?T.line:T.ink}}>›</button>
               </div>
-              <div className="px-5 flex gap-2 overflow-x-auto pb-2">
-                {DAYS.map((d,i)=>{ const past=bookWeek===0 && i<TODAY; return (
+              {/* all 7 days fit the width — no horizontal scrolling */}
+              <div className="px-5 pb-2 grid gap-1" style={{gridTemplateColumns:"repeat(7,minmax(0,1fr))"}}>
+                {DAYS.map((d,i)=>{ const past=bookWeek===0 && i<TODAY; const dt=dateFor(bookWeek,i);
+                  const isToday=bookWeek===0 && i===TODAY; const on=day===i&&!past; return (
                   <button key={d} onClick={()=>!past&&setDay(i)} disabled={past}
-                    className="px-3 py-1.5 rounded-full text-center" style={{flex:"none",
-                      border:`1.5px solid ${day===i&&!past?T.ink:T.line}`, background:day===i&&!past?T.ink:T.card,
-                      color:past?T.line:day===i?T.card:T.ink, opacity:past?.5:1}}>
-                    <div className="text-xs font-bold leading-none">{d}</div>
-                    <div className="text-[10px] leading-none mt-0.5" style={{opacity:.8}}>{fmtDM(dateFor(bookWeek,i))}</div>
+                    className="rounded-xl py-1.5 text-center" style={{minWidth:0,
+                      border:`1.5px solid ${on?T.ink:isToday?T.accent:T.line}`, background:on?T.ink:T.card,
+                      color:past?T.line:on?T.paper:T.ink, opacity:past?.5:1}}>
+                    <div className="text-[10px] font-bold leading-none" style={{opacity:.75}}>{d}</div>
+                    <div style={{...disp,fontWeight:700,fontSize:15,lineHeight:1.15}}>{dt.getDate()}</div>
+                    <div className="text-[8px] leading-none" style={{opacity:.6}}>{dt.toLocaleDateString('en-GB',{month:'short'})}</div>
                   </button>);})}
               </div>
               <div className="px-5 pb-3 flex items-center gap-2">
@@ -1156,11 +1187,81 @@ export default function DannyFitnessDemo() {
                 </Card>);})}
             </div>}
 
-            {/* MY BOOKINGS — view & cancel (moved here from Home) */}
+            {/* MY BOOKINGS — list + calendar view, cancel, and PT reschedule */}
             {seg==="mine" && (() => {
               const none = myClassBookings.length===0 && myPT.length===0 && myCamps.length===0 && myWaitlist.length===0;
+              // camp day-blocks flattened onto (week, weekday) so they show in the calendar too
+              const campBlocks = [];
+              myCamps.forEach(cid=>{ const c=camps.find(x=>x.id===cid); if(!c) return;
+                const absStart = TODAY + (c.startInDays??0);
+                (c.days||[]).forEach((cd,i)=>{ const abs = absStart + i;
+                  (cd.sessions||[]).forEach(s=>{ campBlocks.push({
+                    w:Math.floor(abs/7), d:((abs%7)+7)%7, start:toMin(s.start), dur:Math.round((s.hours||1)*60),
+                    color:T.plum, time:s.start, code:"CAMP", title:c.name,
+                    sub:`${s.activity} · ${locName(c.loc)}`, kind:"camp" }); }); }); });
+              // every booking the client owns, for one (week, weekday), lane-packed like the coach grid
+              const evsFor = (w,d) => {
+                const evs = [];
+                myClassBookings.forEach(sid=>{ const s=sessions.find(x=>x.id===sid); if(!s) return;
+                  if ((bookWeeks[sid]??0)!==w || s.day!==d) return;
+                  evs.push({start:toMin(s.time), dur:CT[s.type].dur, color:CT[s.type].color, time:s.time,
+                    code:s.type, title:CT[s.type].name, locId:s.loc,
+                    sub:`${locName(s.loc)} · Coach ${tName(s.trainer)}`, kind:"class", id:sid}); });
+                myPT.forEach(b=>{ if((b.weekOff??0)!==w || b.day!==d) return;
+                  evs.push({start:toMin(b.time), dur:PT_DUR, color:T.navy, time:b.time, code:"PT",
+                    title:`PT · ${tName(b.trainer)}`, locId:b.loc,
+                    sub:`${b.loc==="other"?(b.otherLabel||"Other spot"):locName(b.loc)} · Coach ${tName(b.trainer)}`,
+                    kind:"pt", pt:b}); });
+                campBlocks.filter(cb=>cb.w===w && cb.d===d).forEach(cb=>evs.push(cb));
+                evs.sort((a,b)=>a.start-b.start);
+                const laneEnds=[]; evs.forEach(e=>{ let i=0; for(;i<laneEnds.length;i++){ if(laneEnds[i]<=e.start) break; } e.lane=i; laneEnds[i]=e.start+e.dur; });
+                evs._lanes = Math.max(1, laneEnds.length);
+                return evs;
+              };
+              const HSTART=6, HEND=22, PXH=48, GUT=38, HEADH=32;
+              const gridH=(HEND-HSTART)*PXH;
+              const evClick = (e) => {
+                if (e.kind==="pt") { const hrs=hoursUntil(e.pt.weekOff, e.pt.day, e.pt.time);
+                  setClientMove({...e.pt, newWeek:e.pt.weekOff??0, newDay:e.pt.day, newTime:e.pt.time, locked:hrs<cancelHrs}); }
+                else ping(`${e.title} · ${e.time} · ${e.sub}`);
+              };
+              const DayGrid = ({w, d, wide, compact}) => { const evs=evsFor(w,d); const lanes=evs._lanes; return (
+                <div style={{position:"relative", height:gridH, flex: wide?"1 1 auto":"1 1 0", minWidth:0, borderLeft: wide?"none":`1px solid ${T.line}`}}>
+                  {Array.from({length:HEND-HSTART}).map((_,i)=>(
+                    <div key={i} className="absolute left-0 right-0" style={{top:i*PXH, height:PXH, borderTop:`1px solid ${T.line}`}}/>))}
+                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH; const h=Math.max(20, e.dur/60*PXH-2);
+                    const left=`${(e.lane/lanes)*100}%`; const wd=`${100/lanes}%`;
+                    return compact ? (
+                    <div key={i} onClick={()=>evClick(e)} className="absolute rounded overflow-hidden"
+                      style={{top:top+1, height:h, left, width:wd, padding:"1px 2px", background:e.color, color:"#fff",
+                        fontSize:8.5, lineHeight:1.08, boxShadow:"0 1px 2px rgba(0,0,0,.15)", cursor:"pointer"}}>
+                      <div style={{fontWeight:800}}>{e.time}</div>
+                      <div style={{fontWeight:700}}>{e.code}</div>
+                      {h>26 && <div style={{opacity:.85}}>{locAbbr(e.locId)||""}</div>}
+                    </div>) : (
+                    <div key={i} onClick={()=>evClick(e)} className="absolute rounded-md px-1 py-0.5 overflow-hidden"
+                      style={{top:top+1, height:h, left, width:wd, background:e.color, color:"#fff",
+                        fontSize:10, lineHeight:1.1, boxShadow:"0 1px 3px rgba(0,0,0,.15)", cursor:"pointer"}}>
+                      <div style={{fontWeight:700}}>{e.time} {e.title}</div>
+                      {h>32 && <div style={{opacity:.9}}>{e.sub}</div>}
+                    </div>);})}
+                </div>);};
+              const TimeGutter = ({top}) => (
+                <div style={{width:GUT, flex:"none"}}>
+                  {top && <div style={{height:HEADH}}/>}
+                  <div style={{position:"relative", height:gridH}}>
+                    {Array.from({length:HEND-HSTART}).map((_,i)=>(
+                      <div key={i} className="absolute text-[10px]" style={{top:i*PXH-5, left:2, color:T.muted}}>{HSTART+i}:00</div>))}
+                  </div>
+                </div>);
               return (
-              <div className="px-5 space-y-3 pt-1">
+              <div className="px-5 pt-1">
+                <div className="flex gap-2 mb-3">
+                  {[["list","List"],["cal","Calendar"]].map(([k,l])=>(
+                    <Chip key={k} active={myView===k} onClick={()=>setMyView(k)}>{l}</Chip>))}
+                </div>
+
+                {myView==="list" && <div className="space-y-3">
                 {none && <div className="text-center py-12 text-sm" style={{color:T.muted}}>No bookings yet. Book a class, PT or camp from the tabs above.</div>}
                 {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
                   <Card key={sid} className="flex items-center gap-3">
@@ -1169,13 +1270,21 @@ export default function DannyFitnessDemo() {
                       <div className="text-xs" style={{color:T.muted}}>{locName(s.loc)} · Coach {tName(s.trainer)}</div></div>
                     <Btn kind="ghost" small onClick={()=>cancelClass(sid)}>Cancel</Btn>
                   </Card>);})}
-                {myPT.map(b=>(
-                  <Card key={b.id} className="flex items-center gap-3">
-                    <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{b.time}</div>
-                    <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {b.date||DAYS[b.day]}</div>
-                      <div className="text-xs" style={{color:T.muted}}>{b.loc==="other" ? b.otherLabel : locName(b.loc)} · Coach {tName(b.trainer)}</div></div>
-                    <Btn kind="ghost" small onClick={()=>cancelPT(b.id)}>Cancel</Btn>
-                  </Card>))}
+                {myPT.map(b=>{ const hrs=hoursUntil(b.weekOff, b.day, b.time); const canChange=hrs>cancelHrs; return (
+                  <Card key={b.id}>
+                    <div className="flex items-center gap-3">
+                      <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{b.time}</div>
+                      <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {b.date||DAYS[b.day]}</div>
+                        <div className="text-xs" style={{color:T.muted}}>{b.loc==="other" ? b.otherLabel : locName(b.loc)} · Coach {tName(b.trainer)}{isHead(b.trainer)?" ★":""}</div></div>
+                    </div>
+                    <div className="flex gap-2 mt-2.5">
+                      <Btn small kind="ghost" full disabled={!canChange}
+                        onClick={()=>setClientMove({...b, newWeek:b.weekOff??0, newDay:b.day, newTime:b.time, locked:false})}>Modify</Btn>
+                      <Btn small kind="ghost" full onClick={()=>cancelPT(b.id)}>Cancel</Btn>
+                    </div>
+                    {!canChange && <div className="text-[11px] mt-1.5 text-center" style={{color:T.accent}}>
+                      Inside the {cancelHrs}h window — message ExerciseOnly to change this session.</div>}
+                  </Card>);})}
                 {myCamps.map(cid=>{ const c=camps.find(x=>x.id===cid); const canCancel=(c.startInDays??99)>CAMP_CANCEL_DAYS; return (
                   <Card key={cid} className="flex items-center gap-3" style={{background:"#FBEDEF"}}>
                     <div className="flex-1"><div className="font-semibold text-sm">{c.name}</div>
@@ -1188,7 +1297,57 @@ export default function DannyFitnessDemo() {
                     <div className="flex-1"><div className="font-semibold text-sm">Waitlisted · {CT[s.type].name} · {DAYS[s.day]} {s.time}</div>
                       <div className="text-xs" style={{color:T.accent}}>We'll WhatsApp you if a spot opens</div></div>
                   </Card>);})}
-                {!none && <div className="text-xs text-center pt-1" style={{color:T.muted}}>Free cancellation until 24h before. Inside 24h, message your coach.</div>}
+                {!none && <div className="text-xs text-center pt-1" style={{color:T.muted}}>
+                  Free changes & cancellation until {cancelHrs}h before. Inside {cancelHrs}h, message ExerciseOnly.</div>}
+                </div>}
+
+                {myView==="cal" && <div>
+                  <div className="flex gap-2 mb-2">
+                    {[["day","Day"],["week","Full week"]].map(([k,l])=>(
+                      <Chip key={k} active={mySpan===k} onClick={()=>setMySpan(k)}>{l}</Chip>))}
+                  </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <button onClick={()=>setMyWeek(w=>w-1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>‹</button>
+                    <div className="text-sm font-bold" style={disp}>{weekLabel(myWeek)}{myWeek===0?" · this week":""}</div>
+                    <button onClick={()=>setMyWeek(w=>w+1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
+                  </div>
+                  {mySpan==="day" ? (<>
+                    <div className="grid gap-1 pb-2" style={{gridTemplateColumns:"repeat(7,minmax(0,1fr))"}}>
+                      {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(myWeek,d); const isToday=(myWeek===0&&d===TODAY); const on=myCalDay===d;
+                        const n=evsFor(myWeek,d).length; return (
+                        <button key={d} onClick={()=>setMyCalDay(d)} className="rounded-xl py-1.5 text-center" style={{minWidth:0,
+                          background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${isToday&&!on?T.accent:on?T.ink:T.line}`}}>
+                          <div className="text-[10px] font-bold leading-none" style={{opacity:.7}}>{DAYS[d]}</div>
+                          <div style={{...disp,fontWeight:700,fontSize:15,lineHeight:1.15}}>{dt.getDate()}</div>
+                          <div className="text-[8px] leading-none" style={{color:on?T.amber:n?T.accent:"transparent"}}>●{n>1?n:""}</div>
+                        </button>);})}
+                    </div>
+                    <div className="text-xs mb-1.5" style={{color:T.muted}}>{FULLDAYS[myCalDay]} {fmtDM(dateFor(myWeek,myCalDay))} · {evsFor(myWeek,myCalDay).length} booking{evsFor(myWeek,myCalDay).length!==1?"s":""} · tap a PT block to modify</div>
+                    <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
+                      <TimeGutter top={false}/>
+                      <DayGrid w={myWeek} d={myCalDay} wide/>
+                    </div>
+                  </>) : (<>
+                    <div className="text-xs mb-1.5" style={{color:T.muted}}>Your week · classes, PT and camp days · tap a PT block to modify</div>
+                    <div className="rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card}}>
+                      <div className="flex">
+                        <TimeGutter top/>
+                        {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(myWeek,d); const isToday=(myWeek===0&&d===TODAY); return (
+                          <div key={d} className="flex flex-col" style={{flex:"1 1 0", minWidth:0}}>
+                            <div className="text-center" style={{height:HEADH, borderLeft:`1px solid ${T.line}`, background:isToday?"#FBF3EC":"transparent"}}>
+                              <div className="text-[9px] font-bold leading-none pt-1" style={{color:isToday?T.accent:T.muted}}>{DAYS[d]}</div>
+                              <div style={{...disp,fontWeight:700,fontSize:12,lineHeight:1.1,color:isToday?T.accent:T.ink}}>{dt.getDate()}/{dt.getMonth()+1}</div>
+                            </div>
+                            <DayGrid w={myWeek} d={d} compact/>
+                          </div>);})}
+                      </div>
+                    </div>
+                  </>)}
+                  <div className="text-[10px] mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5" style={{color:T.muted}}>
+                    <span style={{color:T.navy}}>■ PT</span><span style={{color:T.plum}}>■ Camp</span><span>■ Class (type colour)</span>
+                  </div>
+                  {none && <div className="text-center py-6 text-sm" style={{color:T.muted}}>Nothing booked in this week yet.</div>}
+                </div>}
               </div>);})()}
           </main>)}
 
@@ -1474,6 +1633,21 @@ export default function DannyFitnessDemo() {
                 <Btn small kind="ghost" onClick={()=>ping("Referral link copied — share on WhatsApp or Instagram")}>Share</Btn>
               </div>
               <div className="text-xs mt-1.5" style={{color:"#B9B5A9"}}>{referralUses} friend joined · you both get 1 free class credit when they book their first session.</div>
+              {/* earned referral rewards can be moved into the class-credit pool */}
+              <div className="mt-3 pt-3" style={{borderTop:"1px solid rgba(255,255,255,.14)"}}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">Referral credit earned</div>
+                    <div className="text-xs" style={{color:"#B9B5A9"}}>
+                      {referralReward>0 ? `${referralReward} free class credit${referralReward>1?"s":""} waiting to be added` : "Nothing to claim right now"}</div>
+                  </div>
+                  <span style={{...disp,fontWeight:800,fontSize:26,color:referralReward>0?T.amber:"#6B6459"}}>{referralReward}</span>
+                </div>
+                <Btn small full disabled={referralReward<=0}
+                  onClick={()=>{ const n=referralReward; setCredits(c=>({...c, classes:c.classes+n})); setReferralReward(0);
+                    ping(`${n} referral credit${n>1?"s":""} added — you now have ${credits.classes+n} class credits`); }}>
+                  {referralReward>0 ? `Add ${referralReward} to my class credits` : "No credit to add"}</Btn>
+              </div>
             </Card>
             <Card><div className="text-xs font-bold mb-2" style={{color:T.muted}}>MY PACKS</div>
               <div className="text-sm">Class pack — {credits.classes} credits left · expires 20 Sep</div>
@@ -1485,11 +1659,25 @@ export default function DannyFitnessDemo() {
                 <div key={l.id} className="flex justify-between text-sm py-1"><span>{l.what}</span><span className="font-bold">${l.amt}</span></div>))}
               {ledger.filter(l=>l.who==="Sam Lee").length===0 && <div className="text-sm" style={{color:T.muted}}>No payments yet in this demo.</div>}
             </Card>
-            <Card className="flex justify-between items-center"><div className="text-sm">Marketing messages</div>
-              <span className="text-xs font-bold" style={{color:T.muted}}>OPT-IN OFF ▢</span></Card>
+            {/* working opt-in switch, not a dead label */}
+            <Card className="flex justify-between items-center gap-3">
+              <div className="flex-1">
+                <div className="text-sm font-semibold">Marketing messages</div>
+                <div className="text-xs" style={{color:T.muted}}>
+                  {marketingOptIn ? "You'll get offers & new-class alerts on WhatsApp and email." : "You'll only get booking confirmations and reminders."}</div>
+              </div>
+              <button onClick={()=>{ setMarketingOptIn(v=>{ ping(v?"Marketing messages turned off":"Marketing messages turned on — you'll hear about new offers first"); return !v; }); }}
+                role="switch" aria-checked={marketingOptIn} aria-label="Marketing messages"
+                style={{flex:"none", width:52, height:30, borderRadius:15, padding:3, cursor:"pointer",
+                  background:marketingOptIn?T.moss:"#DED6C8", border:"none", transition:"background .15s"}}>
+                <div style={{width:24, height:24, borderRadius:12, background:"#fff",
+                  transform:`translateX(${marketingOptIn?22:0}px)`, transition:"transform .15s",
+                  boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </button>
+            </Card>
             <Card style={{background:"#EFF3EE"}} className="flex items-center justify-between">
-              <div><div className="font-semibold text-sm">Message your coach</div>
-                <div className="text-xs" style={{color:T.muted}}>In-app chat · or WhatsApp +65 8100 6608</div></div>
+              <div><div className="font-semibold text-sm">Message ExerciseOnly</div>
+                <div className="text-xs" style={{color:T.muted}}>Goes to the ExerciseOnly team · or WhatsApp +65 8100 6608</div></div>
               <Btn small kind="dark" onClick={()=>setChatOpen(true)}>Chat</Btn>
             </Card>
 
@@ -2188,7 +2376,7 @@ export default function DannyFitnessDemo() {
                   if (sheet.kind==="class" && classPass) opts.push(["pass", `${classPass.label} (unlimited)`, false]);
                   if (sheet.kind==="class") opts.push(["credit", `Class credit (${credits.classes} left)`, credits.classes<=0]);
                   if (sheet.kind==="pt") opts.push(["credit", `${isHead(sheet.trainer)?"Head-coach":"Coach"} PT credit (${credits[pool]} left)`, credits[pool]<=0]);
-                  opts.push(["paynow","PayNow QR",false],["card","Card",false]);
+                  opts.push(["paynow","PayNow QR",false],["card","Card · coming soon",true]);
                   return opts.map(([k,label,dis])=>(
                     <button key={k} disabled={dis} onClick={()=>setPayMode(k)}
                       className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold"
@@ -2205,7 +2393,7 @@ export default function DannyFitnessDemo() {
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
               {payMode==="paynow" && <QR/>}
               <Btn full disabled={sheet.kind==="pt" && sheet.loc==="other" && !otherPlace} onClick={confirmBook}>{payMode==="credit"?"Confirm · 1 credit":payMode==="pass"?"Confirm · covered by pass":"Pay & book"}</Btn>
-              <div className="text-center text-xs mt-3" style={{color:T.muted}}>Free cancellation until 24h before.</div>
+              <div className="text-center text-xs mt-3" style={{color:T.muted}}>Free cancellation until {cancelHrs}h before.</div>
             </div>
           </div>)}
 
@@ -2219,10 +2407,11 @@ export default function DannyFitnessDemo() {
               </div>
               <div className="text-sm mb-3" style={{color:T.muted}}>{shopSheet.product.name} · ${shopSheet.product.price}</div>
               <div className="space-y-2 mb-3">
-                {[["paynow","PayNow QR"],["card","Card"]].map(([k,label])=>(
-                  <button key={k} onClick={()=>setPayMode(k)}
+                {[["paynow","PayNow QR",false],["card","Card · coming soon",true]].map(([k,label,dis])=>(
+                  <button key={k} disabled={dis} onClick={()=>setPayMode(k)}
                     className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold"
-                    style={{background:payMode===k?T.ink:T.card, color:payMode===k?T.paper:T.ink, border:`1.5px solid ${payMode===k?T.ink:T.line}`}}>{label}</button>))}
+                    style={{background:payMode===k?T.ink:T.card, color:dis?T.muted:payMode===k?T.paper:T.ink,
+                      border:`1.5px solid ${payMode===k?T.ink:T.line}`, opacity:dis?.5:1}}>{label}</button>))}
               </div>
               <div className="flex gap-2 mb-3">
                 <input value={coupon} onChange={e=>{setCoupon(e.target.value); setCouponMsg(null);}} placeholder="Coupon code"
@@ -2268,10 +2457,11 @@ export default function DannyFitnessDemo() {
 
               <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>PAYMENT</div>
               <div className="space-y-2 mb-3">
-                {[["paynow","PayNow QR"],["card","Card"]].map(([k,label])=>(
-                  <button key={k} onClick={()=>setCampSheet(s=>({...s,pay:k}))}
+                {[["paynow","PayNow QR",false],["card","Card · coming soon",true]].map(([k,label,dis])=>(
+                  <button key={k} disabled={dis} onClick={()=>setCampSheet(s=>({...s,pay:k}))}
                     className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold"
-                    style={{background:campSheet.pay===k?T.ink:T.card, color:campSheet.pay===k?T.paper:T.ink, border:`1.5px solid ${campSheet.pay===k?T.ink:T.line}`}}>{label}</button>))}
+                    style={{background:campSheet.pay===k?T.ink:T.card, color:dis?T.muted:campSheet.pay===k?T.paper:T.ink,
+                      border:`1.5px solid ${campSheet.pay===k?T.ink:T.line}`, opacity:dis?.5:1}}>{label}</button>))}
               </div>
               <div className="flex gap-2 mb-3">
                 <input value={coupon} onChange={e=>{setCoupon(e.target.value); setCouponMsg(null);}} placeholder="Coupon code"
@@ -2291,8 +2481,8 @@ export default function DannyFitnessDemo() {
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setChatOpen(false)}>
             <div className="w-full max-w-md rounded-t-3xl flex flex-col" style={{background:T.paper, height:"70vh"}} onClick={e=>e.stopPropagation()}>
               <div className="px-5 pt-4 pb-2 flex items-center justify-between" style={{borderBottom:`1.5px solid ${T.line}`}}>
-                <div><div style={{...disp,fontWeight:700,fontSize:18}}>Chat · Coach Danny</div>
-                  <div className="text-xs" style={{color:T.muted}}>In-app messaging (demo) · also on WhatsApp +65 8100 6608</div></div>
+                <div><div style={{...disp,fontWeight:700,fontSize:18}}>Chat · ExerciseOnly</div>
+                  <div className="text-xs" style={{color:T.muted}}>Goes to the ExerciseOnly team (admin) · also on WhatsApp +65 8100 6608</div></div>
                 <button onClick={()=>setChatOpen(false)} className="text-xs font-bold px-2 py-1 rounded" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>Close</button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
@@ -2301,12 +2491,12 @@ export default function DannyFitnessDemo() {
                     style={{background:m.from==="me"?T.ink:"#EFEBE3", color:m.from==="me"?T.paper:T.ink}}>{m.text}</div>))}
               </div>
               <div className="p-3 flex gap-2" style={{borderTop:`1.5px solid ${T.line}`}}>
-                <input value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="Message your coach…"
+                <input value={chatInput} onChange={e=>setChatInput(e.target.value)} placeholder="Message ExerciseOnly…"
                   className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                 <Btn small onClick={()=>{ if(!chatInput.trim())return;
                   const q=chatInput.trim();
                   setChatMsgs(m=>[...m,{from:"me",text:q}]); setChatInput("");
-                  setTimeout(()=>setChatMsgs(m=>[...m,{from:"coach",text:"Got it — I'll get back to you shortly. (A future AI assistant could answer schedule/credit questions here instantly.)"}]),700);
+                  setTimeout(()=>setChatMsgs(m=>[...m,{from:"coach",text:"Thanks — the ExerciseOnly team has your message and will reply shortly. (A future AI assistant could answer schedule/credit questions here instantly.)"}]),700);
                 }}>Send</Btn>
               </div>
             </div>
@@ -2439,6 +2629,84 @@ export default function DannyFitnessDemo() {
                   ping(conflict ? `Moved to ${DAYS[nd]} ${nt} despite a conflict — resolve the overlap (audited)` : `Moved to ${DAYS[nd]} ${nt} — booked clients notified (audited)`);
                   setMoveSheet(null);}}>{conflict?"Move anyway":"Confirm move"}</Btn>
                 <button onClick={()=>setMoveSheet(m=>({...m,confirmingCancel:true}))} className="w-full text-sm font-bold mt-2" style={{color:T.accent}}>Cancel this {isPt?"session":"class"}</button>
+              </>)}
+            </div>
+          </div>);})()}
+
+        {/* CLIENT: reschedule my PT session — only inside the policy window, only onto free coach slots */}
+        {clientMove && (() => {
+          const mv = clientMove;
+          const nw = mv.newWeek ?? mv.weekOff ?? 0, nd = mv.newDay ?? mv.day, nt = mv.newTime || mv.time;
+          const isOther = mv.loc==="other";
+          const working = !!workWindow(shifts, mv.trainer, nd);
+          const slots = isOther ? [] : ptSlotsFor(mv.trainer, nd, mv.loc, travel, ptCtx, locName)
+            .filter(sl => !(nw===(mv.weekOff??0) && sl.time===mv.time))       // current slot isn't a "move"
+            .filter(sl => !myPT.some(b=>b.id!==mv.id && (b.weekOff??0)===nw && b.day===nd && b.time===sl.time));
+          const pastDay = nw===0 && nd<TODAY;
+          const changed = !(nw===(mv.weekOff??0) && nd===mv.day && nt===mv.time);
+          const valid = changed && !pastDay && hoursUntil(nw,nd,nt) > cancelHrs;
+          return (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setClientMove(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[88vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-start justify-between">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Modify PT session</div>
+                <button onClick={()=>setClientMove(null)} className="text-sm font-bold px-2 py-1 rounded-lg -mt-1" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-sm mb-3" style={{color:T.muted}}>
+                Currently <span style={{color:T.ink,fontWeight:600}}>{mv.date||DAYS[mv.day]} · {mv.time}</span> · {isOther?(mv.otherLabel||"Other spot"):locName(mv.loc)} · Coach {tName(mv.trainer)}{isHead(mv.trainer)?" ★":""}
+              </div>
+
+              {mv.locked ? (<>
+                <Card style={{background:"#FBF3EC"}}>
+                  <div className="text-sm font-semibold" style={{color:T.accent}}>Inside the {cancelHrs}h change window</div>
+                  <div className="text-xs mt-1" style={{color:T.muted}}>This session starts in under {cancelHrs} hours, so it can't be moved in the app. Message ExerciseOnly and we'll sort it out with your coach.</div>
+                </Card>
+                <Btn full kind="dark" onClick={()=>{setClientMove(null); setChatOpen(true);}} >Message ExerciseOnly</Btn>
+              </>) : (<>
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={()=>setClientMove(m=>({...m,newWeek:Math.max(0,(m.newWeek??0)-1)}))}
+                    className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:nw===0?T.line:T.ink}}>‹</button>
+                  <div className="text-sm font-bold" style={disp}>{nw===0?"This week":nw===1?"Next week":weekLabel(nw)}</div>
+                  <button onClick={()=>setClientMove(m=>({...m,newWeek:Math.min(8,(m.newWeek??0)+1)}))}
+                    className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:nw>=8?T.line:T.ink}}>›</button>
+                </div>
+                <div className="grid gap-1 mb-3" style={{gridTemplateColumns:"repeat(7,minmax(0,1fr))"}}>
+                  {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(nw,d); const past=nw===0&&d<TODAY; const on=nd===d; return (
+                    <button key={d} disabled={past} onClick={()=>setClientMove(m=>({...m,newDay:d,newTime:null}))}
+                      className="rounded-xl py-1.5 text-center" style={{minWidth:0, opacity:past?.4:1,
+                        background:on&&!past?T.ink:T.card, color:past?T.line:on?T.paper:T.ink, border:`1.5px solid ${on&&!past?T.ink:T.line}`}}>
+                      <div className="text-[10px] font-bold leading-none" style={{opacity:.75}}>{DAYS[d]}</div>
+                      <div style={{...disp,fontWeight:700,fontSize:15,lineHeight:1.15}}>{dt.getDate()}</div>
+                    </button>);})}
+                </div>
+
+                <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>COACH {tName(mv.trainer).toUpperCase()} · AVAILABLE {fmtFull(dateFor(nw,nd)).toUpperCase()}</div>
+                {isOther ? (
+                  <div className="mb-3">
+                    <input value={nt} onChange={e=>setClientMove(m=>({...m,newTime:e.target.value}))} placeholder="HH:MM"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    <div className="text-xs mt-1.5" style={{color:T.muted}}>Ad-hoc location — your coach confirms the exact time.</div>
+                  </div>
+                ) : !working ? (
+                  <div className="text-sm mb-3 rounded-xl p-3" style={{background:T.card, border:`1.5px solid ${T.line}`, color:T.muted}}>
+                    Coach {tName(mv.trainer)} isn't working on {FULLDAYS[nd]}. Try another day.</div>
+                ) : slots.length===0 ? (
+                  <div className="text-sm mb-3 rounded-xl p-3" style={{background:T.card, border:`1.5px solid ${T.line}`, color:T.muted}}>
+                    No free slots on {FULLDAYS[nd]} at {locName(mv.loc)}. Try another day or week.</div>
+                ) : (
+                  <div className="flex gap-1.5 flex-wrap mb-3">
+                    {slots.map((sl,i)=>{ const on=nt===sl.time; return (
+                      <button key={i} onClick={()=>setClientMove(m=>({...m,newTime:sl.time}))} title={sl.note||""}
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold"
+                        style={{background:on?T.ink:T.card, color:on?T.paper:sl.note?T.accent:T.ink,
+                          border:`1.5px solid ${on?T.ink:sl.note?T.accent:T.line}`}}>{sl.time}{sl.note?" ⏱":""}</button>);})}
+                  </div>)}
+
+                <div className="text-xs mb-3" style={{color:T.muted}}>
+                  Same coach, same location, no extra charge — your credit stays applied. Free changes until {cancelHrs}h before the new time.</div>
+                <Btn full disabled={!valid} onClick={commitClientMove}>
+                  {changed ? `Move to ${fmtFull(dateFor(nw,nd))} · ${nt}` : "Pick a new day or time"}</Btn>
+                <button onClick={()=>{ cancelPT(mv.id); setClientMove(null); }} className="w-full text-sm font-bold mt-2" style={{color:T.accent}}>Cancel this session instead</button>
               </>)}
             </div>
           </div>);})()}
