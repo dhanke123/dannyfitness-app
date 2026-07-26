@@ -21,6 +21,7 @@ import ChatAndLeads from "./overlays/ChatAndLeads.jsx";
 import ScheduleSheets from "./overlays/ScheduleSheets.jsx";
 import AdminSheets from "./overlays/AdminSheets.jsx";
 import LogSheets from "./overlays/LogSheets.jsx";
+import { NotificationBell, NotificationPanel } from "./components/Notifications.jsx";
 
 function Shell() {
   const { user, logout, tab, setTab, isClient, isAdmin, navItems, pendingCounts, toast } = useApp();
@@ -37,8 +38,11 @@ function Shell() {
               <div className="text-xs" style={{color:T.muted}}>{isAdmin?"Admin console":isClient?"Member":"Coach"}</div>
             </div>
           </div>
-          <button onClick={logout} className="text-xs font-bold px-3 py-2 rounded-lg"
-            style={{...disp, border:`1.5px solid ${T.line}`, color:T.muted}}>Log out</button>
+          <div className="flex items-center gap-2">
+            <NotificationBell/>
+            <button onClick={logout} className="text-xs font-bold px-3 py-2 rounded-lg"
+              style={{...disp, border:`1.5px solid ${T.line}`, color:T.muted}}>Log out</button>
+          </div>
         </header>
 
         {/* ---- screens ---- */}
@@ -60,7 +64,7 @@ function Shell() {
         </nav>
 
         {/* ---- modal sheets ---- */}
-        <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/>
+        <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/><NotificationPanel/>
 
         {toast && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl text-sm font-semibold text-center"
           style={{background:T.ink,color:T.paper,maxWidth:"90%"}}>{toast}</div>}

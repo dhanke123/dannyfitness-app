@@ -8,6 +8,7 @@ import { EXLIB, best1RM, bestWeight, est1RM, estKcal, exMeta, isWorking, muscleO
 import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../lib/scheduling.js";
 import { nid } from "../lib/util.js";
 import { fetchProfile, isConfigured, looksLikeSgMobile, supabase, toAppUser, toE164 } from "../lib/supabase.js";
+import { buildNotifications } from "../lib/notifications.js";
 import { Card } from "../ui/kit.jsx";
 
 const Ctx = createContext(null);
@@ -659,6 +660,35 @@ export function AppProvider({ children }) {
   },[day,ptLoc,ptTrainers,myPT,locations,travel,sessions,ptBookings,timeOff,shifts,
      bookWeek,myClassBookings,myCamps,bookWeeks,camps]);
 
+  /* ---- notifications ----
+     Derived from live state (see lib/notifications.js) so an item can't outlive
+     the thing it describes. Only the read-set is stored. */
+  const [readNotifs, setReadNotifs] = useState([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifications = useMemo(() => {
+    if (!user) return [];
+    return buildNotifications({
+      role: user.role, user, myPT, myClassBookings, sessions, bookWeeks, routines,
+      credits, refundables, exceptionQueue, refundQueue, noShowQueue, incidentals,
+      leads, camps, myCamps, ptBookings, referralReward,
+      tName, locName, dateFor, sessTrainers,
+    });
+  }, [user, myPT, myClassBookings, sessions, bookWeeks, routines, credits, refundables,
+      exceptionQueue, refundQueue, noShowQueue, incidentals, leads, camps, myCamps,
+      ptBookings, referralReward, trainers, locations]);
+  const unreadNotifs = notifications.filter(n => !readNotifs.includes(n.id)).length;
+  const markAllNotifsRead = () => setReadNotifs(notifications.map(n => n.id));
+  // Tapping a notification must land on the thing itself, not just open a tab.
+  const openNotification = (n) => {
+    setReadNotifs(r => r.includes(n.id) ? r : [...r, n.id]);
+    setNotifOpen(false);
+    const a = n.action || {};
+    if (a.tab) setTab(a.tab);
+    if (a.seg) setSeg(a.seg);
+    if (a.adminSec) setAdminSec(a.adminSec);
+    if (a.logView) setLogView(a.logView);
+  };
+
   const staffSessions = (tid)=>sessions.filter(s=>sessTrainers(s).includes(tid));
   const staffTimeOff = (tid)=>timeOff.filter(t=>t.trainer===tid && t.active!==false);
   const revenue = ledger.filter(l=>l.status==="paid").reduce((a,b)=>a+Math.max(0,b.amt),0);
@@ -671,7 +701,9 @@ export function AppProvider({ children }) {
     ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["camps","Camps"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry, addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
+  const store = { logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
+    addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

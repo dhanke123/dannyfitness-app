@@ -13,10 +13,28 @@ export default function AdminManage() {
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
           <main className="flex-1 pb-24 px-5">
-            <div className="flex gap-2 pb-3">
+            {/* Six sections in a single no-wrap flex row overflowed the 448px shell, so
+                Settings sat off-screen and needed a horizontal scroll nobody could see.
+                A 3×2 grid fits, gives every section equal weight, and keeps the count
+                visible — a hidden tab is a tab that never gets used. Settings gains a
+                text label too; a lone gear icon in a full-width cell read as a mistake. */}
+            <div className="grid grid-cols-3 gap-2 pb-3">
               {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],["payouts","Payouts"],
-                ["settings",<svg key="g" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>]].map(([k,l])=>(
-                <Chip key={k} active={adminSec===k} onClick={()=>setAdminSec(k)}>{l}</Chip>))}
+                ["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  Settings</span>]].map(([k,l])=>{
+                // surface where the work is waiting, on the tab itself
+                const n = k==="money" ? pendingCounts.refunds + pendingCounts.receipts : 0;
+                return (
+                <button key={k} onClick={()=>setAdminSec(k)}
+                  className="px-2 py-1.5 rounded-full text-sm font-semibold relative"
+                  style={{background:adminSec===k?T.ink:"transparent", color:adminSec===k?T.paper:T.ink,
+                          border:`1.5px solid ${adminSec===k?T.ink:T.line}`, minWidth:0}}>
+                  {l}
+                  {n>0 && <span style={{position:"absolute", top:-4, right:-4, minWidth:16, height:16,
+                    lineHeight:"16px", borderRadius:8, padding:"0 4px", background:T.accent, color:"#fff",
+                    fontSize:9.5, fontWeight:800}}>{n>9?"9+":n}</span>}
+                </button>);})}
             </div>
 
             {adminSec==="dash" && (() => {
