@@ -1,11 +1,15 @@
+import { useState } from "react";
 import { useApp } from "../../state/AppState.jsx";
 import { CLIENTS } from "../../data/seed.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
-import { T } from "../../theme.js";
+import { downloadCsv } from "../../lib/analytics.js";
+import { T, disp } from "../../theme.js";
 import { Btn, Card, H } from "../../ui/kit.jsx";
 
 export default function StaffClients() {
-  const { credits, isAdmin, isClient, noShowQueue, ping, resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tab, user } = useApp();
+  const { credits, intakeRecords, isAdmin, isClient, measurements, noShowQueue, ping,
+          resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tName, tab, user } = useApp();
+  const [openIntake, setOpenIntake] = useState(null);
   return (<>
         {/* ==================== TRAINER / ADMIN: CLIENTS ==================== */}
         {!isClient && tab==="clients" && (
@@ -50,6 +54,58 @@ export default function StaffClients() {
                   <Btn small kind="ghost" onClick={()=>{setActive({title:`${n} — coach-logged`, forClient:n, exercises:[]}); ping(`Logging a session for ${n}`);}}>Log workout</Btn>
                   <Btn small kind="ghost" onClick={()=>setRoutineSheet({name:"", items:[], owner:user.id, assignedTo:n})}>Assign routine</Btn>
                 </div>
+
+                {/* Intake history, in the same place as the client — not behind a
+                    separate menu. This is the record a coach needs when a client is
+                    handed over: goals, injuries, what's already been tried. It used
+                    to be write-only; the form saved nothing. */}
+                {(() => {
+                  const recs = intakeRecords.filter(r => r.who === n);
+                  const stats = measurements.filter(m => m.who === n);
+                  const open = openIntake === n;
+                  return (
+                    <div className="mt-2 pt-2" style={{borderTop:`1px solid ${T.line}`}}>
+                      <div className="flex items-center justify-between">
+                        <button onClick={()=>setOpenIntake(open ? null : n)} className="text-xs font-bold" style={{color: recs.length ? T.blue : T.muted}}>
+                          {recs.length
+                            ? `Intake records (${recs.length}) ${open ? "▴" : "▾"}`
+                            : "No intake on file yet"}
+                        </button>
+                        {recs.length > 0 && (
+                          <button
+                            onClick={()=>{
+                              downloadCsv(`intake-${n.toLowerCase().replace(/\W+/g,"-")}.csv`,
+                                recs.map(r => ({ client:r.who, date:r.d, coach:tName(r.by),
+                                                 goals:r.goals, injuries:r.injuries, notes:r.notes })));
+                              ping(`${n}'s intake history exported — hand this to the new coach`);
+                            }}
+                            className="text-xs font-bold px-2 py-1 rounded-lg"
+                            style={{border:`1.5px solid ${T.line}`, color:T.ink}}>Export ↓</button>)}
+                      </div>
+
+                      {open && (
+                        <div className="mt-2 space-y-2">
+                          {recs.map(r => (
+                            <div key={r.id} className="rounded-lg p-2 text-xs" style={{background:"#FBF3EC"}}>
+                              <div className="flex justify-between">
+                                <span style={{...disp, fontWeight:700}}>{r.d}</span>
+                                <span style={{color:T.muted}}>by {tName(r.by)}</span>
+                              </div>
+                              {r.goals    && <div className="mt-1"><b>Goals:</b> {r.goals}</div>}
+                              {r.injuries && <div><b>Injuries:</b> <span style={{color:T.accent}}>{r.injuries}</span></div>}
+                              {r.notes    && <div style={{color:T.muted}}>{r.notes}</div>}
+                            </div>))}
+                          {stats.length > 0 && (
+                            <div className="text-xs" style={{color:T.muted}}>
+                              Body stats on file: {stats.map(m=>`${m.d} — ${m.weight}kg${m.fat?` / ${m.fat}%`:""}`).join(" · ")}
+                            </div>)}
+                          <div className="text-[11px]" style={{color:T.muted}}>
+                            Oldest to newest shows how the picture has changed. Export before a handover
+                            so the next coach starts with the history, not a blank page.
+                          </div>
+                        </div>)}
+                    </div>);
+                })()}
               </Card>))}
             <div className="text-xs mt-2" style={{color:T.muted}}>
               Trainers co-author the log: log a session for a client, assign a routine (they see it in their Log), and enter stats/intake. {isAdmin?"Admin can also create / import (CSV) / deactivate clients from Manage → People.":"Payment amounts stay hidden."}

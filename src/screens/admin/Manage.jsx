@@ -2,14 +2,13 @@ import { useApp } from "../../state/AppState.jsx";
 import { COUPONS, TRAINERS } from "../../data/seed.js";
 import { DEFAULT_TRAVEL, PT_DUR, travelKey } from "../../lib/scheduling.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
-import PayoutReport from "../../components/PayoutReport.jsx";
-import Reports from "../../components/Reports.jsx";
+import CampsSection from "./Camps.jsx";
 import { nid } from "../../lib/util.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip } from "../../ui/kit.jsx";
 
 export default function AdminManage() {
-  const { aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, exceptionQueue, incidentals, isAdmin, leads, ledger, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
+  const { aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, incidentals, isAdmin, leads, ledger, openLeads, setLeadStatus, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
@@ -20,7 +19,7 @@ export default function AdminManage() {
                 visible — a hidden tab is a tab that never gets used. Settings gains a
                 text label too; a lone gear icon in a full-width cell read as a mistake. */}
             <div className="grid grid-cols-4 gap-1.5 pb-3">
-              {[["dash","Dash"],["reports","Reports"],["people","People"],["products","Products"],["money","Money"],["payouts","Payouts"],
+              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],["camps","Camps"],
                 ["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
@@ -110,10 +109,24 @@ export default function AdminManage() {
 
             {adminSec==="people" && <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="text-xs font-bold" style={{color:T.muted}}>LEADS · enquiry, Instagram & referrals</div>
+                <div className="text-xs font-bold" style={{color:T.muted}}>
+                  LEADS · {openLeads.length} open{closedLeads.length>0 && <span style={{fontWeight:400}}> · {closedLeads.length} closed</span>}
+                </div>
                 <Btn small kind="ghost" onClick={()=>setAddLead({name:"", phone:"", source:"Walk-in", note:""})}>+ Add lead</Btn>
               </div>
-              {leads.map(l=>{ const wa = (l.phone||"").replace(/\D/g,""); return (
+              {/* What a lead IS and how it leaves the list. Previously a lead could be
+                  tagged but never closed, so the list only grew and "new" stopped
+                  meaning anything. Converted and Lost now archive it out. */}
+              <Card className="!p-3" style={{background:"#EFF3EE"}}>
+                <div className="text-xs" style={{color:T.ink}}>
+                  <b>How this works.</b> Someone enquires (form, Instagram DM, walk-in, referral) and lands here as
+                  <b> New</b>. WhatsApp or call them → mark <b>Contacted</b>. If they book a trial → <b>Trial booked</b>.
+                  Then close it: <b>Converted</b> once they're a paying member, or <b>Lost</b> if they go quiet.
+                  Closed leads drop out of this list into the archive below — that's what keeps the open count honest.
+                </div>
+              </Card>
+              {openLeads.length===0 && <div className="text-xs" style={{color:T.muted}}>No open leads. Everything's been actioned.</div>}
+              {openLeads.map(l=>{ const wa = (l.phone||"").replace(/\D/g,""); return (
                 <Card key={l.id} className="!p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="font-semibold text-sm">{l.name} {l.phone && <span className="text-xs font-normal" style={{color:T.muted}}>· +65 {l.phone}</span>}</div>
@@ -133,18 +146,51 @@ export default function AdminManage() {
                   {l.note && <div className="text-xs mt-1 rounded-lg p-2" style={{background:"#FBF3EC", color:T.ink}}>{l.note}</div>}
                   {/* one-tap contact-back */}
                   <div className="flex gap-1.5 mt-2">
-                    <button disabled={!wa} onClick={()=>{ if(l.status==="new") setLeads(ls=>ls.map(x=>x.id!==l.id?x:{...x,status:"contacted"})); ping(wa?`Opening WhatsApp to +65 ${l.phone} (deep-link in production)`:"No number on file"); }}
+                    <button disabled={!wa} onClick={()=>{ if(l.status==="new") setLeadStatus(l.id,"contacted"); ping(wa?`Opening WhatsApp to +65 ${l.phone} — marked contacted`:"No number on file"); }}
                       className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{background:wa?"#25D366":T.line, color:"#fff", opacity:wa?1:.5}}>WhatsApp</button>
-                    <button disabled={!wa} onClick={()=>ping(wa?`Calling +65 ${l.phone}…`:"No number on file")}
+                    <button disabled={!wa} onClick={()=>{ if(l.status==="new") setLeadStatus(l.id,"contacted"); ping(wa?`Calling +65 ${l.phone}… — marked contacted`:"No number on file"); }}
                       className="text-xs font-bold px-2.5 py-1.5 rounded-lg" style={{border:`1.5px solid ${T.line}`, color:wa?T.ink:T.muted}}>Call</button>
                   </div>
-                  <div className="flex gap-1.5 mt-2 flex-wrap">
-                    {["new","contacted","trial booked","converted","lost"].map(st=>(
-                      <button key={st} onClick={()=>setLeads(ls=>ls.map(x=>x.id!==l.id?x:{...x,status:st}))}
+                  {/* Progress and close are visually separated — closing is the action
+                      that removes it from the list, so it shouldn't sit in the same row
+                      as a harmless status nudge. */}
+                  <div className="flex gap-1.5 mt-2 flex-wrap items-center">
+                    <span className="text-[10px] font-bold" style={{color:T.muted}}>STAGE</span>
+                    {["new","contacted","trial booked"].map(st=>(
+                      <button key={st} onClick={()=>setLeadStatus(l.id,st)}
                         className="text-xs font-bold px-2 py-1 rounded-lg"
                         style={{background:l.status===st?T.plum:"transparent", color:l.status===st?"#fff":T.muted, border:`1px solid ${l.status===st?T.plum:T.line}`}}>{st}</button>))}
                   </div>
+                  <div className="flex gap-1.5 mt-2">
+                    <Btn small kind="ghost" full onClick={()=>setLeadStatus(l.id,"lost")}>Lost — close it</Btn>
+                    <Btn small full onClick={()=>setLeadStatus(l.id,"converted")}>Converted ✓</Btn>
+                  </div>
                 </Card>);})}
+
+              {closedLeads.length>0 && (
+                <details>
+                  <summary className="text-xs font-bold cursor-pointer" style={{color:T.muted}}>
+                    CLOSED LEADS ({closedLeads.length}) · converted &amp; lost
+                  </summary>
+                  <div className="space-y-2 mt-2">
+                    {closedLeads.map(l=>(
+                      <Card key={l.id} className="!p-3" style={{opacity:.75}}>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm">
+                            <span className="font-semibold">{l.name}</span>
+                            <span className="text-xs" style={{color:T.muted}}> · {l.source}{l.closedAt?` · closed ${l.closedAt}`:""}</span>
+                          </div>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                            style={{background:l.status==="converted"?T.moss:T.line, color:l.status==="converted"?"#fff":T.muted}}>{l.status}</span>
+                        </div>
+                        <button onClick={()=>setLeadStatus(l.id,"contacted")} className="text-xs font-bold mt-1.5" style={{color:T.accent}}>
+                          Reopen</button>
+                      </Card>))}
+                  </div>
+                  <div className="text-[11px] mt-2" style={{color:T.muted}}>
+                    Kept, not deleted — closed leads are what the conversion-rate report in Reports → Clients is built from.
+                  </div>
+                </details>)}
               <Btn full kind="ghost" onClick={()=>ping("Instagram booking link — opens this same flow from your bio/stories")}>View Instagram booking link</Btn>
               <div className="text-xs font-bold pt-2" style={{color:T.muted}}>TRAINERS · rate + permissions</div>
               {trainers.filter(t=>!t.admin).map(t=>{ const rt=rates[t.id]; return (
@@ -278,10 +324,9 @@ export default function AdminManage() {
               <div className="text-xs" style={{color:T.muted}}>Trainer payouts: sessions × rate, monthly export. All actions audited.</div>
             </div>}
 
-            {adminSec==="reports" && <Reports/>}
-
-            {/* Round-2 [confirm] deliverable: the monthly sheet Danny hands over to pay coaches. */}
-            {adminSec==="payouts" && <PayoutReport/>}
+            {/* Camps moved here from the bottom nav — set up occasionally, so a
+                permanent slot in a five-item nav was expensive. */}
+            {adminSec==="camps" && <CampsSection/>}
 
             {adminSec==="settings" && <div className="space-y-3">
               <Card className="!p-3 flex items-center justify-between">

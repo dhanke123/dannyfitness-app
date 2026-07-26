@@ -7,7 +7,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Chip, Select } from "../ui/kit.jsx";
 
 export default function LogSheets() {
-  const { active, addCustomExercise, addExerciseToActive, addSet, customEx, cycleType, exLib, exPicker, exSearch, finishWorkout, intakeForm, logs, measurements, noteSheet, ping, plate, prToast, removeExercise, removeSet, rest, routineSheet, setActive, setCustomEx, setExPicker, setExSearch, setIntakeForm, setLogs, setNoteSheet, setPlate, setRest, setRoutineSheet, setRoutines, sheet, toast, toggleSetDone, updSet } = useApp();
+  const { active, addCustomExercise, addExerciseToActive, addSet, customEx, cycleType, exLib, exPicker, exSearch, finishWorkout, intakeForm, logs, measurements, noteSheet, ping, plate, saveIntake, prToast, removeExercise, removeSet, rest, routineSheet, setActive, setCustomEx, setExPicker, setExSearch, setIntakeForm, setLogs, setNoteSheet, setPlate, setRest, setRoutineSheet, setRoutines, sheet, toast, toggleSetDone, updSet } = useApp();
   return (<>
         {/* activity logger — cardio / sports with duration + optional distance */}
         {noteSheet && (() => {
@@ -181,12 +181,27 @@ export default function LogSheets() {
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setIntakeForm(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
               <div className="flex items-center justify-between"><div style={{...disp,fontWeight:700,fontSize:22}}>New client intake · {intakeForm.who}</div><button onClick={()=>setIntakeForm(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button></div>
-              <div className="text-xs mb-3" style={{color:T.muted}}>One-time deeper assessment — separate from the ongoing weight/fat log.</div>
+              <div className="text-xs mb-3" style={{color:T.muted}}>
+                Deeper assessment, kept as a dated record. Any coach who takes this client on
+                can read the history — and export it — from Clients.</div>
+              {/* These inputs were UNCONTROLLED and the save handler discarded everything:
+                  the sheet closed, showed "Intake saved" and stored nothing. Now bound to
+                  the form state and persisted via saveIntake. */}
               <div className="space-y-2 mb-3">
-                {["Goals","Injury / medical history","Mobility notes","Waist / chest / arm measurements (cm)"].map(f=>(
-                  <input key={f} placeholder={f} className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>))}
+                <textarea value={intakeForm.goals||""} onChange={e=>setIntakeForm(f=>({...f,goals:e.target.value}))}
+                  rows={2} placeholder="Goals — what are they training for?"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card,resize:"none"}}/>
+                <textarea value={intakeForm.injuries||""} onChange={e=>setIntakeForm(f=>({...f,injuries:e.target.value}))}
+                  rows={2} placeholder="Injury / medical history — anything to work around"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card,resize:"none"}}/>
+                <textarea value={intakeForm.notes||""} onChange={e=>setIntakeForm(f=>({...f,notes:e.target.value}))}
+                  rows={2} placeholder="Mobility, lifestyle, preferences, measurements"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card,resize:"none"}}/>
               </div>
-              <Btn full onClick={()=>{setIntakeForm(null); ping("Intake saved — kept separate from the client's simple progress view");}}>Save intake</Btn>
+              <Btn full disabled={!(intakeForm.goals||intakeForm.injuries||intakeForm.notes)}
+                onClick={()=>saveIntake(intakeForm)}>Save intake</Btn>
+              <div className="text-center text-xs mt-2" style={{color:T.muted}}>
+                Saved against {intakeForm.who} and dated. Earlier records are kept, not overwritten.</div>
             </div>
           </div>)}
   </>);

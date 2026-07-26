@@ -14,7 +14,7 @@ import StaffToday from "./screens/staff/Today.jsx";
 import StaffSchedule from "./screens/staff/Schedule.jsx";
 import StaffClients from "./screens/staff/Clients.jsx";
 import StaffMe from "./screens/staff/Me.jsx";
-import AdminCamps from "./screens/admin/Camps.jsx";
+import AdminReports from "./screens/admin/ReportsScreen.jsx";
 import AdminManage from "./screens/admin/Manage.jsx";
 import BookingSheets from "./overlays/BookingSheets.jsx";
 import ChatAndLeads from "./overlays/ChatAndLeads.jsx";
@@ -48,7 +48,7 @@ function Shell() {
         {/* ---- screens ---- */}
         <ClientHome/><ClientBook/><ClientLog/><ClientShop/><ClientAccount/>
         <StaffToday/><StaffSchedule/><StaffClients/><StaffMe/>
-        <AdminCamps/><AdminManage/>
+        <AdminReports/><AdminManage/>
 
         {/* bottom nav — admin tabs carry a pending-approval count so the four queues can't
             pile up unnoticed (Decision 6). */}

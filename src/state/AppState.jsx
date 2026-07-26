@@ -59,6 +59,26 @@ export function AppProvider({ children }) {
   const [logView, setLogView] = useState("train"); // Log sub-view: 'train' | 'progress'
   const [goal, setGoal] = useState({ workouts:4, kcal:2000 }); // client's weekly goal (Log → Progress)
   const [intakeForm, setIntakeForm] = useState(null);
+  const [reportView, setReportView] = useState("analytics"); // Reports screen: analytics | payouts
+  /* Intake assessments were never persisted — the form closed with a toast and the
+     answers vanished. That's the record a coach most needs when a client is handed
+     over: goals, injury history, what's already been tried. Now kept per client,
+     newest first, and exportable. */
+  const [intakeRecords, setIntakeRecords] = useState([
+    { id:"ia1", who:"Sam Lee", by:"danny", d:"1 Jul 2026",
+      goals:"Build strength, prep for IPPT in Nov", injuries:"Left shoulder impingement (2024) — cleared, avoid heavy overhead",
+      notes:"Desk job, trains 3x/wk. Prefers early mornings." },
+    { id:"ia2", who:"Ben", by:"dylan", d:"18 Jun 2026",
+      goals:"General conditioning, lose 4kg", injuries:"None reported",
+      notes:"New to structured training. Responds well to group settings." },
+  ]);
+  const saveIntake = (rec) => {
+    setIntakeRecords(rs => [{ id:nid(), who:rec.who, by:user?.id || "staff",
+      d:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+      goals:rec.goals||"", injuries:rec.injuries||"", notes:rec.notes||"" }, ...rs]);
+    setIntakeForm(null);
+    ping(`Intake saved for ${rec.who} — visible to any coach who takes them on`);
+  };
   const [products, setProducts] = useState(seedProducts);
   const [camps, setCamps] = useState(seedCamps);
   const [classTemplates, setClassTemplates] = useState(seedClassTemplates);
@@ -66,6 +86,23 @@ export function AppProvider({ children }) {
   const [audit, setAudit] = useState([]); // admin override / book-on-behalf trail (never cleared in real build)
   const logAudit = (what)=> setAudit(a=>[{id:nid(), what, when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}, ...a]);
   const [leads, setLeads] = useState(seedLeads);
+  /* Lead lifecycle. Previously a lead could be tagged but never left the list, so
+     the queue only ever grew and "new" stopped meaning anything. Now: converted and
+     lost are CLOSED — they drop out of the working list into a collapsed archive,
+     which is what makes the open count trustworthy. */
+  const LEAD_OPEN = ["new","contacted","trial booked"];
+  const setLeadStatus = (id, status) => {
+    setLeads(ls => ls.map(l => l.id!==id ? l : {
+      ...l, status,
+      closedAt: LEAD_OPEN.includes(status) ? null
+        : new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short'}),
+      firstContactedAt: l.firstContactedAt || (status!=="new" ? new Date().toISOString() : null),
+    }));
+    if (status==="converted") ping("Marked converted — moved to closed leads");
+    else if (status==="lost") ping("Marked lost — moved to closed leads. Reopen any time.");
+  };
+  const openLeads   = leads.filter(l => LEAD_OPEN.includes(l.status));
+  const closedLeads = leads.filter(l => !LEAD_OPEN.includes(l.status));
   const [perm, setPerm] = useState({ dylan:{editDesc:false, cancel:false, earnings:false, manageLocations:false},
     marcus:{editDesc:true, cancel:false, earnings:false, manageLocations:false}, wei:{editDesc:false, cancel:false, earnings:true, manageLocations:false} });
   const [measurements, setMeasurements] = useState([{who:"Sam Lee", weight:74.5, fat:19.2, d:"1 Jul"},{who:"Sam Lee", weight:73.8, fat:18.4, d:"15 Jul"}]);
@@ -712,10 +749,10 @@ export function AppProvider({ children }) {
   const navItems = isClient
     ? [["home","Home"],["book","Book"],["log","Log"],["shop","Shop"],["account","Account"]]
     : isAdmin
-    ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["camps","Camps"],["manage","Manage"]]
+    ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["reports","Reports"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+  const store = { reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
