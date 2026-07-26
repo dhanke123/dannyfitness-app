@@ -8,7 +8,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Card, Select } from "../ui/kit.jsx";
 
 export default function ScheduleSheets() {
-  const { addTimeOff, audit, bookFor, booked, cancelHrs, cancelPT, clientMove, commitClientMove, day, doneSheet, hoursUntil, incidentals, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setIncidentals, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
+  const { addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, resolveIncidental, commitClientMove, day, doneSheet, hoursUntil, incidentals, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setIncidentals, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
   return (<>
         {/* time off sheet */}
         {timeOffSheet && (
@@ -85,7 +85,7 @@ export default function ScheduleSheets() {
             .filter(sl => !myPT.some(b=>b.id!==mv.id && (b.weekOff??0)===nw && b.day===nd && b.time===sl.time));
           const pastDay = nw===0 && nd<TODAY;
           const changed = !(nw===(mv.weekOff??0) && nd===mv.day && nt===mv.time);
-          const valid = changed && !pastDay && hoursUntil(nw,nd,nt) > cancelHrs;
+          const valid = changed && !pastDay && hoursUntil(nw,nd,nt) > policy.ptHrs;
           return (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setClientMove(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[88vh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
@@ -97,12 +97,16 @@ export default function ScheduleSheets() {
                 Currently <span style={{color:T.ink,fontWeight:600}}>{mv.date||DAYS[mv.day]} · {mv.time}</span> · {isOther?(mv.otherLabel||"Other spot"):locName(mv.loc)} · Coach {tName(mv.trainer)}{isHead(mv.trainer)?" ★":""}
               </div>
 
+              {/* Decision 1a — inside the window is an approval request, not a refusal. */}
               {mv.locked ? (<>
                 <Card style={{background:"#FBF3EC"}}>
-                  <div className="text-sm font-semibold" style={{color:T.accent}}>Inside the {cancelHrs}h change window</div>
-                  <div className="text-xs mt-1" style={{color:T.muted}}>This session starts in under {cancelHrs} hours, so it can't be moved in the app. Message ExerciseOnly and we'll sort it out with your coach.</div>
+                  <div className="text-sm font-semibold" style={{color:T.accent}}>Inside the {policy.ptHrs}h change window</div>
+                  <div className="text-xs mt-1" style={{color:T.muted}}>This session starts in under {policy.ptHrs} hours, so it can't be moved straight away — but you can ask. Tell us why and the ExerciseOnly admin will review it.</div>
                 </Card>
-                <Btn full kind="dark" onClick={()=>{setClientMove(null); setChatOpen(true);}} >Message ExerciseOnly</Btn>
+                <Btn full onClick={()=>{ setClientMove(null); setExceptionSheet({
+                  what:`PT · ${tName(mv.trainer)} · ${mv.date||DAYS[mv.day]} ${mv.time}`, kind:"pt",
+                  ask:"change", hrs:Math.max(0,Math.round(hoursUntil(mv.weekOff, mv.day, mv.time))), reason:"" }); }}>Request an exception</Btn>
+                <button onClick={()=>{setClientMove(null); setChatOpen(true);}} className="w-full text-sm font-bold mt-2" style={{color:T.muted}}>Or message ExerciseOnly</button>
               </>) : (<>
                 <div className="flex items-center justify-between mb-2">
                   <button onClick={()=>setClientMove(m=>({...m,newWeek:Math.max(0,(m.newWeek??0)-1)}))}
@@ -144,7 +148,7 @@ export default function ScheduleSheets() {
                   </div>)}
 
                 <div className="text-xs mb-3" style={{color:T.muted}}>
-                  Same coach, same location, no extra charge — your credit stays applied. Free changes until {cancelHrs}h before the new time.</div>
+                  Same coach, same location, no extra charge — your credit stays applied. Reschedule as often as you need, as long as it's more than {policy.ptHrs}h before the new time.</div>
                 <Btn full disabled={!valid} onClick={commitClientMove}>
                   {changed ? `Move to ${fmtFull(dateFor(nw,nd))} · ${nt}` : "Pick a new day or time"}</Btn>
                 <button onClick={()=>{ cancelPT(mv.id); setClientMove(null); }} className="w-full text-sm font-bold mt-2" style={{color:T.accent}}>Cancel this session instead</button>

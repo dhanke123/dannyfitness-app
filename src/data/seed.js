@@ -144,6 +144,8 @@ export const seedProducts = [
 /* ---------- camps: builder data — days -> session blocks, not a flat date range ---------- */
 // Camps run a minimum of 5 days. Cancellation allowed only if the camp starts more than
 // CAMP_CANCEL_DAYS away (exact value TBD with Danny). `startInDays` is demo-relative.
+// DEPRECATED as a gate — the live value is `policy.campDays` in AppState (admin-editable
+// under Manage → Settings, Decisions 1 & 16). Kept only as the seed default.
 export const CAMP_CANCEL_DAYS = 2;
 
 export const seedCamps = [

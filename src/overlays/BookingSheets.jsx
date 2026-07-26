@@ -1,11 +1,19 @@
 import { useApp } from "../state/AppState.jsx";
 import { CT, PT_PRICE, isHead } from "../data/seed.js";
 import { DAYS } from "../lib/dates.js";
+import { downloadIcs, eventStart, googleCalUrl } from "../lib/calendar.js";
 import { T, disp } from "../theme.js";
 import { Btn, Card, QR, Select } from "../ui/kit.jsx";
 
 export default function BookingSheets() {
-  const { applyCoupon, campSheet, cancelHrs, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, loc, locName, otherPlace, payMode, ptPool, setCampSheet, setCoupon, setCouponMsg, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName } = useApp();
+  const { applyCoupon, campSheet, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, exceptionSheet, justBooked, loc, locName, otherPlace, payMode, ping, policy, ptPool, reminderChannel, requestException, setCampSheet, setCoupon, setCouponMsg, setExceptionSheet, setJustBooked, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName } = useApp();
+
+  const bookedEvent = justBooked && {
+    title: justBooked.title, start: eventStart(justBooked.weekOff, justBooked.day, justBooked.time),
+    minutes: justBooked.minutes, location: justBooked.location, uid: justBooked.uid,
+    details: `${justBooked.details}\nManage or cancel in the ExerciseOnly app.`,
+  };
+
   return (<>
         {/* booking sheet */}
         {sheet && (
@@ -50,7 +58,75 @@ export default function BookingSheets() {
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
               {payMode==="paynow" && <QR/>}
               <Btn full disabled={sheet.kind==="pt" && sheet.loc==="other" && !otherPlace} onClick={confirmBook}>{payMode==="credit"?"Confirm · 1 credit":payMode==="pass"?"Confirm · covered by pass":"Pay & book"}</Btn>
-              <div className="text-center text-xs mt-3" style={{color:T.muted}}>Free cancellation until {cancelHrs}h before.</div>
+              {/* window is per booking type and read from Settings — never a constant in copy */}
+              <div className="text-center text-xs mt-3" style={{color:T.muted}}>
+                Free cancellation until {sheet.kind==="class"?policy.classHrs:policy.ptHrs}h before. Inside that, you can request an exception.</div>
+            </div>
+          </div>)}
+
+        {/* ---- confirmation step: add to calendar (Decision 14) ----
+             .ics download + a Google Calendar link. No OAuth, no sync, no stored tokens —
+             works for Apple, Outlook and Google, and there is nothing to revoke later. */}
+        {justBooked && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setJustBooked(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="text-center mb-1" style={{fontSize:34}}>✅</div>
+              <div className="text-center" style={{...disp,fontWeight:700,fontSize:22}}>You're booked</div>
+              <div className="text-center text-sm mb-4" style={{color:T.muted}}>
+                {justBooked.dateLabel ? `${justBooked.dateLabel} · ` : ""}{justBooked.time} · {justBooked.location}
+                <div className="text-xs mt-1">Confirmation and reminders go to your {reminderChannel==="email"?"email":"WhatsApp"} — change this in Account.</div>
+              </div>
+              <div className="text-xs font-bold mb-2" style={{color:T.muted}}>ADD TO YOUR CALENDAR</div>
+              <div className="space-y-2 mb-3">
+                <button onClick={()=>{ downloadIcs(bookedEvent); ping("Calendar file downloaded — open it to add the session"); }}
+                  className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold"
+                  style={{background:T.card, border:`1.5px solid ${T.line}`}}>📅 Apple Calendar / Outlook <span className="font-normal" style={{color:T.muted}}>· .ics file</span></button>
+                <button onClick={()=>window.open(googleCalUrl(bookedEvent), "_blank", "noopener")}
+                  className="w-full text-left px-4 py-3 rounded-xl text-sm font-semibold"
+                  style={{background:T.card, border:`1.5px solid ${T.line}`}}>📅 Google Calendar <span className="font-normal" style={{color:T.muted}}>· opens in a new tab</span></button>
+              </div>
+              <Btn full kind="dark" onClick={()=>setJustBooked(null)}>Done</Btn>
+              <div className="text-center text-xs mt-3" style={{color:T.muted}}>You can add this to your calendar later from Book → Booked.</div>
+            </div>
+          </div>)}
+
+        {/* ---- request an exception (Decision 1a) ----
+             Inside the cancellation window is no longer a dead end. The member gives a
+             reason, it lands in the admin Exceptions queue, and a human decides. Nothing
+             about the booking changes until it's approved. */}
+        {exceptionSheet && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setExceptionSheet(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-start justify-between mb-1">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Request an exception</div>
+                <button onClick={()=>setExceptionSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg -mt-1" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="text-sm mb-3" style={{color:T.muted}}>
+                {exceptionSheet.what}
+                <div className="text-xs mt-1">
+                  {exceptionSheet.kind==="camp"
+                    ? `Starts in under ${policy.campDays} day${policy.campDays===1?"":"s"}.`
+                    : `Starts in about ${exceptionSheet.hrs}h — inside the ${exceptionSheet.kind==="class"?policy.classHrs:policy.ptHrs}h window.`}
+                </div>
+              </div>
+              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>WHAT DO YOU NEED?</div>
+              <div className="flex gap-2 mb-3">
+                {[["cancel","Cancel it"], ...(exceptionSheet.kind==="pt" ? [["change","Move it"]] : [])].map(([k,l])=>(
+                  <button key={k} onClick={()=>setExceptionSheet(s=>({...s, ask:k}))}
+                    className="flex-1 px-3 py-2.5 rounded-xl text-sm font-semibold"
+                    style={{background:exceptionSheet.ask===k?T.ink:T.card, color:exceptionSheet.ask===k?T.paper:T.ink,
+                      border:`1.5px solid ${exceptionSheet.ask===k?T.ink:T.line}`}}>{l}</button>))}
+              </div>
+              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>WHY? (the admin sees this)</div>
+              <textarea value={exceptionSheet.reason} onChange={e=>setExceptionSheet(s=>({...s, reason:e.target.value}))}
+                rows={3} placeholder="e.g. I've come down with flu and don't want to pass it on"
+                className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-3"
+                style={{border:`1.5px solid ${T.line}`, background:T.card, resize:"none"}}/>
+              <Btn full disabled={!exceptionSheet.reason.trim()}
+                onClick={()=>requestException({what:exceptionSheet.what, kind:exceptionSheet.kind,
+                  ask:exceptionSheet.ask, reason:exceptionSheet.reason.trim()})}>Send request</Btn>
+              <div className="text-center text-xs mt-3" style={{color:T.muted}}>
+                Your booking stays as it is until someone reviews this. You'll hear back on {reminderChannel==="email"?"email":"WhatsApp"}.</div>
             </div>
           </div>)}
 

@@ -1,30 +1,37 @@
 import { useApp } from "../../state/AppState.jsx";
 import { COUPONS, TRAINERS } from "../../data/seed.js";
 import { DEFAULT_TRAVEL, PT_DUR, travelKey } from "../../lib/scheduling.js";
+import ApprovalQueue from "../../components/ApprovalQueue.jsx";
+import PayoutReport from "../../components/PayoutReport.jsx";
 import { nid } from "../../lib/util.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip } from "../../ui/kit.jsx";
 
 export default function AdminManage() {
-  const { aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, incidentals, isAdmin, leads, ledger, locations, login, newLocName, noShowQueue, offers, perm, permOpen, ping, products, promoteSuggested, ptBookings, rates, resolveNoShow, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
+  const { aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, exceptionQueue, incidentals, isAdmin, leads, ledger, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
           <main className="flex-1 pb-24 px-5">
             <div className="flex gap-2 pb-3">
-              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],
+              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],["payouts","Payouts"],
                 ["settings",<svg key="g" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>]].map(([k,l])=>(
                 <Chip key={k} active={adminSec===k} onClick={()=>setAdminSec(k)}>{l}</Chip>))}
             </div>
 
             {adminSec==="dash" && (() => {
               // weekly trainer payout/cost from rates (per-class/PT or salary)
+              // Rough weekly estimate for the dashboard. The authoritative figure —
+              // paid only for delivered work — is in Manage → Payouts.
               const payoutFor = (tid) => {
                 const rt = rates[tid]; if(!rt) return 0;
                 if (rt.type==="salary") return Math.round(rt.monthly/4.33);
-                const classes = staffSessions(tid).length;
+                const mine = staffSessions(tid);
+                const classPay = rt.type==="per_head"
+                  ? mine.reduce((a,s)=>a + (s.attendees||[]).length * (rt.perHead||0), 0)
+                  : mine.length * (rt.perClass||0);
                 const pts = ptBookings.filter(b=>b.trainer===tid && b.status!=="cancelled").length;
-                return classes*rt.perClass + pts*rt.perPt;
+                return classPay + pts*(rt.perPt||0);
               };
               const payouts = trainers.map(t=>({t, amt:payoutFor(t.id)}));
               const totalPayout = payouts.reduce((a,b)=>a+b.amt,0);
@@ -57,10 +64,23 @@ export default function AdminManage() {
                       <div className="text-xs" style={{color:T.muted}}>{st}</div></div>))}
                 </div>
               </Card>
-              {noShowQueue.length>0 && (
+              {/* Decision 6 — pending items stay pending. Without a visible count in one place
+                  the four queues silently pile up, so Dash summarises all of them. */}
+              {pendingCounts.total>0 && (
                 <Card style={{background:"#F7EEE9"}}>
-                  <div className="text-xs font-bold mb-1" style={{color:T.accent}}>NO-SHOW DECISIONS PENDING ({noShowQueue.length})</div>
-                  <div className="text-sm">Go to Money → No-shows to waive or apply.</div>
+                  <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>WAITING ON YOU ({pendingCounts.total})</div>
+                  <div className="space-y-1">
+                    {[["Exception requests", pendingCounts.exceptions, "schedule", "Schedule"],
+                      ["No-show decisions", pendingCounts.noshows, "clients", "Clients"],
+                      ["Refund requests", pendingCounts.refunds, "money", "Manage → Money"],
+                      ["Trainer receipts", pendingCounts.receipts, "money", "Manage → Money"]]
+                      .filter(([,n])=>n>0).map(([label,n,,where])=>(
+                      <div key={label} className="flex items-center justify-between text-sm">
+                        <span>{label} <span className="font-bold">({n})</span></span>
+                        <span className="text-xs" style={{color:T.muted}}>{where}</span>
+                      </div>))}
+                  </div>
+                  <div className="text-xs mt-2" style={{color:T.muted}}>Nothing auto-approves or auto-declines — these wait until you action them.</div>
                 </Card>)}
               <Card style={{background:"#F7EEE9"}}>
                 <div className="text-xs font-bold" style={{color:T.accent}}>ALERTS</div>
@@ -101,9 +121,9 @@ export default function AdminManage() {
                 <Card key={t.id}>
                   <div className="flex items-center justify-between">
                     <div><div className="font-semibold text-sm">{t.name}</div>
-                      <div className="text-xs" style={{color:T.muted}}>{t.tag} · {rt ? (rt.type==="salary" ? `$${rt.monthly}/mo salary` : `$${rt.perClass}/class · $${rt.perPt}/PT`) : "rate not set"}</div></div>
+                      <div className="text-xs" style={{color:T.muted}}>{t.tag} · {rt ? (rt.type==="salary" ? `$${rt.monthly}/mo salary` : rt.type==="per_head" ? `$${rt.perHead}/head · $${rt.perPt}/PT` : `$${rt.perClass}/class · $${rt.perPt}/PT`) : "rate not set"}</div></div>
                     <div className="flex gap-1.5">
-                      <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", bio:t.bio||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
+                      <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", bio:t.bio||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perHead:rt?.perHead||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
                       <Btn small kind="ghost" onClick={()=>setPermOpen(permOpen===t.id?null:t.id)}>Perms</Btn>
                       <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — their sessions need reassignment`)}>Deactivate</Btn>
                     </div>
@@ -190,37 +210,33 @@ export default function AdminManage() {
                 <div className="text-xs" style={{color:"#B9B5A9"}}>PAYMENT METHODS</div>
                 <div className="text-sm mt-1">PayNow (UEN linked) ✓ · Card via Stripe ✓ · Cash ✓</div>
               </Card>
+              {/* ---- Queue 3 of 4: REFUNDS (Decisions 2, 6, 7) ----
+                   Credit back is automatic on cancellation. Money back is not: the member asks,
+                   the admin approves, and only then does the credit come off and the HitPay
+                   refund get triggered by hand. Never both a credit and a refund. */}
+              {refundQueue.length>0 && (
+                <ApprovalQueue
+                  label="REFUND REQUESTS · bank refund instead of credit"
+                  items={refundQueue.map(r=>({
+                    id:r.id, title:`${r.who} — $${r.amt} back to bank`,
+                    sub:`${r.what} · originally paid by ${r.method} · cancelled ${r.when}${r.reason?` · "${r.reason}"`:""}`,
+                  }))}
+                  onResolve={resolveRefund}
+                  approveLabel="Approve refund" denyLabel="Deny (keep credit)" />)}
+
+              {/* ---- Queue 4 of 4: RECEIPTS / INCIDENTALS (Decisions 6, 7) ---- */}
               {incidentals.filter(i=>i.status==="pending").length>0 && (
-                <>
-                  <div className="text-xs font-bold" style={{color:T.accent}}>INCIDENTALS · trainer-submitted, awaiting your approval</div>
-                  {incidentals.filter(i=>i.status==="pending").map(i=>(
-                    <Card key={i.id} style={{background:"#F7EEE9"}}>
-                      <div className="flex items-center justify-between">
-                        <div className="font-semibold text-sm">{i.label} · ${i.amt}</div>
-                        <div className="text-xs" style={{color:T.muted}}>{tName(i.trainer)}</div>
-                      </div>
-                      <div className="text-xs mb-2" style={{color:T.muted}}>{i.note}</div>
-                      <div className="flex gap-2">
-                        <Btn small kind="ghost" onClick={()=>{setIncidentals(x=>x.map(y=>y.id!==i.id?y:{...y,status:"rejected"})); ping("Incidental rejected");}}>Reject</Btn>
-                        <Btn small onClick={()=>{setIncidentals(x=>x.map(y=>y.id!==i.id?y:{...y,status:"approved"}));
-                          setLedger(l=>[{id:nid(),who:tName(i.trainer),what:`Incidental · ${i.label}`,amt:-i.amt,method:"Expense",status:"paid",d:"Today"},...l]);
-                          ping("Approved — recorded as an expense for analysis (audited)");}}>Approve</Btn>
-                      </div>
-                    </Card>))}
-                </>)}
-              {noShowQueue.length>0 && (
-                <>
-                  <div className="text-xs font-bold" style={{color:T.accent}}>NO-SHOW DECISIONS · waive or apply</div>
-                  {noShowQueue.map(nq=>(
-                    <Card key={nq.id} style={{background:"#F7EEE9"}}>
-                      <div className="font-semibold text-sm">{nq.who}</div>
-                      <div className="text-xs mb-2" style={{color:T.muted}}>{nq.session} · Policy: {nq.policy}</div>
-                      <div className="flex gap-2">
-                        <Btn small kind="ghost" onClick={()=>resolveNoShow(nq.id,false)}>Waive (relationship call)</Btn>
-                        <Btn small onClick={()=>resolveNoShow(nq.id,true)}>Apply</Btn>
-                      </div>
-                    </Card>))}
-                </>)}
+                <ApprovalQueue
+                  label="RECEIPTS · trainer-submitted incidentals"
+                  items={incidentals.filter(i=>i.status==="pending").map(i=>({
+                    id:i.id, title:`${i.label} · $${i.amt}`, sub:i.note, meta:tName(i.trainer),
+                  }))}
+                  onResolve={resolveIncidental}
+                  approveLabel="Approve" denyLabel="Deny" />)}
+
+              {refundQueue.length===0 && incidentals.filter(i=>i.status==="pending").length===0 && (
+                <div className="text-xs" style={{color:T.muted}}>
+                  No refund or receipt approvals waiting. No-shows are under Clients; exception requests are under Schedule.</div>)}
               <div className="text-xs font-bold pt-1" style={{color:T.muted}}>LEDGER · export CSV for accountant</div>
               {ledger.map(l=>(
                 <Card key={l.id} className="flex items-center gap-3 !p-3">
@@ -231,6 +247,9 @@ export default function AdminManage() {
                 </Card>))}
               <div className="text-xs" style={{color:T.muted}}>Trainer payouts: sessions × rate, monthly export. All actions audited.</div>
             </div>}
+
+            {/* Round-2 [confirm] deliverable: the monthly sheet Danny hands over to pay coaches. */}
+            {adminSec==="payouts" && <PayoutReport/>}
 
             {adminSec==="settings" && <div className="space-y-3">
               <Card className="!p-3 flex items-center justify-between">
@@ -271,8 +290,37 @@ export default function AdminManage() {
                       className="w-16 px-2 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
                   </Card>);})}
 
-              <div className="text-xs font-bold pt-2" style={{color:T.muted}}>POLICIES</div>
+              {/* Decisions 1 & 16 — split per booking type, admin-editable, all starting at 24h.
+                  Classes and PT use hours; camps use days only. Every gate and every line of
+                  policy copy in the app reads these three numbers, so changing one here changes
+                  the rule everywhere at once. Nothing is hard-coded. */}
+              <div className="text-xs font-bold pt-2" style={{color:T.muted}}>CANCELLATION &amp; CHANGE WINDOWS</div>
+              <div className="text-xs" style={{color:T.muted}}>
+                Inside these windows a member can't cancel or move on their own — they can request an exception, which lands in your queue under Schedule.</div>
+              {[["classHrs","Classes","hours before"],["ptHrs","Personal training","hours before"],["campDays","Camps","days before"]].map(([k,label,unit])=>(
+                <Card key={k} className="!p-3 flex items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold">{label}</div>
+                    <div className="text-xs" style={{color:T.muted}}>{unit} the session starts</div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <input type="number" min="0" value={policy[k]}
+                      onChange={e=>setPolicy(p=>({...p, [k]:Math.max(0, +e.target.value||0)}))}
+                      className="w-16 px-2 py-1.5 rounded-lg text-sm text-center font-bold outline-none"
+                      style={{border:`1.5px solid ${T.line}`}}/>
+                    <span className="text-xs" style={{color:T.muted}}>{k==="campDays"?"days":"hrs"}</span>
+                  </div>
+                </Card>))}
+              <div className="text-xs" style={{color:T.muted}}>
+                Class rescheduling isn't offered — members cancel and rebook, and the credit returns.
+                PT can be moved as often as needed, as long as it's outside the window.</div>
+
+              <div className="text-xs font-bold pt-2" style={{color:T.muted}}>REMINDERS</div>
+              <Card className="!p-3"><div className="text-sm">Sent at <b>24h</b> and <b>2h</b> before every booking. Members choose WhatsApp or email in their Account; new members default to WhatsApp.</div></Card>
+
+              <div className="text-xs font-bold pt-2" style={{color:T.muted}}>OTHER POLICIES</div>
               <Card className="!p-3"><div className="text-sm">PT session length: <b>{PT_DUR} min</b> (fixed for now — flagged as possibly variable by trainer/session type later)</div></Card>
+              <Card className="!p-3"><div className="text-sm">Card payments: <b>off</b> — PayNow only at launch. Review when the studio passes <b>100 active members</b>.</div></Card>
               <Card className="!p-3"><div className="text-sm">Same-location changeover buffer: <b>0 min</b> (no gap required back-to-back at one venue)</div></Card>
             </div>}
           </main>)}

@@ -2,16 +2,36 @@ import { useApp } from "../../state/AppState.jsx";
 import { CT, isHead, weekExtras } from "../../data/seed.js";
 import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, firstName, fmtDM, locAbbr, toMin, upcomingDate, weekLabel } from "../../lib/dates.js";
 import { PT_DUR, sessTrainers } from "../../lib/scheduling.js";
+import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, H, Select } from "../../ui/kit.jsx";
 
 export default function StaffSchedule() {
-  const { active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
+  const { active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
   return (<>
         {/* ==================== TRAINER / ADMIN: SCHEDULE ==================== */}
         {!isClient && tab==="schedule" && (
           <main className="flex-1 pb-24 px-5">
             <H>{isAdmin?"Master schedule":"My week & availability"}</H>
+
+            {/* ---- Queue 1 of 4: EXCEPTIONS (Decisions 1a, 6, 7) ----
+                 Members who are inside the cancellation window land here rather than hitting a
+                 wall. Nothing auto-resolves: these sit until the admin approves or denies with
+                 a reason, which is why the count is badged on the nav. */}
+            {isAdmin && exceptionQueue.length>0 && (
+              <div className="mb-4">
+                <ApprovalQueue
+                  label="EXCEPTION REQUESTS · inside the cancellation window"
+                  items={exceptionQueue.map(e=>({
+                    id:e.id,
+                    title:`${e.who} — ${e.ask==="cancel"?"wants to cancel":"wants to move"}`,
+                    sub:`${e.what} · "${e.reason}"`,
+                    meta:e.when,
+                  }))}
+                  onResolve={resolveException}
+                  approveLabel="Approve" denyLabel="Deny" />
+              </div>)}
+
             <div className="flex gap-2 pb-3">
               {[["cal","Calendar"],["week","List"],["coach",isAdmin?"By coach":"Availability"]].map(([k,l])=>(
                 <Chip key={k} active={schedView===k} onClick={()=>setSchedView(k)}>{l}</Chip>))}

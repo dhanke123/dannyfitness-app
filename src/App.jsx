@@ -23,7 +23,7 @@ import AdminSheets from "./overlays/AdminSheets.jsx";
 import LogSheets from "./overlays/LogSheets.jsx";
 
 function Shell() {
-  const { user, setUser, tab, setTab, isClient, isAdmin, navItems, toast } = useApp();
+  const { user, logout, tab, setTab, isClient, isAdmin, navItems, pendingCounts, toast } = useApp();
   if (!user) return <Login/>;
   return (
     <div className="min-h-screen flex justify-center" style={{background:"#E6DFD3", ...body, color:T.ink}}>
@@ -37,7 +37,7 @@ function Shell() {
               <div className="text-xs" style={{color:T.muted}}>{isAdmin?"Admin console":isClient?"Member":"Coach"}</div>
             </div>
           </div>
-          <button onClick={()=>setUser(null)} className="text-xs font-bold px-3 py-2 rounded-lg"
+          <button onClick={logout} className="text-xs font-bold px-3 py-2 rounded-lg"
             style={{...disp, border:`1.5px solid ${T.line}`, color:T.muted}}>Log out</button>
         </header>
 
@@ -46,11 +46,17 @@ function Shell() {
         <StaffToday/><StaffSchedule/><StaffClients/><StaffMe/>
         <AdminCamps/><AdminManage/>
 
-        {/* bottom nav */}
+        {/* bottom nav — admin tabs carry a pending-approval count so the four queues can't
+            pile up unnoticed (Decision 6). */}
         <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md flex" style={{background:T.ink, paddingBottom:"env(safe-area-inset-bottom)"}}>
-          {navItems.map(([k,label])=>(
-            <button key={k} onClick={()=>setTab(k)} className="flex-1 py-3"
-              style={{...disp,fontSize:13,fontWeight:700,color:tab===k?T.accent:"#B9B5A9"}}>{label}</button>))}
+          {navItems.map(([k,label])=>{ const n = isAdmin ? (pendingCounts[k]||0) : 0; return (
+            <button key={k} onClick={()=>setTab(k)} className="flex-1 py-3 relative"
+              style={{...disp,fontSize:13,fontWeight:700,color:tab===k?T.accent:"#B9B5A9"}}>
+              {label}
+              {n>0 && <span style={{position:"absolute", top:6, left:"50%", marginLeft:label.length*3.4,
+                minWidth:15, height:15, lineHeight:"15px", borderRadius:8, padding:"0 4px",
+                background:T.accent, color:"#fff", fontSize:9.5, fontWeight:800}}>{n>9?"9+":n}</span>}
+            </button>);})}
         </nav>
 
         {/* ---- modal sheets ---- */}

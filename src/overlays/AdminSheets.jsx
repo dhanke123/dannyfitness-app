@@ -150,9 +150,10 @@ export default function AdminSheets() {
                   className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                 <textarea value={addTrainer.bio||""} onChange={e=>setAddTrainer(a=>({...a,bio:e.target.value}))} placeholder="Coach bio / about (shown to clients on Shop → About)" rows={2}
                   className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
-                <div className="flex gap-2">
-                  {[["per_class","Per class/PT"],["salary","Monthly salary"]].map(([k,l])=>(
-                    <button key={k} onClick={()=>setAddTrainer(a=>({...a,payType:k}))} className="flex-1 px-3 py-2 rounded-lg text-sm font-semibold"
+                {/* Three bases — per-head was in the payout sample but had no way to be entered. */}
+                <div className="flex gap-1.5">
+                  {[["per_class","Per class"],["per_head","Per head"],["salary","Salary"]].map(([k,l])=>(
+                    <button key={k} onClick={()=>setAddTrainer(a=>({...a,payType:k}))} className="flex-1 px-2 py-2 rounded-lg text-xs font-semibold"
                       style={{background:addTrainer.payType===k?T.ink:T.card,color:addTrainer.payType===k?T.paper:T.ink,border:`1.5px solid ${addTrainer.payType===k?T.ink:T.line}`}}>{l}</button>))}
                 </div>
                 {addTrainer.payType==="salary" ? (
@@ -160,15 +161,21 @@ export default function AdminSheets() {
                     className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                 ) : (
                   <div className="flex gap-2">
-                    <input value={addTrainer.perClass} onChange={e=>setAddTrainer(a=>({...a,perClass:e.target.value}))} placeholder="$ / class" type="number"
-                      className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    {addTrainer.payType==="per_head" ? (
+                      <input value={addTrainer.perHead||""} onChange={e=>setAddTrainer(a=>({...a,perHead:e.target.value}))} placeholder="$ / head" type="number"
+                        className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    ) : (
+                      <input value={addTrainer.perClass} onChange={e=>setAddTrainer(a=>({...a,perClass:e.target.value}))} placeholder="$ / class" type="number"
+                        className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>)}
                     <input value={addTrainer.perPt} onChange={e=>setAddTrainer(a=>({...a,perPt:e.target.value}))} placeholder="$ / PT" type="number"
                       className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                   </div>)}
+                {addTrainer.payType==="per_head" && <div className="text-xs" style={{color:T.muted}}>
+                  Paid per attendee actually marked present. No-shows don't count.</div>}
               </div>
               <Btn full disabled={!addTrainer.name} onClick={()=>{
                 const nm = addTrainer.name.trim();
-                const rateObj = {type:addTrainer.payType, perClass:+addTrainer.perClass||0, perPt:+addTrainer.perPt||0, monthly:+addTrainer.monthly||0};
+                const rateObj = {type:addTrainer.payType, perClass:+addTrainer.perClass||0, perHead:+addTrainer.perHead||0, perPt:+addTrainer.perPt||0, monthly:+addTrainer.monthly||0};
                 if (addTrainer.editId) {
                   const id = addTrainer.editId;
                   setTrainers(ts=>ts.map(t=>t.id!==id?t:{...t,name:nm,phone:addTrainer.phone,bio:addTrainer.bio}));

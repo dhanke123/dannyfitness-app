@@ -4,7 +4,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, H } from "../../ui/kit.jsx";
 
 export default function ClientAccount() {
-  const { active, classPass, credits, isClient, ledger, login, marketingOptIn, offers, ping, referralCode, referralReward, referralUses, setChatOpen, setCredits, setMarketingOptIn, setReferralReward, tab } = useApp();
+  const { active, classPass, credits, isClient, ledger, login, marketingOptIn, offers, optInAt, ping, referralCode, referralReward, referralUses, reminderChannel, setChatOpen, setCredits, setMarketingOptIn, setOptInAt, setReferralReward, setReminderChannel, tab } = useApp();
   return (<>
         {/* ==================== CLIENT: ACCOUNT ==================== */}
         {isClient && tab==="account" && (
@@ -44,14 +44,40 @@ export default function ClientAccount() {
                 <div key={l.id} className="flex justify-between text-sm py-1"><span>{l.what}</span><span className="font-bold">${l.amt}</span></div>))}
               {ledger.filter(l=>l.who==="Sam Lee").length===0 && <div className="text-sm" style={{color:T.muted}}>No payments yet in this demo.</div>}
             </Card>
+            {/* Decision 13/19 — members pick where reminders land. Email is the fallback, not SMS.
+                New members default to WhatsApp: they give a phone at OTP signup and may have no
+                email yet. Transactional messages always send; only marketing is gated by opt-in. */}
+            <Card>
+              <div className="text-sm font-semibold mb-0.5">Reminders &amp; confirmations</div>
+              <div className="text-xs mb-2.5" style={{color:T.muted}}>
+                Where we send booking confirmations and your 24h and 2h reminders.</div>
+              <div className="flex gap-2">
+                {[["whatsapp","WhatsApp","+65 9XXX XXXX"],["email","Email","sam@email.com"]].map(([k,l,sub])=>{
+                  const on = reminderChannel===k; return (
+                  <button key={k} onClick={()=>{ setReminderChannel(k); ping(`Reminders will come by ${l} from now on`); }}
+                    className="flex-1 px-3 py-2.5 rounded-xl text-left"
+                    style={{background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${on?T.ink:T.line}`}}>
+                    <div className="text-sm font-bold">{l}{on?" ✓":""}</div>
+                    <div className="text-[11px]" style={{color:on?"#B9B5A9":T.muted}}>{sub}</div>
+                  </button>);})}
+              </div>
+              <div className="text-[11px] mt-2" style={{color:T.muted}}>
+                Confirmations, reminders and cancellations always send — this only changes the channel.</div>
+            </Card>
+
             {/* working opt-in switch, not a dead label */}
             <Card className="flex justify-between items-center gap-3">
               <div className="flex-1">
                 <div className="text-sm font-semibold">Marketing messages</div>
                 <div className="text-xs" style={{color:T.muted}}>
-                  {marketingOptIn ? "You'll get offers & new-class alerts on WhatsApp and email." : "You'll only get booking confirmations and reminders."}</div>
+                  {marketingOptIn ? `You'll get offers & new-class alerts by ${reminderChannel==="email"?"email":"WhatsApp"}.` : "You'll only get booking confirmations and reminders."}</div>
+                {marketingOptIn && optInAt && <div className="text-[11px] mt-0.5" style={{color:T.muted}}>Consent recorded {optInAt}</div>}
               </div>
-              <button onClick={()=>{ setMarketingOptIn(v=>{ ping(v?"Marketing messages turned off":"Marketing messages turned on — you'll hear about new offers first"); return !v; }); }}
+              <button onClick={()=>{ setMarketingOptIn(v=>{ const next=!v;
+                  // PDPA: consent needs a timestamp. In the real build this is stamped server-side
+                  // by a trigger so the client can't backdate it.
+                  setOptInAt(next ? new Date().toLocaleString('en-GB',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : null);
+                  ping(v?"Marketing messages turned off":"Marketing messages turned on — you'll hear about new offers first"); return next; }); }}
                 role="switch" aria-checked={marketingOptIn} aria-label="Marketing messages"
                 style={{flex:"none", width:52, height:30, borderRadius:15, padding:3, cursor:"pointer",
                   background:marketingOptIn?T.moss:"#DED6C8", border:"none", transition:"background .15s"}}>

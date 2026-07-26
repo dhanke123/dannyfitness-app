@@ -1,15 +1,30 @@
 import { useApp } from "../../state/AppState.jsx";
 import { CLIENTS } from "../../data/seed.js";
+import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import { T } from "../../theme.js";
 import { Btn, Card, H } from "../../ui/kit.jsx";
 
 export default function StaffClients() {
-  const { credits, isAdmin, isClient, ping, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tab, user } = useApp();
+  const { credits, isAdmin, isClient, noShowQueue, ping, resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tab, user } = useApp();
   return (<>
         {/* ==================== TRAINER / ADMIN: CLIENTS ==================== */}
         {!isClient && tab==="clients" && (
           <main className="flex-1 pb-24 px-5">
             <H>Clients</H>
+
+            {/* ---- Queue 2 of 4: NO-SHOWS (Decisions 5, 6, 7) ----
+                 Class no-shows get the same treatment as PT: the coach marks absent, nothing
+                 auto-deducts, the admin decides. "Apply" is the approval (forfeit the credit),
+                 "Waive" is the denial — both capture a reason and are audit-logged. */}
+            {isAdmin && noShowQueue.length>0 && (
+              <div className="mb-4">
+                <ApprovalQueue
+                  label="NO-SHOW DECISIONS · nothing is deducted until you decide"
+                  items={noShowQueue.map(nq=>({ id:nq.id, title:nq.who, sub:`${nq.session} · Policy: ${nq.policy}` }))}
+                  onResolve={(id, approved, reason)=>resolveNoShow(id, approved, reason)}
+                  approveLabel="Apply forfeit" denyLabel="Waive" />
+              </div>)}
+
             {/* PR feed — a low-effort reason to congratulate clients (retention driver) */}
             <Card className="mb-3" style={{background:"#FBF3EC"}}>
               <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>RECENT CLIENT PRs 🏆</div>

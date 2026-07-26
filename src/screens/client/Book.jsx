@@ -1,12 +1,26 @@
 import { useApp } from "../../state/AppState.jsx";
-import { CAMP_CANCEL_DAYS, CT, PT_PRICE, isHead } from "../../data/seed.js";
+import { CT, PT_PRICE, isHead } from "../../data/seed.js";
 import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, fmtDM, fmtFull, locAbbr, toMin, weekLabel } from "../../lib/dates.js";
+import { downloadIcs, eventStart, googleCalUrl } from "../../lib/calendar.js";
 import { PT_DUR } from "../../lib/scheduling.js";
+import { AddToCalendar } from "../../components/ApprovalQueue.jsx";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Select, Ticks } from "../../ui/kit.jsx";
 
 export default function ClientBook() {
-  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, otherPlace, ping, ptByTrainer, ptLoc, ptPool, ptTrainers, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
+  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, otherPlace, ping, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
+
+  /* One place that turns any booking into a calendar event (Decision 14). Both the .ics
+     download and the Google URL are built from the same object, so they can never drift. */
+  const calEvent = (ev) => ({
+    title: ev.title, start: eventStart(ev.weekOff, ev.day, ev.time), minutes: ev.minutes || 60,
+    location: ev.location || "", uid: ev.uid,
+    details: `${ev.details || ""}\nManage or cancel in the ExerciseOnly app.`.trim(),
+  });
+  const CalRow = ({ ev }) => { const e = calEvent(ev); return (
+    <AddToCalendar compact onIcs={()=>{ downloadIcs(e); ping("Calendar file downloaded — open it to add the session"); }}
+      onGoogle={()=>window.open(googleCalUrl(e), "_blank", "noopener")} />); };
+
   return (<>
         {/* ==================== CLIENT: BOOK ==================== */}
         {isClient && tab==="book" && (
@@ -183,7 +197,7 @@ export default function ClientBook() {
               const gridH=(HEND-HSTART)*PXH;
               const evClick = (e) => {
                 if (e.kind==="pt") { const hrs=hoursUntil(e.pt.weekOff, e.pt.day, e.pt.time);
-                  setClientMove({...e.pt, newWeek:e.pt.weekOff??0, newDay:e.pt.day, newTime:e.pt.time, locked:hrs<cancelHrs}); }
+                  setClientMove({...e.pt, newWeek:e.pt.weekOff??0, newDay:e.pt.day, newTime:e.pt.time, locked:hrs<policy.ptHrs}); }
                 else ping(`${e.title} · ${e.time} · ${e.sub}`);
               };
               const DayGrid = ({w, d, wide, compact}) => { const evs=evsFor(w,d); const lanes=evs._lanes; return (
@@ -230,42 +244,94 @@ export default function ClientBook() {
 
                 {myView==="list" && <div className="space-y-3">
                 {none && <div className="text-center py-12 text-sm" style={{color:T.muted}}>No bookings yet. Book a class, PT or camp from the tabs above.</div>}
-                {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
-                  <Card key={sid} className="flex items-center gap-3">
-                    <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{s.time}</div>
-                    <div className="flex-1"><div className="font-semibold text-sm">{CT[s.type].name} · {bookDates[sid]||DAYS[s.day]}</div>
-                      <div className="text-xs" style={{color:T.muted}}>{locName(s.loc)} · Coach {tName(s.trainer)}</div></div>
-                    <Btn kind="ghost" small onClick={()=>cancelClass(sid)}>Cancel</Btn>
+                {myClassBookings.map(sid=>{ const s=sessions.find(x=>x.id===sid); const w=bookWeeks[sid]??0;
+                  const hrs=hoursUntil(w, s.day, s.time); const canCancel=hrs>policy.classHrs; return (
+                  <Card key={sid}>
+                    <div className="flex items-center gap-3">
+                      <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{s.time}</div>
+                      <div className="flex-1"><div className="font-semibold text-sm">{CT[s.type].name} · {bookDates[sid]||DAYS[s.day]}</div>
+                        <div className="text-xs" style={{color:T.muted}}>{locName(s.loc)} · Coach {tName(s.trainer)}</div></div>
+                      {canCancel && <Btn kind="ghost" small onClick={()=>cancelClass(sid)}>Cancel</Btn>}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 mt-2.5">
+                      <CalRow ev={{title:`${CT[s.type].name} · ExerciseOnly`, weekOff:w, day:s.day, time:s.time,
+                        minutes:CT[s.type].dur, location:locName(s.loc), uid:`class-${sid}-w${w}`,
+                        details:`Coach ${tName(s.trainer)}`}}/>
+                      {/* Decision 4 — classes are not rescheduled. Cancel and rebook. */}
+                      {!canCancel && <Btn small kind="ghost" onClick={()=>setExceptionSheet({
+                        what:`${CT[s.type].name} · ${bookDates[sid]||DAYS[s.day]} ${s.time}`, kind:"class",
+                        ask:"cancel", hrs:Math.max(0,Math.round(hrs)), reason:""})}>Request an exception</Btn>}
+                    </div>
+                    {!canCancel && <div className="text-[11px] mt-1.5" style={{color:T.accent}}>
+                      Inside the {policy.classHrs}h window — cancelling now needs approval.</div>}
                   </Card>);})}
-                {myPT.map(b=>{ const hrs=hoursUntil(b.weekOff, b.day, b.time); const canChange=hrs>cancelHrs; return (
+                {myPT.map(b=>{ const hrs=hoursUntil(b.weekOff, b.day, b.time); const canChange=hrs>policy.ptHrs;
+                  const where = b.loc==="other" ? (b.otherLabel||"Other spot") : locName(b.loc); return (
                   <Card key={b.id}>
                     <div className="flex items-center gap-3">
                       <div style={{...disp,fontWeight:700,fontSize:20,minWidth:52}} className="text-right">{b.time}</div>
                       <div className="flex-1"><div className="font-semibold text-sm">Personal Training · {b.date||DAYS[b.day]}</div>
-                        <div className="text-xs" style={{color:T.muted}}>{b.loc==="other" ? b.otherLabel : locName(b.loc)} · Coach {tName(b.trainer)}{isHead(b.trainer)?" ★":""}</div></div>
+                        <div className="text-xs" style={{color:T.muted}}>{where} · Coach {tName(b.trainer)}{isHead(b.trainer)?" ★":""}</div></div>
                     </div>
-                    <div className="flex gap-2 mt-2.5">
-                      <Btn small kind="ghost" full disabled={!canChange}
-                        onClick={()=>setClientMove({...b, newWeek:b.weekOff??0, newDay:b.day, newTime:b.time, locked:false})}>Modify</Btn>
-                      <Btn small kind="ghost" full onClick={()=>cancelPT(b.id)}>Cancel</Btn>
+                    {/* Decision 3 — PT reschedule is unlimited, as long as it's outside the window. */}
+                    {canChange ? (
+                      <div className="flex gap-2 mt-2.5">
+                        <Btn small kind="ghost" full
+                          onClick={()=>setClientMove({...b, newWeek:b.weekOff??0, newDay:b.day, newTime:b.time, locked:false})}>Modify</Btn>
+                        <Btn small kind="ghost" full onClick={()=>cancelPT(b.id)}>Cancel</Btn>
+                      </div>
+                    ) : (
+                      <div className="mt-2.5">
+                        {/* Decision 1a — inside the window is a request, not a dead end. */}
+                        <Btn small kind="ghost" full onClick={()=>setExceptionSheet({
+                          what:`PT · ${tName(b.trainer)} · ${b.date||DAYS[b.day]} ${b.time}`, kind:"pt",
+                          ask:"change", hrs:Math.max(0,Math.round(hrs)), reason:""})}>Request an exception</Btn>
+                        <div className="text-[11px] mt-1.5 text-center" style={{color:T.accent}}>
+                          Inside the {policy.ptHrs}h window — tell us why and we'll take a look.</div>
+                      </div>)}
+                    <div className="mt-2.5">
+                      <CalRow ev={{title:`PT with ${tName(b.trainer)} · ExerciseOnly`, weekOff:b.weekOff, day:b.day,
+                        time:b.time, minutes:PT_DUR, location:where, uid:`pt-${b.id}`,
+                        details:`Personal training with Coach ${tName(b.trainer)}`}}/>
                     </div>
-                    {!canChange && <div className="text-[11px] mt-1.5 text-center" style={{color:T.accent}}>
-                      Inside the {cancelHrs}h window — message ExerciseOnly to change this session.</div>}
                   </Card>);})}
-                {myCamps.map(cid=>{ const c=camps.find(x=>x.id===cid); const canCancel=(c.startInDays??99)>CAMP_CANCEL_DAYS; return (
-                  <Card key={cid} className="flex items-center gap-3" style={{background:"#FBEDEF"}}>
-                    <div className="flex-1"><div className="font-semibold text-sm">{c.name}</div>
-                      <div className="text-xs" style={{color:T.plum}}>{c.dates} · {locName(c.loc)}{c.type==="Kids"?" · waiver on file":""}</div></div>
-                    {canCancel ? <Btn kind="ghost" small onClick={()=>cancelCamp(cid)}>Cancel</Btn>
-                      : <span className="text-xs text-right" style={{color:T.muted}}>Cancellation<br/>closed</span>}
+                {/* Decision 16 — camps use the DAYS rule only; there is no 24h camp setting. */}
+                {myCamps.map(cid=>{ const c=camps.find(x=>x.id===cid); const canCancel=(c.startInDays??99)>policy.campDays; return (
+                  <Card key={cid} style={{background:"#FBEDEF"}}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1"><div className="font-semibold text-sm">{c.name}</div>
+                        <div className="text-xs" style={{color:T.plum}}>{c.dates} · {locName(c.loc)}{c.type==="Kids"?" · waiver on file":""}</div></div>
+                      {canCancel && <Btn kind="ghost" small onClick={()=>cancelCamp(cid)}>Cancel</Btn>}
+                    </div>
+                    {!canCancel && (
+                      <div className="mt-2.5">
+                        <Btn small kind="ghost" full onClick={()=>setExceptionSheet({
+                          what:`${c.name} · ${c.dates}`, kind:"camp", ask:"cancel", days:c.startInDays??0, reason:""})}>Request an exception</Btn>
+                        <div className="text-[11px] mt-1.5 text-center" style={{color:T.plum}}>
+                          Starts in under {policy.campDays} day{policy.campDays===1?"":"s"} — cancelling now needs approval.</div>
+                      </div>)}
                   </Card>);})}
                 {myWaitlist.map(sid=>{ const s=sessions.find(x=>x.id===sid); return (
                   <Card key={sid} className="flex items-center gap-3" style={{background:"#FBF3EC"}}>
                     <div className="flex-1"><div className="font-semibold text-sm">Waitlisted · {CT[s.type].name} · {DAYS[s.day]} {s.time}</div>
                       <div className="text-xs" style={{color:T.accent}}>We'll WhatsApp you if a spot opens</div></div>
                   </Card>);})}
+                {/* Decision 2 — credit back is automatic; money back is a request the admin actions. */}
+                {refundables.length>0 && <>
+                  <div className="text-xs font-bold pt-2" style={{color:T.muted}}>CREDITED BACK · you can ask for the money instead</div>
+                  {refundables.map(r=>(
+                    <Card key={r.id} className="!p-3" style={{background:"#EFF3EE"}}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1"><div className="text-sm font-semibold">{r.what}</div>
+                          <div className="text-xs" style={{color:T.muted}}>${r.amt} · paid by {r.method} · cancelled {r.when} · already back on your account as credit</div></div>
+                      </div>
+                      <Btn small kind="ghost" full onClick={()=>requestRefund(r, "")}>Request a bank refund instead</Btn>
+                    </Card>))}
+                </>}
+
                 {!none && <div className="text-xs text-center pt-1" style={{color:T.muted}}>
-                  Free changes & cancellation until {cancelHrs}h before. Inside {cancelHrs}h, message ExerciseOnly.</div>}
+                  Free changes & cancellation until {policy.classHrs}h before a class, {policy.ptHrs}h before PT and {policy.campDays} day{policy.campDays===1?"":"s"} before a camp.
+                  Inside that, request an exception and we'll review it.</div>}
                 </div>}
 
                 {myView==="cal" && <div>
