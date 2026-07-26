@@ -29,6 +29,13 @@ export const locAbbr = (loc) => loc==="other" ? "OTH" : String(loc||"").toUpperC
 
 export const firstName = (n) => String(n||"").split(" ")[0];
 
+/* ---------- calendar grid bounds ----------
+   Shared by the client Booked calendar and the trainer/admin schedule so the two can
+   never drift apart. Column width and row height stay per-view (the client grid is
+   narrower); only the hour range is common. */
+export const CAL_HSTART = 5;   // grid starts 5:00 am
+export const CAL_HEND   = 22;  // grid ends 10:00 pm
+
 /* ---------- time helpers ---------- */
 export const toMin = (t) => { const [h,m] = t.split(":").map(Number); return h*60+m; };
 

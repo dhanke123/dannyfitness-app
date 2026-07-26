@@ -1,6 +1,6 @@
 import { useApp } from "../../state/AppState.jsx";
 import { CT, isHead, weekExtras } from "../../data/seed.js";
-import { DAYS, FULLDAYS, TODAY, dateFor, firstName, fmtDM, locAbbr, toMin, upcomingDate, weekLabel } from "../../lib/dates.js";
+import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, firstName, fmtDM, locAbbr, toMin, upcomingDate, weekLabel } from "../../lib/dates.js";
 import { PT_DUR, sessTrainers } from "../../lib/scheduling.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, H, Select } from "../../ui/kit.jsx";
@@ -20,7 +20,7 @@ export default function StaffSchedule() {
             {/* ---- CALENDAR: Google-Calendar-style time-grid — day or full-week ---- */}
             {schedView==="cal" && (() => {
               const toMin = (t)=>{ const [h,m]=t.split(":").map(Number); return h*60+m; };
-              const HSTART=6, HEND=22, PXH=52, GUT=40, HEADH=34;
+              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=52, GUT=40, HEADH=34;
               const gridH=(HEND-HSTART)*PXH;
               // events for a weekday, respecting role + admin trainer filter, with lane packing
               const evsForDay = (d) => {
@@ -73,12 +73,18 @@ export default function StaffSchedule() {
                       {h>32 && <div style={{opacity:.9}}>{e.sub}</div>}
                     </div>);})}
                 </div>);};
+              // Hour labels 6:00 … 22:00. First and last nudged inside the box — at top:-5
+              // the 6:00 label was clipped by the wrapper's overflow-hidden, and 22:00 was
+              // never drawn, so the grid appeared to stop at 21:00.
               const TimeGutter = ({top}) => (
                 <div style={{width:GUT, flex:"none"}}>
                   {top && <div style={{height:HEADH}}/>}
                   <div style={{position:"relative", height:gridH}}>
-                    {Array.from({length:HEND-HSTART}).map((_,i)=>(
-                      <div key={i} className="absolute text-[10px]" style={{top:i*PXH-5, left:2, color:T.muted}}>{HSTART+i}:00</div>))}
+                    {Array.from({length:HEND-HSTART+1}).map((_,i)=>{
+                      const last = i===HEND-HSTART;
+                      return (
+                      <div key={i} className="absolute text-[10px]"
+                        style={{top: last ? gridH-9 : Math.max(0, i*PXH-5), left:2, color:T.muted}}>{HSTART+i}:00</div>);})}
                   </div>
                 </div>);
               const dayCount = (d)=>evsForDay(d).length;

@@ -1,6 +1,6 @@
 import { useApp } from "../../state/AppState.jsx";
 import { CAMP_CANCEL_DAYS, CT, PT_PRICE, isHead } from "../../data/seed.js";
-import { DAYS, FULLDAYS, TODAY, dateFor, fmtDM, fmtFull, locAbbr, toMin, weekLabel } from "../../lib/dates.js";
+import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, fmtDM, fmtFull, locAbbr, toMin, weekLabel } from "../../lib/dates.js";
 import { PT_DUR } from "../../lib/scheduling.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Select, Ticks } from "../../ui/kit.jsx";
@@ -179,7 +179,7 @@ export default function ClientBook() {
                 evs._lanes = Math.max(1, laneEnds.length);
                 return evs;
               };
-              const HSTART=6, HEND=22, PXH=48, GUT=38, HEADH=32;
+              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=48, GUT=38, HEADH=32;
               const gridH=(HEND-HSTART)*PXH;
               const evClick = (e) => {
                 if (e.kind==="pt") { const hrs=hoursUntil(e.pt.weekOff, e.pt.day, e.pt.time);
@@ -207,12 +207,18 @@ export default function ClientBook() {
                       {h>32 && <div style={{opacity:.9}}>{e.sub}</div>}
                     </div>);})}
                 </div>);};
+              // Hour labels 6:00 … 22:00. The first and last are nudged inside the box —
+              // at top:-5 the 6:00 label was being clipped by the wrapper's overflow-hidden,
+              // and 22:00 was never drawn at all, so the grid looked like it stopped at 21:00.
               const TimeGutter = ({top}) => (
                 <div style={{width:GUT, flex:"none"}}>
                   {top && <div style={{height:HEADH}}/>}
                   <div style={{position:"relative", height:gridH}}>
-                    {Array.from({length:HEND-HSTART}).map((_,i)=>(
-                      <div key={i} className="absolute text-[10px]" style={{top:i*PXH-5, left:2, color:T.muted}}>{HSTART+i}:00</div>))}
+                    {Array.from({length:HEND-HSTART+1}).map((_,i)=>{
+                      const last = i===HEND-HSTART;
+                      return (
+                      <div key={i} className="absolute text-[10px]"
+                        style={{top: last ? gridH-9 : Math.max(0, i*PXH-5), left:2, color:T.muted}}>{HSTART+i}:00</div>);})}
                   </div>
                 </div>);
               return (
