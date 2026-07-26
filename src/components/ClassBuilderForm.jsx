@@ -10,10 +10,16 @@
 
 import { useApp } from "../state/AppState.jsx";
 import { CT, isHead } from "../data/seed.js";
-import { DAYS } from "../lib/dates.js";
+import { DAYS, fromISO, isoFor, toISO } from "../lib/dates.js";
 import { SEVERITY, allConflicts, hasBlocking } from "../lib/conflicts.js";
 import { T, disp } from "../theme.js";
-import { Btn, Select } from "../ui/kit.jsx";
+import { Btn, DateInput, Select, TimeInput } from "../ui/kit.jsx";
+
+const endTime = (t, mins) => {
+  const [h,m] = String(t||"0:0").split(":").map(Number);
+  const tot = h*60+m+mins;
+  return `${String(Math.floor(tot/60)%24).padStart(2,"0")}:${String(tot%60).padStart(2,"0")}`;
+};
 
 export default function ClassBuilderForm() {
   const { classBuilder, setClassBuilder, saveClass, locations, locName,
@@ -24,12 +30,18 @@ export default function ClassBuilderForm() {
 
   const dur = CT[cb.type]?.dur || 60;
   const ctx = { sessions, ptBookings, timeOff, camps, travel };
-  const conflicts = cb.trainers.length
-    ? allConflicts({ trainers: cb.trainers, day: cb.day, time: cb.time, durMin: dur, loc: cb.loc },
+  /* A weekday alone can't be conflict-checked properly: "Wednesday 09:00" clashes
+     with every Wednesday forever, and a coach's single-date leave is invisible to
+     it. The picker takes a real date and derives the weekday and week offset, so
+     a clash is checked against the day it actually happens. */
+  const picked = fromISO(cb.date);
+  const conflicts = (cb.trainers.length && picked)
+    ? allConflicts({ trainers: cb.trainers, day: picked.day, weekOff: picked.weekOff,
+                     time: cb.time, durMin: dur, loc: cb.loc },
                    ctx, tName, locName, cb.editId)
     : [];
   const blocked = hasBlocking(conflicts);
-  const ready = cb.trainers.length > 0 && cb.time && cb.loc && +cb.cap > 0 && !blocked;
+  const ready = cb.trainers.length > 0 && picked && !picked.past && cb.time && cb.loc && +cb.cap > 0 && !blocked;
 
   const toggleCoach = (id) =>
     set("trainers", cb.trainers.includes(id) ? cb.trainers.filter(x => x !== id) : [...cb.trainers, id]);
@@ -63,19 +75,25 @@ export default function ClassBuilderForm() {
 
         <div className="flex gap-2 mb-3">
           <div className="flex-1">
-            <div className="text-xs font-bold mb-1" style={{color:T.muted}}>DAY</div>
-            <Select value={String(cb.day)} onChange={v=>set("day", +v)} style={{width:"100%"}}
-              options={DAYS.map((d,i)=>[String(i), d])}/>
+            <div className="text-xs font-bold mb-1" style={{color:T.muted}}>DATE</div>
+            <DateInput value={cb.date} min={toISO(new Date())} onChange={v=>set("date", v)} style={{width:"100%"}}/>
           </div>
-          <div className="flex-1">
+          <div style={{width:112}}>
             <div className="text-xs font-bold mb-1" style={{color:T.muted}}>START</div>
-            <input value={cb.time} onChange={e=>set("time", e.target.value)} placeholder="07:00" style={field}/>
+            <TimeInput value={cb.time} onChange={v=>set("time", v)} style={{width:"100%"}}/>
           </div>
           <div style={{width:74}}>
             <div className="text-xs font-bold mb-1" style={{color:T.muted}}>CAP</div>
             <input value={cb.cap} onChange={e=>set("cap", e.target.value)} type="number" style={field}/>
           </div>
         </div>
+
+        {picked && (
+          <div className="text-[11px] mb-2" style={{color: picked.past ? T.accent : T.muted}}>
+            {picked.past
+              ? "That date has passed — pick a future one."
+              : `${picked.date.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'})} · ${cb.time}–${endTime(cb.time,dur)} · ${dur} min`}
+          </div>)}
 
         <div className="text-xs font-bold mb-1" style={{color:T.muted}}>LOCATION</div>
         <div className="mb-3">
@@ -123,12 +141,17 @@ export default function ClassBuilderForm() {
           <div className="mb-3">
             <div className="text-xs font-bold mb-1" style={{color:T.muted}}>REPEAT</div>
             <div className="flex gap-1.5">
-              {[[1,"Once"],[4,"4 weeks"],[8,"8 weeks"],[12,"12 weeks"]].map(([n,l])=>(
+              {[[1,"Just once"],[4,"4 weeks"],[8,"8 weeks"],[12,"12 weeks"]].map(([n,l])=>(
                 <button key={n} onClick={()=>set("repeat", n)}
                   className="flex-1 px-2 py-1.5 rounded-lg text-xs font-bold"
                   style={{background:cb.repeat===n?T.ink:"transparent", color:cb.repeat===n?T.paper:T.ink,
                           border:`1.5px solid ${cb.repeat===n?T.ink:T.line}`}}>{l}</button>))}
             </div>
+            {cb.repeat>1 && picked && !picked.past && (
+              <div className="text-[11px] mt-1" style={{color:T.muted}}>
+                Same weekday and time each week, ending {new Date(new Date(cb.date).getTime()+(cb.repeat-1)*7*86400000)
+                  .toLocaleDateString('en-GB',{day:'numeric',month:'short'})}. Each one is checked separately.
+              </div>)}
           </div>)}
 
         <Btn full disabled={!ready} onClick={()=>saveClass(cb)}>
@@ -136,7 +159,7 @@ export default function ClassBuilderForm() {
         </Btn>
         {!ready && !blocked && (
           <div className="text-center text-xs mt-2" style={{color:T.muted}}>
-            Needs a coach, a start time, a location and a capacity.</div>)}
+            Needs a date, a start time, a location, a capacity and at least one coach.</div>)}
       </div>
     </div>);
 }

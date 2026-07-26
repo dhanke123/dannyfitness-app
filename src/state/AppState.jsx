@@ -3,7 +3,7 @@
    consuming useApp() should not need to change. */
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { COUPONS, CT, PT_PRICE, TRAINERS, isHead, mkSet, seedAbout, seedCamps, seedClassTemplates, seedLeads, seedLedger, seedLocations, seedOffers, seedProducts, seedPtBookings, seedRoutines, seedSessions, seedShifts, seedTimeOff, seedTravel, seedWorkoutSessions } from "../data/seed.js";
-import { DAYS, TODAY, dateFor, fmtFull, toMin } from "../lib/dates.js";
+import { DAYS, TODAY, dateFor, fmtFull, fromISO, isoFor, toMin } from "../lib/dates.js";
 import { EXLIB, best1RM, bestWeight, est1RM, estKcal, exMeta, isWorking, muscleOf } from "../lib/metrics.js";
 import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../lib/scheduling.js";
 import { nid } from "../lib/util.js";
@@ -73,7 +73,7 @@ export function AppProvider({ children }) {
   const [showCancelled, setShowCancelled] = useState(true);// calendar: keep cancelled visible
 
   const openClassBuilder = (seed) => setClassBuilder({
-    editId:null, type:"STR", day:TODAY, time:"07:00", loc:seedLocations[0]?.id,
+    editId:null, type:"STR", date:isoFor(0, TODAY), time:"07:00", loc:seedLocations[0]?.id,
     cap:10, trainers:[], repeat:1, ...seed });
 
   /* Save re-runs the conflict check. The form checks live, but state can move
@@ -81,24 +81,31 @@ export function AppProvider({ children }) {
      or a member takes a PT slot. Validating only in the UI is validating nowhere. */
   const saveClass = (cb) => {
     const dur = CT[cb.type]?.dur || 60;
+    const picked = fromISO(cb.date);
+    if (!picked) { ping("Pick a date for the class"); return; }
     const ctx = { sessions, ptBookings, timeOff, camps, travel };
-    const found = allConflicts({trainers:cb.trainers, day:cb.day, time:cb.time, durMin:dur, loc:cb.loc},
-                               ctx, tName, locName, cb.editId);
+    const found = allConflicts({trainers:cb.trainers, day:picked.day, weekOff:picked.weekOff,
+                                time:cb.time, durMin:dur, loc:cb.loc}, ctx, tName, locName, cb.editId);
     if (hasBlocking(found)) { ping(found.find(f=>f.severity==="block").message); return; }
 
     if (cb.editId) {
       setSessions(ss => ss.map(x => x.id!==cb.editId ? x : {
-        ...x, type:cb.type, day:cb.day, time:cb.time, loc:cb.loc, cap:+cb.cap||8,
+        ...x, type:cb.type, day:picked.day, weekOff:picked.weekOff, date:cb.date,
+        time:cb.time, loc:cb.loc, cap:+cb.cap||8,
         trainers:[...cb.trainers], trainer:cb.trainers[0] }));
-      logAudit(`Class edited · ${CT[cb.type].name} ${DAYS[cb.day]} ${cb.time}`);
+      logAudit(`Class edited · ${CT[cb.type].name} ${cb.date} ${cb.time}`);
       ping(`${CT[cb.type].name} updated`);
     } else {
       const n = Math.max(1, +cb.repeat || 1);
-      const made = Array.from({length:n}).map(() => ({
-        id:nid(), type:cb.type, day:cb.day, time:cb.time, loc:cb.loc, cap:+cb.cap||8,
+      // Each repeat is a separate dated session, so each can be cancelled, moved
+      // or conflict-checked on its own — a single recurring row can't be.
+      const made = Array.from({length:n}).map((_,i) => ({
+        id:nid(), type:cb.type, day:picked.day, weekOff:picked.weekOff + i,
+        date:isoFor(picked.weekOff + i, picked.day),
+        time:cb.time, loc:cb.loc, cap:+cb.cap||8,
         trainer:cb.trainers[0], trainers:[...cb.trainers], attendees:[], status:"scheduled" }));
       setSessions(ss => [...ss, ...made]);
-      logAudit(`Class created · ${CT[cb.type].name} ${DAYS[cb.day]} ${cb.time} · ${cb.trainers.map(tName).join(" + ")}`);
+      logAudit(`Class created · ${CT[cb.type].name} ${cb.date} ${cb.time} · ${cb.trainers.map(tName).join(" + ")} · ${n}x`);
       ping(n>1 ? `${n} weekly ${CT[cb.type].name} classes created` : `${CT[cb.type].name} created — live in the timetable`);
     }
     setClassBuilder(null);

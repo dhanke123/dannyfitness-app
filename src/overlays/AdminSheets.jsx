@@ -9,7 +9,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Select } from "../ui/kit.jsx";
 
 export default function AdminSheets() {
-  const { productForm, setProductForm, addProduct, addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, receiptSheet, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setMeasForm, setMeasurements, setPerm, setRates, setReceiptSheet, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
+  const { sessions, ptBookings, timeOff, camps, travel, locName, productForm, setProductForm, addProduct, addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, receiptSheet, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setMeasForm, setMeasurements, setPerm, setRates, setReceiptSheet, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
   return (<>
         <ClassBuilderForm/>
         {/* Adding a pack used to be a toast that created nothing. */}
@@ -231,6 +231,7 @@ export default function AdminSheets() {
         {/* camp builder sheet */}
         {campBuilder && (
           <CampBuilderForm camp={campBuilder} locations={locations} trainers={trainers}
+            ctx={{sessions, ptBookings, timeOff, camps, travel}} tName={tName} locName={locName}
             onCancel={()=>setCampBuilder(null)}
             onSave={(c)=>{
               setCamps(cs => c.id && cs.some(x=>x.id===c.id) ? cs.map(x=>x.id===c.id?c:x) : [...cs, {...c, id:c.id||nid(), spots:(c.spots ?? (+c.cap||0))}]);

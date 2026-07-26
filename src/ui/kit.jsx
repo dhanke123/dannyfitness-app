@@ -43,3 +43,19 @@ export const Select = ({value,onChange,options,style={}}) => (
     style={{...body, border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, ...style}}>
     {options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
   </select>);
+
+/* Native date/time inputs. A free-text time box was accepting "9am" and "banana",
+   which parse to NaN — and because every NaN comparison is false, the conflict
+   engine silently found nothing wrong. Native inputs give a real picker on
+   phones and can only produce a valid value. */
+export const TimeInput = ({ value, onChange, style }) => (
+  <input type="time" value={value || ""} onChange={e=>onChange(e.target.value)} step="300"
+    className="px-2 py-1.5 rounded-lg text-sm outline-none"
+    style={{border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, ...style}}/>
+);
+
+export const DateInput = ({ value, onChange, min, style }) => (
+  <input type="date" value={value || ""} min={min} onChange={e=>onChange(e.target.value)}
+    className="px-2 py-1.5 rounded-lg text-sm outline-none"
+    style={{border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, ...style}}/>
+);

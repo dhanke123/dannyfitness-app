@@ -20,20 +20,26 @@ const overlaps = (aS, aE, bS, bE) => aS < bE && aE > bS;
 export const SEVERITY = { BLOCK: "block", WARN: "warn" };
 
 /* Everything a coach is committed to on one weekday, as minute ranges. */
-export function commitments(trainerId, day, ctx, ignoreSessionId) {
+export function commitments(trainerId, day, ctx, ignoreSessionId, weekOff) {
+  /* weekOff-aware. A session carrying an explicit weekOff exists only in that
+     week; seed timetable rows have none and recur every week. Without this a
+     class created for 12 August clashes with one created for 19 August purely
+     because both fall on a Tuesday. */
+  const sameWeek = (x) => weekOff == null || x.weekOff == null || x.weekOff === weekOff;
   const { sessions = [], ptBookings = [], timeOff = [], camps = [] } = ctx;
   const out = [];
 
   sessions.filter(s => s.id !== ignoreSessionId
                     && s.status !== "cancelled"
                     && sessTrainers(s).includes(trainerId)
-                    && s.day === day)
+                    && s.day === day && sameWeek(s))
     .forEach(s => out.push({
       kind: "class", start: toMin(s.time), end: toMin(s.time) + (CT[s.type]?.dur || 60),
       loc: s.loc, label: CT[s.type]?.name || "Class",
     }));
 
-  ptBookings.filter(b => b.trainer === trainerId && b.day === day && b.status !== "cancelled")
+  ptBookings.filter(b => b.trainer === trainerId && b.day === day
+                      && b.status !== "cancelled" && sameWeek(b))
     .forEach(b => out.push({
       kind: "pt", start: toMin(b.time), end: toMin(b.time) + PT_DUR,
       loc: b.loc, label: `PT · ${b.who || "client"}`,
@@ -45,7 +51,9 @@ export function commitments(trainerId, day, ctx, ignoreSessionId) {
     const abs = (c.startInDays ?? 0) + i;
     if (((abs % 7) + 7) % 7 !== day) return;
     (cd.sessions || []).forEach(cs => {
-      if (cs.trainer !== trainerId) return;
+      // camp blocks can now carry more than one coach
+      const coaches = cs.trainers || (cs.trainer ? [cs.trainer] : []);
+      if (!coaches.includes(trainerId)) return;
       out.push({ kind: "camp", start: toMin(cs.start),
         end: toMin(cs.start) + Math.round((cs.hours || 1) * 60),
         loc: c.loc, label: `${c.name} — ${cs.activity}` });
@@ -64,13 +72,13 @@ export function commitments(trainerId, day, ctx, ignoreSessionId) {
 
 /* Check a proposed session against every coach assigned to it.
    Returns [] when clear. */
-export function checkSessionConflicts({ trainers = [], day, time, durMin, loc },
+export function checkSessionConflicts({ trainers = [], day, time, durMin, loc, weekOff },
                                       ctx, tName, locName, ignoreSessionId) {
   const start = toMin(time), end = start + durMin;
   const found = [];
 
   trainers.forEach(tid => {
-    commitments(tid, day, ctx, ignoreSessionId).forEach(c => {
+    commitments(tid, day, ctx, ignoreSessionId, weekOff).forEach(c => {
       if (overlaps(start, end, c.start, c.end)) {
         found.push({
           severity: SEVERITY.BLOCK, trainer: tid,
@@ -102,10 +110,11 @@ const fmt = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 
 /* Two classes at the same venue and time. Not automatically wrong — these are
    outdoor locations and Danny may run two groups side by side — so it's a warning
    that surfaces the decision rather than a rule that assumes one. */
-export function checkVenueClash({ day, time, durMin, loc }, ctx, locName, ignoreSessionId) {
+export function checkVenueClash({ day, time, durMin, loc, weekOff }, ctx, locName, ignoreSessionId) {
   const start = toMin(time), end = start + durMin;
   const clash = (ctx.sessions || []).filter(s =>
     s.id !== ignoreSessionId && s.status !== "cancelled" && s.day === day && s.loc === loc &&
+    (weekOff == null || s.weekOff == null || s.weekOff === weekOff) &&
     overlaps(start, end, toMin(s.time), toMin(s.time) + (CT[s.type]?.dur || 60)));
   return clash.length ? [{
     severity: SEVERITY.WARN, trainer: null,
@@ -115,6 +124,12 @@ export function checkVenueClash({ day, time, durMin, loc }, ctx, locName, ignore
 
 /* Everything, in one call. */
 export function allConflicts(draft, ctx, tName, locName, ignoreSessionId) {
+  // An unparseable time makes every overlap test NaN-false, i.e. "no conflicts".
+  // Fail loudly instead of silently approving everything.
+  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(String(draft.time || ""))) {
+    return [{ severity: SEVERITY.BLOCK, trainer: null,
+      message: `"${draft.time || "(empty)"}" isn't a valid time — use 24-hour HH:MM` }];
+  }
   return [
     ...checkSessionConflicts(draft, ctx, tName, locName, ignoreSessionId),
     ...checkVenueClash(draft, ctx, locName, ignoreSessionId),
