@@ -3,6 +3,7 @@ import { COUPONS, TRAINERS } from "../../data/seed.js";
 import { DEFAULT_TRAVEL, PT_DUR, travelKey } from "../../lib/scheduling.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import PayoutReport from "../../components/PayoutReport.jsx";
+import Reports from "../../components/Reports.jsx";
 import { nid } from "../../lib/util.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip } from "../../ui/kit.jsx";
@@ -18,8 +19,8 @@ export default function AdminManage() {
                 A 3×2 grid fits, gives every section equal weight, and keeps the count
                 visible — a hidden tab is a tab that never gets used. Settings gains a
                 text label too; a lone gear icon in a full-width cell read as a mistake. */}
-            <div className="grid grid-cols-3 gap-2 pb-3">
-              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],["payouts","Payouts"],
+            <div className="grid grid-cols-4 gap-1.5 pb-3">
+              {[["dash","Dash"],["reports","Reports"],["people","People"],["products","Products"],["money","Money"],["payouts","Payouts"],
                 ["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
@@ -27,7 +28,7 @@ export default function AdminManage() {
                 const n = k==="money" ? pendingCounts.refunds + pendingCounts.receipts : 0;
                 return (
                 <button key={k} onClick={()=>setAdminSec(k)}
-                  className="px-2 py-1.5 rounded-full text-sm font-semibold relative"
+                  className="px-1.5 py-1.5 rounded-full text-xs font-semibold relative"
                   style={{background:adminSec===k?T.ink:"transparent", color:adminSec===k?T.paper:T.ink,
                           border:`1.5px solid ${adminSec===k?T.ink:T.line}`, minWidth:0}}>
                   {l}
@@ -276,6 +277,8 @@ export default function AdminManage() {
                 </Card>))}
               <div className="text-xs" style={{color:T.muted}}>Trainer payouts: sessions × rate, monthly export. All actions audited.</div>
             </div>}
+
+            {adminSec==="reports" && <Reports/>}
 
             {/* Round-2 [confirm] deliverable: the monthly sheet Danny hands over to pay coaches. */}
             {adminSec==="payouts" && <PayoutReport/>}

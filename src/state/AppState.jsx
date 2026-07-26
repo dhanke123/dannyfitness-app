@@ -9,6 +9,7 @@ import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../li
 import { nid } from "../lib/util.js";
 import { fetchProfile, isConfigured, looksLikeSgMobile, supabase, toAppUser, toE164 } from "../lib/supabase.js";
 import { buildNotifications } from "../lib/notifications.js";
+import { EVENTS, startUsageSession, track } from "../lib/usage.js";
 import { Card } from "../ui/kit.jsx";
 
 const Ctx = createContext(null);
@@ -17,6 +18,8 @@ export const useApp = () => useContext(Ctx);
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [tab, setTab] = useState("home");
+  // F0: one event per screen view. Screen name + role only — never who or what.
+  useEffect(() => { if (user) track(EVENTS.SCREEN_VIEW, { screen: tab, role: user.role }); }, [tab, user]);
   const [toast, setToast] = useState(null);
   const ping = (m)=>{ setToast(m); setTimeout(()=>setToast(null),2800); };
 
@@ -142,6 +145,7 @@ export function AppProvider({ children }) {
     // which isn't mounted before login — so a stranger sending an enquiry saw the form
     // simply disappear with no acknowledgement at all. A one-shot action by someone
     // with no account needs a confirmation they can't miss.
+    track(EVENTS.ENQUIRY_SUBMIT, { source:"login_screen" });
     setEnquiry(e2 => ({ ...e2, sent: true }));
   };
   const [incidentals, setIncidentals] = useState([  // trainer-logged extras awaiting Danny's approval
@@ -230,6 +234,7 @@ export function AppProvider({ children }) {
   const landingTab = (role) => role==="client" ? "home" : "today";
   const login = (acct) => {
     const u = ACCOUNTS[acct] || ACCOUNTS.client;
+    startUsageSession(u);
     setUser(u);
     setTab(landingTab(u.role));
     setCoupon(""); setCouponMsg(null);
@@ -249,6 +254,7 @@ export function AppProvider({ children }) {
       const profile = await fetchProfile(session.user.id);
       const u = toAppUser(profile);
       if (!u) { setUser(null); return; }
+      startUsageSession(u);
       setUser(u);
       setTab(landingTab(u.role));
     } catch (e) {
@@ -339,6 +345,7 @@ export function AppProvider({ children }) {
       else if (payMode==="credit") setCredits(c=>({...c, classes:c.classes-1}));
       else { const price=applyCoupon(CT[s.type].price);
         setLedger(l=>[{id:nid(), who:"Sam Lee", what:`Drop-in · ${CT[s.type].name}${coupon?` (${coupon.toUpperCase()})`:""}`, amt:Math.round(price), method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]); }
+      track(EVENTS.BOOK_CONFIRM, { kind:"class", method:payMode });
       setMyClassBookings(b=>[...b, s.id]);
       if (s.date) setBookDates(bd=>({...bd, [s.id]:s.date}));
       setBookWeeks(bw=>({...bw, [s.id]:bookWeek}));
@@ -353,6 +360,7 @@ export function AppProvider({ children }) {
       if (payMode==="credit") setCredits(c=>({...c, [pool]:c[pool]-1}));
       else setLedger(l=>[{id:nid(), who:"Sam Lee", what:`PT · ${tName(s.trainer)}${isHead(s.trainer)?" (Head Coach)":""}`, amt:PT_PRICE[s.trainer], method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]);
       const bk = {id:nid(), day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, otherLabel:locLabel, mode:payMode, pool, date:s.date, weekOff:bookWeek};
+      track(EVENTS.BOOK_CONFIRM, { kind:"pt", method:payMode });
       setMyPT(p=>[...p, bk]);
       if (s.loc!=="other") setPtBookings(pb=>[...pb, {id:bk.id, trainer:s.trainer, day:s.day, time:s.time, loc:s.loc, who:"Sam Lee", date:s.date, weekOff:bookWeek}]);
       else setSuggestedLocs(sl=> sl.includes(locLabel) ? sl : [...sl, locLabel]);
@@ -374,6 +382,7 @@ export function AppProvider({ children }) {
   const cancelClass = (sid) => {
     const s = sessions.find(x=>x.id===sid);
     const pay = bookPay[sid] || {mode:"credit", amt:0};
+    track(EVENTS.BOOK_CANCEL, { kind:"class", method:pay.mode });
     setMyClassBookings(b=>b.filter(x=>x!==sid));
     if (pay.mode==="pass") { ping("Cancelled — your pass covers it, nothing deducted"); }
     else if (pay.mode==="credit") { setCredits(c=>({...c, classes:c.classes+1})); ping("Cancelled — credit returned"); }
@@ -389,6 +398,7 @@ export function AppProvider({ children }) {
   const requestException = (payload) => {
     setExceptionQueue(q=>[...q, {id:nid(), who:"Sam Lee", ...payload,
       when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}]);
+    track(EVENTS.EXCEPTION_REQUEST, { kind:payload.kind, type:payload.ask });
     setExceptionSheet(null);
     ping("Exception requested — ExerciseOnly will review and reply. Nothing has changed on your booking yet.");
   };
@@ -400,6 +410,7 @@ export function AppProvider({ children }) {
   };
   const requestRefund = (item, reason) => {
     setRefundables(r=>r.filter(x=>x.id!==item.id));
+    track(EVENTS.REFUND_REQUEST, { method:item.method });
     setRefundQueue(q=>[...q, {...item, reason, who:"Sam Lee",
       when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}]);
     ping("Refund requested — ExerciseOnly will review. Your credit stays on the account until it's approved.");
@@ -424,6 +435,7 @@ export function AppProvider({ children }) {
   };
   // client-side PT reschedule — only inside the policy window and onto a slot the coach actually has free
   const commitClientMove = () => {
+    track(EVENTS.BOOK_MODIFY, { kind:"pt" });
     const mv = clientMove; if (!mv) return;
     const nw = mv.newWeek ?? mv.weekOff ?? 0, nd = mv.newDay ?? mv.day, nt = mv.newTime || mv.time;
     // rescheduling must not land on top of the member's own other commitments —
@@ -441,6 +453,7 @@ export function AppProvider({ children }) {
   const cancelPT = (id) => {
     const b = myPT.find(x=>x.id===id);
     const pool = b.pool || "ptCoach";
+    track(EVENTS.BOOK_CANCEL, { kind:"pt", method:b.mode });
     setMyPT(p=>p.filter(x=>x.id!==id));
     setPtBookings(pb=>pb.filter(x=>x.id!==id));
     // credit back either way (Decision 2) — a paid session also becomes refundable-to-bank on request
@@ -681,6 +694,7 @@ export function AppProvider({ children }) {
   // Tapping a notification must land on the thing itself, not just open a tab.
   const openNotification = (n) => {
     setReadNotifs(r => r.includes(n.id) ? r : [...r, n.id]);
+    track(EVENTS.NOTIFICATION_OPEN, { kind:n.tone });
     setNotifOpen(false);
     const a = n.action || {};
     if (a.tab) setTab(a.tab);
