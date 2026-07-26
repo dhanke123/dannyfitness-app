@@ -5,7 +5,7 @@ import { estKcal, prShelf, strengthLogs } from "../../lib/metrics.js";
 import { T, disp } from "../../theme.js";
 
 export default function ClientHome() {
-  const { active, bookDates, booked, classPass, credits, day, goal, isClient, loc, locName, logs, measurements, myClassBookings, myPT, ping, sessions, setLogView, setSeg, setTab, tName, tab, user } = useApp();
+  const { active, bookDates, booked, checkIn, checkedIn, classPass, credits, day, goal, isClient, loc, locName, logs, measurements, myClassBookings, myPT, ping, sessions, setLogView, setSeg, setTab, tName, tab, user } = useApp();
   return (<>
         {/* ==================== CLIENT: HOME (Solar Warm dashboard) ==================== */}
         {isClient && tab==="home" && (() => {
@@ -47,7 +47,7 @@ export default function ClientHome() {
                 <div style={{...disp,fontWeight:800,fontSize:21,marginTop:10,position:"relative"}}>{hero.title}</div>
                 <div className="text-xs" style={{marginTop:3,opacity:.94,position:"relative"}}>{hero.sub}</div>
                 <div className="flex items-center gap-3" style={{marginTop:14,position:"relative"}}>
-                  <button onClick={()=>ping("Checked in — see you there! 💪")} style={{flex:1,...disp,fontWeight:700,fontSize:14,padding:12,borderRadius:14,border:"none",background:"#fff",color:T.accent}}>Check in</button>
+                  <button onClick={()=>checkIn(`${hero.day}-${hero.time}`, hero.title)} style={{flex:1,...disp,fontWeight:700,fontSize:14,padding:12,borderRadius:14,border:"none",background:"#fff",color:T.accent}}>{checkedIn.includes(`${hero.day}-${hero.time}`) ? "Checked in ✓" : "Check in"}</button>
                   <button onClick={()=>{setTab("book"); setSeg("mine");}} className="text-xs font-semibold" style={{color:"#fff",opacity:.95,textDecoration:"underline",whiteSpace:"nowrap"}}>Manage bookings</button>
                 </div>
               </div>

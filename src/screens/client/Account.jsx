@@ -4,7 +4,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, H } from "../../ui/kit.jsx";
 
 export default function ClientAccount() {
-  const { active, classPass, credits, isClient, ledger, login, marketingOptIn, offers, openEnquiry, optInAt, ping, referralCode, referralReward, referralUses, reminderChannel, setChatOpen, setCredits, setMarketingOptIn, setOptInAt, setReferralReward, setReminderChannel, tab } = useApp();
+  const { active, classPass, credits, isClient, ledger, login, marketingOptIn, copyText, offers, openEnquiry, optInAt, ping, referralCode, setLegalSheet, referralReward, referralUses, reminderChannel, setChatOpen, setCredits, setMarketingOptIn, setOptInAt, setReferralReward, setReminderChannel, tab } = useApp();
   return (<>
         {/* ==================== CLIENT: ACCOUNT ==================== */}
         {isClient && tab==="account" && (
@@ -15,7 +15,7 @@ export default function ClientAccount() {
               <div className="text-xs font-bold mb-1" style={{color:"#B9B5A9"}}>REFER A FRIEND</div>
               <div className="flex items-center justify-between">
                 <span style={{...disp,fontWeight:700,fontSize:20,color:T.accent}}>{referralCode}</span>
-                <Btn small kind="ghost" onClick={()=>ping("Referral link copied — share on WhatsApp or Instagram")}>Share</Btn>
+                <Btn small kind="ghost" onClick={()=>copyText(`Join me at ExerciseOnly — use my code ${referralCode} and we both get a free class. https://exerciseonly.vip`, "Referral link copied — paste it into WhatsApp or Instagram")}>Share</Btn>
               </div>
               <div className="text-xs mt-1.5" style={{color:"#B9B5A9"}}>{referralUses} friend joined · you both get 1 free class credit when they book their first session.</div>
               {/* earned referral rewards can be moved into the class-credit pool */}
@@ -108,7 +108,11 @@ export default function ClientAccount() {
               </Card>
             </a>
 
-            <div className="text-xs text-center" style={{color:T.muted}}>Privacy policy · Request account deletion · v0 demo</div>
+            {/* These were plain text. Both are PDPA rights, not decoration. */}
+            <div className="flex justify-center gap-4 text-xs">
+              <button onClick={()=>setLegalSheet("privacy")} className="font-bold" style={{color:T.blue}}>Privacy policy</button>
+              <button onClick={()=>setLegalSheet("delete")} className="font-bold" style={{color:T.muted}}>Delete my account</button>
+            </div>
           </main>)}
 
   </>);

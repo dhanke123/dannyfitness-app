@@ -3,7 +3,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, H, Sub } from "../../ui/kit.jsx";
 
 export default function ClientShop() {
-  const { aboutCopy, active, coupon, day, isClient, login, offers, ping, products, sessions, setCoupon, setCouponMsg, setPayMode, setShopSheet, setShopTab, shopTab, tab, trainers } = useApp();
+  const { copyText, referralCode, aboutCopy, active, coupon, day, isClient, login, offers, ping, products, sessions, setCoupon, setCouponMsg, setPayMode, setShopSheet, setShopTab, shopTab, tab, trainers } = useApp();
   return (<>
         {/* ==================== CLIENT: SHOP (Buy · About · Offers) ==================== */}
         {isClient && tab==="shop" && (
@@ -89,7 +89,7 @@ export default function ClientShop() {
                     <div className="text-sm" style={{color:T.muted}}>{o.blurb}</div>
                     <div className="mt-2">
                       {o.kind==="Referral"
-                        ? <Btn small onClick={()=>ping("Referral link copied — share on WhatsApp / Instagram")}>Share my code</Btn>
+                        ? <Btn small onClick={()=>copyText(`Join me at ExerciseOnly — use my code ${referralCode} and we both get a free class. https://exerciseonly.vip`, "Referral link copied — paste it into WhatsApp or Instagram")}>Share my code</Btn>
                         : <Btn small onClick={()=>{setShopTab("buy"); setCoupon(o.code); ping(`Coupon ${o.code} ready — buy a pack and it's applied at checkout`);}}>Get code · {o.code}</Btn>}
                     </div>
                   </Card>))}

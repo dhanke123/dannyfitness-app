@@ -60,6 +60,83 @@ export function AppProvider({ children }) {
   const [goal, setGoal] = useState({ workouts:4, kcal:2000 }); // client's weekly goal (Log → Progress)
   const [intakeForm, setIntakeForm] = useState(null);
   const [reportView, setReportView] = useState("analytics"); // Reports screen: analytics | payouts
+  /* ---- flows that used to dead-end ----
+     Each of these was a button that fired a toast and changed nothing. A control
+     that reports success without doing anything is worse than one that's disabled:
+     it teaches people the app lies, and they stop trusting the parts that work. */
+  const [legalSheet, setLegalSheet] = useState(null);      // 'privacy' | 'delete'
+  const [deletionRequests, setDeletionRequests] = useState([]);
+  const [checkedIn, setCheckedIn] = useState([]);          // booking keys the member has checked into
+  const [productForm, setProductForm] = useState(null);    // add a pack/pass properly
+
+  // Clipboard with a truthful fallback — navigator.clipboard is unavailable on
+  // insecure origins and in some in-app browsers, and silently failing there is
+  // exactly the pattern being removed.
+  const copyText = async (text, okMsg) => {
+    try {
+      if (navigator?.clipboard?.writeText) { await navigator.clipboard.writeText(text); ping(okMsg); return true; }
+      throw new Error("no clipboard");
+    } catch { ping(`Copy this: ${text}`); return false; }
+  };
+
+  const checkIn = (key, label) => {
+    if (checkedIn.includes(key)) { ping("Already checked in"); return; }
+    setCheckedIn(c => [...c, key]);
+    ping(`Checked in for ${label} — your coach can see you've arrived`);
+  };
+
+  // DECISION 15: deletion anonymises, financial records are retained.
+  const requestDeletion = (reason) => {
+    setDeletionRequests(d => [{ id:nid(), who:user?.name || "Member", reason: reason || "",
+      when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),
+      status:"pending" }, ...d]);
+    setLegalSheet(null);
+    ping("Deletion request sent. ExerciseOnly will confirm within 30 days.");
+  };
+  const resolveDeletion = (id, approved, reason) => {
+    const it = deletionRequests.find(x=>x.id===id);
+    setDeletionRequests(d => d.filter(x=>x.id!==id));
+    logAudit(`Account deletion ${approved?"completed":"declined"} · ${it?.who}${reason?` · "${reason}"`:""}`);
+    ping(approved
+      ? "Account anonymised — name, phone and email scrubbed. Bookings and payments kept so the books still balance."
+      : "Deletion declined — the member is told why.");
+  };
+
+  const deactivateTrainer = (tid) => {
+    const t = trainers.find(x=>x.id===tid);
+    const openWork = sessions.filter(x=>sessTrainers(x).includes(tid)).length
+                   + ptBookings.filter(b=>b.trainer===tid && b.status!=="cancelled").length;
+    setTrainers(ts => ts.map(x => x.id!==tid ? x : {...x, active:false}));
+    setPtTrainers(p => p.filter(id => id!==tid));
+    logAudit(`Trainer deactivated · ${t?.name}`);
+    ping(openWork > 0
+      ? `${t?.name} deactivated — hidden from booking. ${openWork} existing session${openWork===1?"":"s"} still need reassigning.`
+      : `${t?.name} deactivated — hidden from new bookings.`);
+  };
+  const reactivateTrainer = (tid) => {
+    setTrainers(ts => ts.map(x => x.id!==tid ? x : {...x, active:true}));
+    ping(`${trainers.find(x=>x.id===tid)?.name} is bookable again`);
+  };
+
+  // Generate real sessions from a template rather than claiming to.
+  const applyTemplate = (tpl) => {
+    const made = (tpl.blocks||[]).map(b => ({
+      id: nid(), day: b.day, time: b.start, type: b.type, loc: b.loc,
+      trainer: b.trainer, cap: b.cap || 8, attendees: [],
+    }));
+    if (!made.length) { ping(`"${tpl.name}" has no class blocks yet — edit it first`); return; }
+    setSessions(ss => [...ss, ...made]);
+    logAudit(`Template applied · ${tpl.name} · ${made.length} sessions`);
+    ping(`"${tpl.name}" applied — ${made.length} session${made.length===1?"":"s"} added to the timetable`);
+  };
+
+  const addProduct = (form) => {
+    setProducts(ps => [...ps, { id:nid(), name:form.name.trim(), price:+form.price||0,
+      kind:form.kind, sessions:+form.sessions||0, period:form.period||null,
+      validity:+form.validity||90, active:true }]);
+    setProductForm(null);
+    ping(`${form.name.trim()} added — live in the shop now`);
+  };
   /* Intake assessments were never persisted — the form closed with a toast and the
      answers vanished. That's the record a coach most needs when a client is handed
      over: goals, injury history, what's already been tried. Now kept per client,
@@ -241,11 +318,11 @@ export function AppProvider({ children }) {
     setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null); setBookFor(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -580,11 +657,12 @@ export function AppProvider({ children }) {
     refunds: refundQueue.length,
     noshows: noShowQueue.length,
     receipts: incidentals.filter(i=>i.status==="pending").length,
+    deletions: deletionRequests.filter(d=>d.status==="pending").length,
   };
   pendingCounts.schedule = pendingCounts.exceptions;
   pendingCounts.clients  = pendingCounts.noshows;
-  pendingCounts.manage   = pendingCounts.refunds + pendingCounts.receipts;
-  pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows + pendingCounts.receipts;
+  pendingCounts.manage   = pendingCounts.refunds + pendingCounts.receipts + pendingCounts.deletions;
+  pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows + pendingCounts.receipts + pendingCounts.deletions;
 
   const addLocation = () => {
     if (!newLocName.trim()) return;
@@ -752,7 +830,7 @@ export function AppProvider({ children }) {
     ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["reports","Reports"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+  const store = { legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };

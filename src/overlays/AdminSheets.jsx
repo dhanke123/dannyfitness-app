@@ -8,8 +8,41 @@ import { T, disp } from "../theme.js";
 import { Btn, Select } from "../ui/kit.jsx";
 
 export default function AdminSheets() {
-  const { addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, receiptSheet, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setMeasForm, setMeasurements, setPerm, setRates, setReceiptSheet, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
+  const { productForm, setProductForm, addProduct, addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, receiptSheet, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setMeasForm, setMeasurements, setPerm, setRates, setReceiptSheet, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
   return (<>
+        {/* Adding a pack used to be a toast that created nothing. */}
+        {productForm && (
+          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setProductForm(null)}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-3">
+                <div style={{...disp,fontWeight:700,fontSize:22}}>Add a pack or pass</div>
+                <button onClick={()=>setProductForm(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+              </div>
+              <div className="space-y-2 mb-3">
+                <input value={productForm.name} onChange={e=>setProductForm(f=>({...f,name:e.target.value}))} placeholder="Name — e.g. 10-class pack"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[["classes","Class credits"],["pthead","PT · head coach"],["ptcoach","PT · coach"],["classpass","Unlimited pass"]].map(([k,l])=>(
+                    <button key={k} onClick={()=>setProductForm(f=>({...f,kind:k}))} className="px-2.5 py-1.5 rounded-lg text-xs font-bold"
+                      style={{background:productForm.kind===k?T.ink:"transparent",color:productForm.kind===k?T.paper:T.ink,border:`1.5px solid ${productForm.kind===k?T.ink:T.line}`}}>{l}</button>))}
+                </div>
+                <div className="flex gap-2">
+                  <input value={productForm.price} onChange={e=>setProductForm(f=>({...f,price:e.target.value}))} placeholder="Price $" type="number"
+                    className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                  {productForm.kind==="classpass"
+                    ? <input value={productForm.period||""} onChange={e=>setProductForm(f=>({...f,period:e.target.value}))} placeholder="day / week / month"
+                        className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    : <input value={productForm.sessions} onChange={e=>setProductForm(f=>({...f,sessions:e.target.value}))} placeholder="Sessions" type="number"
+                        className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>}
+                </div>
+                <input value={productForm.validity} onChange={e=>setProductForm(f=>({...f,validity:e.target.value}))} placeholder="Valid for (days)" type="number"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              </div>
+              <Btn full disabled={!productForm.name.trim() || !productForm.price} onClick={()=>addProduct(productForm)}>Add to shop</Btn>
+              <div className="text-center text-xs mt-2" style={{color:T.muted}}>Goes live in the shop immediately. Existing purchases are unaffected.</div>
+            </div>
+          </div>)}
+
         {/* admin: add a coupon */}
         {couponForm && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setCouponForm(null)}>

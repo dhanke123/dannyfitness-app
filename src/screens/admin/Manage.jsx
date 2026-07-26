@@ -8,7 +8,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip } from "../../ui/kit.jsx";
 
 export default function AdminManage() {
-  const { aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, incidentals, isAdmin, leads, ledger, openLeads, setLeadStatus, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
+  const { applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, incidentals, isAdmin, leads, ledger, openLeads, setLeadStatus, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
@@ -191,17 +191,19 @@ export default function AdminManage() {
                     Kept, not deleted — closed leads are what the conversion-rate report in Reports → Clients is built from.
                   </div>
                 </details>)}
-              <Btn full kind="ghost" onClick={()=>ping("Instagram booking link — opens this same flow from your bio/stories")}>View Instagram booking link</Btn>
+              <Btn full kind="ghost" onClick={()=>copyText("https://exerciseonly.vip/?from=instagram", "Booking link copied — paste it into your Instagram bio or a story")}>Copy Instagram booking link</Btn>
               <div className="text-xs font-bold pt-2" style={{color:T.muted}}>TRAINERS · rate + permissions</div>
               {trainers.filter(t=>!t.admin).map(t=>{ const rt=rates[t.id]; return (
-                <Card key={t.id}>
+                <Card key={t.id} style={t.active===false?{opacity:.6}:undefined}>
                   <div className="flex items-center justify-between">
-                    <div><div className="font-semibold text-sm">{t.name}</div>
+                    <div><div className="font-semibold text-sm">{t.name}{t.active===false && <span className="text-xs font-normal" style={{color:T.accent}}> · inactive</span>}</div>
                       <div className="text-xs" style={{color:T.muted}}>{t.tag} · {rt ? (rt.type==="salary" ? `$${rt.monthly}/mo salary` : rt.type==="per_head" ? `$${rt.perHead}/head · $${rt.perPt}/PT` : `$${rt.perClass}/class · $${rt.perPt}/PT`) : "rate not set"}</div></div>
                     <div className="flex gap-1.5">
                       <Btn small kind="ghost" onClick={()=>setAddTrainer({editId:t.id, name:t.name, phone:t.phone||"", bio:t.bio||"", payType:rt?.type||"per_class", perClass:rt?.perClass||"", perHead:rt?.perHead||"", perPt:rt?.perPt||"", monthly:rt?.monthly||""})}>Edit</Btn>
                       <Btn small kind="ghost" onClick={()=>setPermOpen(permOpen===t.id?null:t.id)}>Perms</Btn>
-                      <Btn small kind="ghost" onClick={()=>ping(`${t.name} deactivated (demo) — their sessions need reassignment`)}>Deactivate</Btn>
+                      {t.active===false
+                        ? <Btn small onClick={()=>reactivateTrainer(t.id)}>Reactivate</Btn>
+                        : <Btn small kind="ghost" onClick={()=>deactivateTrainer(t.id)}>Deactivate</Btn>}
                     </div>
                   </div>
                   {permOpen===t.id && (
@@ -215,7 +217,13 @@ export default function AdminManage() {
                     </div>)}
                 </Card>);})}
               <Btn full kind="ghost" onClick={()=>setAddTrainer({name:"",phone:"",payType:"per_class",perClass:"",perPt:"",monthly:""})}>+ Add trainer</Btn>
-              <Btn full kind="ghost" onClick={()=>ping("CSV import — map columns, PDPA consent requested on first login")}>Import clients (CSV)</Btn>
+              <div className="rounded-xl p-3" style={{border:`1.5px dashed ${T.line}`}}>
+                <div className="text-sm font-semibold" style={{color:T.muted}}>Import clients (CSV) — not available yet</div>
+                <div className="text-[11px] mt-0.5" style={{color:T.muted}}>
+                  Needs the backend: each row has to create a real account and request PDPA consent at
+                  first login. Deliberately not faked — a button that says "imported" and does nothing
+                  is how you lose a client list.</div>
+              </div>
             </div>}
 
             {adminSec==="products" && <div className="space-y-3">
@@ -272,12 +280,12 @@ export default function AdminManage() {
                       <Btn small kind="ghost" onClick={()=>{
                         const clone = {id:nid(), name:tpl.name+" (copy)", blocks:tpl.blocks.map(b=>({...b}))};
                         setClassTemplates(ts=>[...ts,clone]); ping(`Cloned "${tpl.name}" — edit and rename the copy`);}}>Clone</Btn>
-                      <Btn small onClick={()=>ping(`"${tpl.name}" applied — sessions generated for upcoming weeks`)}>Apply</Btn>
+                      <Btn small onClick={()=>applyTemplate(tpl)}>Apply</Btn>
                     </div>
                   </div>
                 </Card>))}
 
-              <Btn full kind="ghost" onClick={()=>ping("New product — pack / membership / coupon code")}>+ Add pack, membership or coupon</Btn>
+              <Btn full kind="ghost" onClick={()=>setProductForm({name:"", price:"", kind:"classes", sessions:"", validity:"90"})}>+ Add a pack or pass</Btn>
               <div className="text-xs" style={{color:T.muted}}>Price changes never affect already-purchased packs. Template edits only affect future-generated sessions.</div>
             </div>}
 
@@ -310,7 +318,16 @@ export default function AdminManage() {
                   onResolve={resolveIncidental}
                   approveLabel="Approve" denyLabel="Deny" />)}
 
-              {refundQueue.length===0 && incidentals.filter(i=>i.status==="pending").length===0 && (
+              {/* DECISION 15 — deletion is a PDPA right with a real queue behind it. */}
+              {deletionRequests.length>0 && (
+                <ApprovalQueue
+                  label="ACCOUNT DELETION REQUESTS"
+                  items={deletionRequests.map(d=>({ id:d.id, title:`${d.who} asked to delete their account`,
+                    sub:d.reason ? `"${d.reason}"` : "No reason given", meta:d.when }))}
+                  onResolve={resolveDeletion}
+                  approveLabel="Anonymise" denyLabel="Decline" />)}
+
+              {refundQueue.length===0 && incidentals.filter(i=>i.status==="pending").length===0 && deletionRequests.length===0 && (
                 <div className="text-xs" style={{color:T.muted}}>
                   No refund or receipt approvals waiting. No-shows are under Clients; exception requests are under Schedule.</div>)}
               <div className="text-xs font-bold pt-1" style={{color:T.muted}}>LEDGER · export CSV for accountant</div>
@@ -319,7 +336,12 @@ export default function AdminManage() {
                   <div className="flex-1"><div className="text-sm font-semibold">{l.who} · {l.what}</div>
                     <div className="text-xs" style={{color:T.muted}}>{l.method} · {l.d}</div></div>
                   <div className="font-bold text-sm">${l.amt}</div>
-                  <Btn small kind="ghost" onClick={()=>ping("Refund flow — full/partial or return credit, reason logged")}>Refund</Btn>
+                  <Btn small kind="ghost" disabled={l.amt<=0} onClick={()=>{
+                    setRefundQueue(q=>[...q, {id:nid(), who:l.who, what:l.what, amt:l.amt,
+                      method:l.method, pool:null, reason:"Raised by admin from the ledger",
+                      when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}]);
+                    ping("Added to the refund queue — approve it below to record the refund");
+                  }}>Refund</Btn>
                 </Card>))}
               <div className="text-xs" style={{color:T.muted}}>Trainer payouts: sessions × rate, monthly export. All actions audited.</div>
             </div>}
