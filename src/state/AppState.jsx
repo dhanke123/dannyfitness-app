@@ -3,9 +3,9 @@
    consuming useApp() should not need to change. */
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
 import { COUPONS, CT, PT_PRICE, TRAINERS, isHead, mkSet, seedAbout, seedCamps, seedClassTemplates, seedLeads, seedLedger, seedLocations, seedOffers, seedProducts, seedPtBookings, seedRoutines, seedSessions, seedShifts, seedTimeOff, seedTravel, seedWorkoutSessions } from "../data/seed.js";
-import { DAYS, TODAY, dateFor, fmtFull } from "../lib/dates.js";
+import { DAYS, TODAY, dateFor, fmtFull, toMin } from "../lib/dates.js";
 import { EXLIB, best1RM, bestWeight, est1RM, estKcal, exMeta, isWorking, muscleOf } from "../lib/metrics.js";
-import { ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../lib/scheduling.js";
+import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../lib/scheduling.js";
 import { nid } from "../lib/util.js";
 import { fetchProfile, isConfigured, looksLikeSgMobile, supabase, toAppUser, toE164 } from "../lib/supabase.js";
 import { Card } from "../ui/kit.jsx";
@@ -302,6 +302,15 @@ export function AppProvider({ children }) {
   const ptPool = (trainerId) => isHead(trainerId) ? "ptHead" : "ptCoach";
   const confirmBook = () => {
     const s = sheet;
+    /* Filtering the slot list is presentation; this is the actual gate. The sheet
+       can be opened, left sitting while another booking is made in a different
+       tab, and then confirmed against stale data. */
+    const dur = s.kind === "class" ? CT[s.type].dur : PT_DUR;
+    const clash = memberClash(bookWeek, s.day, s.time, dur);
+    if (clash) {
+      ping(`You're already booked for ${clash.label} at that time — cancel that first.`);
+      return;
+    }
     if (s.kind==="class") {
       if (payMode==="pass") { /* covered by active class pass — no deduction, no charge */ }
       else if (payMode==="credit") setCredits(c=>({...c, classes:c.classes-1}));
@@ -394,6 +403,12 @@ export function AppProvider({ children }) {
   const commitClientMove = () => {
     const mv = clientMove; if (!mv) return;
     const nw = mv.newWeek ?? mv.weekOff ?? 0, nd = mv.newDay ?? mv.day, nt = mv.newTime || mv.time;
+    // rescheduling must not land on top of the member's own other commitments —
+    // and must ignore the booking being moved, or it always clashes with itself
+    const clash = memberBusy(nw, nd)
+      .filter(b => !(b.label === `PT with ${tName(mv.trainer)}` && toMin(mv.time) === b.start && nw === (mv.weekOff ?? 0) && nd === mv.day))
+      .find(b => toMin(nt) < b.end && toMin(nt) + PT_DUR > b.start);
+    if (clash) { ping(`That clashes with ${clash.label} — pick another time.`); return; }
     const nDate = fmtFull(dateFor(nw, nd));
     setMyPT(p=>p.map(b=>b.id!==mv.id ? b : {...b, day:nd, time:nt, weekOff:nw, date:nDate}));
     setPtBookings(pb=>pb.map(b=>b.id!==mv.id ? b : {...b, day:nd, time:nt, weekOff:nw, date:nDate}));
@@ -559,18 +574,65 @@ export function AppProvider({ children }) {
 
   const daySessions = useMemo(()=>sessions.filter(s=>s.day===day && (loc==="all"||s.loc===loc)).sort((a,b)=>a.time.localeCompare(b.time)),[sessions,day,loc]);
 
+  /* ---- the member's OWN commitments ----
+     The coach-side rules stop a coach being in two places at once. They say nothing
+     about the member. Without this, one person could book two overlapping PT
+     sessions with different coaches, or a PT session on top of a class they're
+     already in — which is exactly what happened.
+
+     A conflict is an overlap, not an identical start time, and it is scoped to the
+     week being browsed. The old check compared `time === time` and ignored
+     weekOffset entirely, so it both missed real clashes and hid slots in unrelated
+     weeks. */
+  const memberBusy = (weekOff, dayIdx) => {
+    const out = [];
+    myClassBookings.forEach(sid => {
+      const s = sessions.find(x => x.id === sid);
+      if (!s || (bookWeeks[sid] ?? 0) !== weekOff || s.day !== dayIdx) return;
+      out.push({ start: toMin(s.time), end: toMin(s.time) + CT[s.type].dur, label: CT[s.type].name });
+    });
+    myPT.forEach(b => {
+      if ((b.weekOff ?? 0) !== weekOff || b.day !== dayIdx) return;
+      out.push({ start: toMin(b.time), end: toMin(b.time) + PT_DUR, label: `PT with ${tName(b.trainer)}` });
+    });
+    myCamps.forEach(cid => {
+      const c = camps.find(x => x.id === cid); if (!c) return;
+      const absStart = TODAY + (c.startInDays ?? 0);
+      (c.days || []).forEach((cd, i) => {
+        const abs = absStart + i;
+        if (Math.floor(abs / 7) !== weekOff || ((abs % 7) + 7) % 7 !== dayIdx) return;
+        (cd.sessions || []).forEach(s => out.push({
+          start: toMin(s.start), end: toMin(s.start) + Math.round((s.hours || 1) * 60), label: c.name,
+        }));
+      });
+    });
+    return out;
+  };
+  // returns the clashing commitment, or null
+  const memberClash = (weekOff, dayIdx, time, dur, ignoreId) => {
+    const st = toMin(time), en = st + dur;
+    return memberBusy(weekOff, dayIdx)
+      .filter(b => b.id !== ignoreId)
+      .find(b => st < b.end && en > b.start) || null;
+  };
+
   const ptCtx = { sessions, ptBookings, timeOff, shifts };
   // Per-trainer availability at the chosen location: free ranges (summary) + bookable slots.
   const ptByTrainer = useMemo(()=>{
     if (ptLoc==="all" || ptLoc==="other") return [];
     return ptTrainers.map(tid=>{
+      // hide any slot that clashes with something the member has already booked —
+      // whatever the type, and whichever coach it's with
       const slots = ptSlotsFor(tid, day, ptLoc, travel, ptCtx, locName)
-        .filter(sl=>!myPT.some(b=>b.day===sl.day&&b.time===sl.time&&b.trainer===sl.trainer));
+        .filter(sl => !memberClash(bookWeek, sl.day ?? day, sl.time, PT_DUR));
       const { ranges, gaps } = ptRangesFor(tid, day, ptLoc, travel, ptCtx, locName);
       const working = !!workWindow(shifts, tid, day);
       return { trainer:tid, slots, ranges, gaps, working };
     });
-  },[day,ptLoc,ptTrainers,myPT,locations,travel,sessions,ptBookings,timeOff,shifts]);
+    // bookWeek / myClassBookings / myCamps are in here because the member-clash
+    // check reads them — without them the slot list goes stale after a booking
+  },[day,ptLoc,ptTrainers,myPT,locations,travel,sessions,ptBookings,timeOff,shifts,
+     bookWeek,myClassBookings,myCamps,bookWeeks,camps]);
 
   const staffSessions = (tid)=>sessions.filter(s=>sessTrainers(s).includes(tid));
   const staffTimeOff = (tid)=>timeOff.filter(t=>t.trainer===tid && t.active!==false);
@@ -584,7 +646,7 @@ export function AppProvider({ children }) {
     ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["camps","Camps"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { logout, sendOtp, verifyOtp, addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
+  const store = { logout, sendOtp, verifyOtp, memberBusy, memberClash, addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }

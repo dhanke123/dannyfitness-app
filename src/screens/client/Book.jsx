@@ -8,7 +8,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Select, Ticks } from "../../ui/kit.jsx";
 
 export default function ClientBook() {
-  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, otherPlace, ping, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
+  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, otherPlace, ping, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
 
   /* One place that turns any booking into a calendar event (Decision 14). Both the .ics
      download and the Google URL are built from the same object, so they can never drift. */
@@ -85,10 +85,15 @@ export default function ClientBook() {
                     <Ticks cap={s.cap} n={n}/></div>
                   <div className="text-right">
                     <div className="text-sm font-bold mb-1.5">${ct.price}</div>
-                    {mine ? <span className="text-xs font-bold" style={{color:T.moss}}>BOOKED ✓</span> :
-                     waited ? <span className="text-xs font-bold" style={{color:T.accent}}>WAITLISTED</span> :
-                     full ? <Btn small kind="ghost" onClick={()=>joinWaitlist(s.id)}>Waitlist</Btn> :
-                     <Btn small onClick={()=>{setSheet({kind:"class",...s, date:fmtFull(dateFor(bookWeek,day))}); setPayMode(classPass?"pass":credits.classes>0?"credit":"paynow");}}>Book</Btn>}
+                    {(() => {
+                      // a class the member can't attend because they're already busy
+                      const clash = mine ? null : memberClash(bookWeek, s.day, s.time, ct.dur);
+                      return mine ? <span className="text-xs font-bold" style={{color:T.moss}}>BOOKED ✓</span> :
+                       waited ? <span className="text-xs font-bold" style={{color:T.accent}}>WAITLISTED</span> :
+                       clash ? <span className="text-[11px] font-bold" style={{color:T.muted}}>CLASHES<br/>{clash.label}</span> :
+                       full ? <Btn small kind="ghost" onClick={()=>joinWaitlist(s.id)}>Waitlist</Btn> :
+                       <Btn small onClick={()=>{setSheet({kind:"class",...s, date:fmtFull(dateFor(bookWeek,day))}); setPayMode(classPass?"pass":credits.classes>0?"credit":"paynow");}}>Book</Btn>;
+                    })()}
                   </div>
                 </Card>);})}
             </div>}
