@@ -1,9 +1,43 @@
+import { useRef } from "react";
 import { useApp } from "../state/AppState.jsx";
 import { CT, PT_PRICE, isHead } from "../data/seed.js";
 import { DAYS } from "../lib/dates.js";
 import { downloadIcs, eventStart, googleCalUrl } from "../lib/calendar.js";
 import { T, disp } from "../theme.js";
 import { Btn, Card, QR, Select } from "../ui/kit.jsx";
+
+/* Manual PayNow proof capture (module scope — stable identity, inputs keep focus).
+   Shows the static QR AND the direct pay-to-mobile option, then takes the
+   transfer screenshot that goes to the admin PAYMENT APPROVALS queue. */
+function PayProof({ proof, onProof }) {
+  const ref = useRef(null);
+  const { paynowConfig } = useApp();   // admin-set UEN / mobile / real QR image
+  return (
+    <div className="mb-3">
+      <QR uen={paynowConfig.uen} image={paynowConfig.qrImage}/>
+      <div className="text-xs text-center mb-2" style={{ color: T.muted }}>
+        Scan the QR, or PayNow directly to <b style={{ color: T.ink }}>{paynowConfig.mobile}</b> (ExerciseOnly)
+      </div>
+      <input ref={ref} type="file" accept="image/*" style={{ display: "none" }} aria-label="Payment proof"
+        onChange={e => { const f = e.target.files?.[0];
+          if (f) onProof({ name: f.name, size: f.size }); }}/>
+      {proof ? (
+        <div className="flex items-center gap-2 rounded-lg p-2" style={{ background: "#EAF4EE" }}>
+          <span>🖼️</span><span className="text-xs flex-1 truncate">{proof.name}</span>
+          <button onClick={() => onProof(null)} className="text-[11px] font-bold" style={{ color: T.accent }}>Remove</button>
+        </div>
+      ) : (
+        <button onClick={() => { if (ref.current) { ref.current.value = ""; ref.current.click(); } }}
+          className="w-full py-2.5 rounded-xl text-sm font-bold"
+          style={{ border: `1.5px dashed ${T.accent}`, color: T.accent, background: "transparent" }}>
+          📎 Upload transfer screenshot
+        </button>
+      )}
+      <div className="text-[10px] mt-1.5 text-center" style={{ color: T.muted }}>
+        Admin checks it against the bank app and approves — your purchase lands right after.
+      </div>
+    </div>);
+}
 
 export default function BookingSheets() {
   const { applyCoupon, campSheet, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, exceptionSheet, justBooked, loc, locName, otherPlace, payMode, ping, policy, ptPool, reminderChannel, requestException, setCampSheet, setCoupon, setCouponMsg, setExceptionSheet, setJustBooked, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName, myGroup, myGroupPack } = useApp();
@@ -83,8 +117,8 @@ export default function BookingSheets() {
                   <Btn small kind="ghost" onClick={()=>applyCoupon(sheet.kind==="class"?CT[sheet.type].price:PT_PRICE[sheet.trainer])}>Apply</Btn>
                 </div>)}
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
-              {payMode==="paynow" && <QR/>}
-              <Btn full disabled={(sheet.kind==="pt" && sheet.loc==="other" && !otherPlace) || (payMode==="grouppack" && myGroupPack && myGroupPack.size-myGroupPack.used<=0)} onClick={confirmBook}>{payMode==="grouppack"?"Confirm · 1 group credit":payMode==="credit"?"Confirm · 1 credit":payMode==="pass"?"Confirm · covered by pass":"Pay & book"}</Btn>
+              {payMode==="paynow" && <PayProof proof={sheet.proof} onProof={p=>setSheet(s=>({...s, proof:p}))}/>}
+              <Btn full disabled={(sheet.kind==="pt" && sheet.loc==="other" && !otherPlace) || (payMode==="grouppack" && myGroupPack && myGroupPack.size-myGroupPack.used<=0) || (payMode==="paynow" && !sheet.proof)} onClick={confirmBook}>{payMode==="grouppack"?"Confirm · 1 group credit":payMode==="credit"?"Confirm · 1 credit":payMode==="pass"?"Confirm · covered by pass":payMode==="paynow"?(sheet.proof?"Submit proof for approval":"Upload proof to continue"):"Pay & book"}</Btn>
               {/* window is per booking type and read from Settings — never a constant in copy */}
               <div className="text-center text-xs mt-3" style={{color:T.muted}}>
                 Free cancellation until {sheet.kind==="class"?policy.classHrs:policy.ptHrs}h before. Inside that, you can request an exception.</div>
@@ -179,8 +213,9 @@ export default function BookingSheets() {
                 <Btn small kind="ghost" onClick={()=>applyCoupon(shopSheet.product.price)}>Apply</Btn>
               </div>
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
-              {payMode==="paynow" && <QR/>}
-              <Btn full onClick={confirmShopBuy}>Pay ${Math.round(couponValue(shopSheet.product.price))} & buy</Btn>
+              {payMode==="paynow" && <PayProof proof={shopSheet.proof} onProof={p=>setShopSheet(s=>({...s, proof:p}))}/>}
+              <Btn full disabled={payMode==="paynow" && !shopSheet.proof} onClick={confirmShopBuy}>
+                {payMode==="paynow" ? (shopSheet.proof ? `Submit $${Math.round(couponValue(shopSheet.product.price))} proof for approval` : "Upload proof to continue") : `Pay $${Math.round(couponValue(shopSheet.product.price))} & buy`}</Btn>
               <div className="text-center text-xs mt-3" style={{color:T.muted}}>Receipt emailed via Resend. Card details never touch our servers.</div>
             </div>
           </div>)}
@@ -229,9 +264,9 @@ export default function BookingSheets() {
                 <Btn small kind="ghost" onClick={()=>applyCoupon(campSheet.camp.price)}>Apply</Btn>
               </div>
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
-              {campSheet.pay==="paynow" && <QR/>}
-              <Btn full disabled={campSheet.waiver && (!campSheet.waiver.child || !campSheet.waiver.emergency || !campSheet.waiver.accepted)}
-                onClick={confirmCampBuy}>Pay ${Math.round(couponValue(campSheet.camp.price))} & book</Btn>
+              {campSheet.pay==="paynow" && <PayProof proof={campSheet.proof} onProof={p=>setCampSheet(s=>({...s, proof:p}))}/>}
+              <Btn full disabled={(campSheet.waiver && (!campSheet.waiver.child || !campSheet.waiver.emergency || !campSheet.waiver.accepted)) || (campSheet.pay==="paynow" && !campSheet.proof)}
+                onClick={confirmCampBuy}>{campSheet.pay==="paynow" ? (campSheet.proof ? `Submit $${Math.round(couponValue(campSheet.camp.price))} proof for approval` : "Upload proof to continue") : `Pay $${Math.round(couponValue(campSheet.camp.price))} & book`}</Btn>
               <div className="text-center text-xs mt-3" style={{color:T.muted}}>Free cancellation within the policy window · one-off payment, no pack credits.</div>
             </div>
           </div>)}

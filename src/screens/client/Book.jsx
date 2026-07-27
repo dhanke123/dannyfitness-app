@@ -9,7 +9,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Select, Ticks } from "../../ui/kit.jsx";
 
 export default function ClientBook() {
-  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, gymHoursStart, gymHoursEnd, otherPlace, ping, setBookingDetail, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
+  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, gymHoursStart, gymHoursEnd, otherPlace, ping, setBookingDetail, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, paymentQueue, user, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
 
   /* One place that turns any booking into a calendar event (Decision 14). Both the .ics
      download and the Google URL are built from the same object, so they can never drift. */
@@ -261,6 +261,22 @@ export default function ClientBook() {
                   {[["list","List"],["cal","Calendar"]].map(([k,l])=>(
                     <Chip key={k} active={myView===k} onClick={()=>setMyView(k)}>{l}</Chip>))}
                 </div>
+
+                {/* purchases waiting on the admin matching the PayNow transfer —
+                    shown in BOTH views; a held payment must never hide behind a toggle */}
+                {(() => { const mine = paymentQueue.filter(p => p.who === user?.name);
+                  return mine.length > 0 && (
+                  <Card style={{background:"#FBF3EC"}} className="mb-3">
+                    <div className="text-xs font-bold mb-1.5" style={{color:T.orange}}>AWAITING PAYMENT APPROVAL</div>
+                    {mine.map(p=>(
+                      <div key={p.id} className="flex items-center justify-between text-sm py-0.5">
+                        <span>{p.what}</span>
+                        <span className="text-xs font-bold" style={{color:T.orange}}>${p.amt} · pending</span>
+                      </div>))}
+                    <div className="text-[11px] mt-1.5" style={{color:T.muted}}>
+                      Admin is matching your transfer — your booking/credits land the moment it's confirmed.
+                    </div>
+                  </Card>); })()}
 
                 {myView==="list" && <div className="space-y-3">
                 {none && <div className="text-center py-12 text-sm" style={{color:T.muted}}>No bookings yet. Book a class, PT or camp from the tabs above.</div>}

@@ -452,6 +452,69 @@ export function AppProvider({ children }) {
   const [classTemplates, setClassTemplates] = useState(seedClassTemplates);
   const [ledger, setLedger] = useState(seedLedger);
   const [audit, setAudit] = useState([]); // admin override / book-on-behalf trail (never cleared in real build)
+
+  /* ---- MANUAL PAYNOW (Danny's cost-saving decision, 27 Jul 2026) ----
+     HitPay checkout is HIDDEN, not deleted: flip MANUAL_PAYNOW to false and the
+     original instant-payment path (and the hitpay-create-payment edge function)
+     comes straight back. While true: PayNow purchases show the static QR / the
+     studio mobile number, the member uploads a transfer screenshot, and the
+     purchase lands in an admin PAYMENT APPROVALS queue. Nothing is granted until
+     the admin matches the proof against the bank app and approves. */
+  const MANUAL_PAYNOW = true;
+  /* PayNow receiving details — admin-editable (Manage → Settings → PayNow).
+     qrImage is the bank-generated QR uploaded as a data URL so it renders
+     offline; uen falls back to VITE_PAYNOW_UEN if never set here. */
+  const [paynowConfig, setPaynowConfig] = useState({
+    uen: import.meta.env.VITE_PAYNOW_UEN || "",
+    mobile: "+65 8100 6608",
+    qrImage: null,
+  });
+  const [paymentQueue, setPaymentQueue] = useState([]);
+  const submitPaymentProof = ({ kind, what, amt, payload, proof, method }) => {
+    setPaymentQueue(q => [{ id: nid(), who: user?.name || "Member", kind, what,
+      amt: Math.round(amt), payload, proof, method: method || "PayNow",
+      at: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),
+      status: "pending" }, ...q]);
+    notifyStaff("admin", `${user?.name || "A member"} paid $${Math.round(amt)} by PayNow for ${what} — proof uploaded, needs approval`);
+    ping("Proof submitted — you'll get your booking/credits as soon as admin confirms the transfer (usually same day).");
+  };
+  const resolvePayment = (id, approved, reason) => {
+    const it = paymentQueue.find(x => x.id === id); if (!it) return;
+    setPaymentQueue(q => q.filter(x => x.id !== id));
+    if (!approved) {
+      notifyClient(it.who, `Your PayNow proof for ${it.what} ($${it.amt}) couldn't be verified${reason?`: ${reason}`:""}. Nothing was charged in the app — message us if this is a mistake.`);
+      ping("Payment denied — client notified");
+      logAudit(`Denied PayNow proof · ${it.who} · ${it.what} · $${it.amt}${reason?` · ${reason}`:""}`);
+      return;
+    }
+    /* Approved: execute the held purchase. Same grants as the instant path. */
+    const p = it.payload || {};
+    if (it.kind === "shop") {
+      const prod = p.product;
+      if (prod.kind==="classes") setCredits(c=>({...c, classes:c.classes+prod.sessions}));
+      else if (prod.kind==="pthead") setCredits(c=>({...c, ptHead:c.ptHead+prod.sessions}));
+      else if (prod.kind==="ptcoach") setCredits(c=>({...c, ptCoach:c.ptCoach+prod.sessions}));
+      else if (prod.kind==="classpass") setClassPass({label:prod.name, period:prod.period, expires:`+${prod.validity}d`});
+      else if (prod.kind==="ptcombo") setGroupPacks(gs=>[...gs]); // group pack fulfilment is manual for now — admin creates the group + pack
+    } else if (it.kind === "camp") {
+      setCamps(cs=>cs.map(x=>x.id!==p.campId?x:{...x,spots:x.spots-1}));
+      setMyCamps(m=>[...m, p.campId]);
+    } else if (it.kind === "class") {
+      setMyClassBookings(b=>[...b, p.sessionId]);
+      if (p.date) setBookDates(bd=>({...bd, [p.sessionId]:p.date}));
+      setBookWeeks(bw=>({...bw, [p.sessionId]:p.weekOff??0}));
+      setBookPay(bp=>({...bp, [p.sessionId]:{mode:"paynow", amt:it.amt}}));
+    } else if (it.kind === "pt") {
+      const bk = { id:nid(), day:p.day, time:p.time, trainer:p.trainer, loc:p.loc,
+        otherLabel:p.otherLabel, mode:"paynow", pool:p.pool, date:p.date, weekOff:p.weekOff };
+      setMyPT(x=>[...x, bk]); setPtBookings(pb=>[...pb, {...bk, who:it.who}]);
+    }
+    setLedger(l=>[{id:nid(), who:it.who, what:`${it.what} (manual PayNow)`, amt:it.amt,
+      method:"PayNow", status:"paid", d:"Today", iso: toISO(new Date())},...l]);
+    notifyClient(it.who, `Payment confirmed — ${it.what} is yours. Thanks!`);
+    ping(`Approved — $${it.amt} recorded, ${it.what} granted to ${it.who}`);
+    logAudit(`Approved PayNow proof · ${it.who} · ${it.what} · $${it.amt} · ${it.proof?.name||"no file"}`);
+  };
   /* Client notices — pushed when STAFF book or change something on a client's
      behalf. Unlike the derived notification feed, these are events, so they're
      stored. TODO(twilio): when WhatsApp is wired up, send the same text via the
@@ -805,6 +868,12 @@ export function AppProvider({ children }) {
       return;
     }
     if (s.kind==="class") {
+      if (MANUAL_PAYNOW && (payMode==="paynow"||payMode==="card")) {
+        submitPaymentProof({ kind:"class", what:`${CT[s.type].name} · ${s.date||DAYS[s.day]} ${s.time}`,
+          amt: couponValue(CT[s.type].price), proof: s.proof,
+          payload:{ sessionId:s.id, date:s.date, weekOff:bookWeek } });
+        setSheet(null); return;
+      }
       if (payMode==="pass") { /* covered by active class pass — no deduction, no charge */ }
       else if (payMode==="credit") setCredits(c=>({...c, classes:c.classes-1}));
       else { const price=applyCoupon(CT[s.type].price);
@@ -824,6 +893,14 @@ export function AppProvider({ children }) {
       const locLabel = s.loc==="other" ? (otherPlace||"Other spot") : null;
       const pool = ptPool(s.trainer);
       const asGroup = s.bookAs === "group" && myGroup;
+      if (MANUAL_PAYNOW && (payMode==="paynow"||payMode==="card")) {
+        submitPaymentProof({ kind:"pt", what:`PT · ${tName(s.trainer)} · ${s.date||DAYS[s.day]} ${s.time}`,
+          amt: PT_PRICE[s.trainer], proof: s.proof,
+          payload:{ trainer:s.trainer, day:s.day, time:s.time, loc:s.loc,
+            otherLabel: s.loc==="other" ? (otherPlace||"Other spot") : null,
+            pool, date:s.date, weekOff:bookWeek } });
+        setSheet(null); return;
+      }
       if (payMode==="grouppack" && asGroup) {
         /* group booking burns ONE shared credit — the pack belongs to the group,
            whoever of them taps Book */
@@ -953,6 +1030,10 @@ export function AppProvider({ children }) {
   const confirmShopBuy = () => {
     const p = shopSheet.product;
     const price = applyCoupon(p.price);
+    if (MANUAL_PAYNOW && (payMode==="paynow"||payMode==="card"||!payMode)) {
+      submitPaymentProof({ kind:"shop", what:p.name, amt:price, proof:shopSheet.proof, payload:{ product:p } });
+      setShopSheet(null); setCoupon(""); setCouponMsg(null); return;
+    }
     if (p.kind==="classes") setCredits(c=>({...c, classes:c.classes+p.sessions}));
     else if (p.kind==="pthead") setCredits(c=>({...c, ptHead:c.ptHead+p.sessions}));
     else if (p.kind==="ptcoach") setCredits(c=>({...c, ptCoach:c.ptCoach+p.sessions}));
@@ -972,6 +1053,10 @@ export function AppProvider({ children }) {
   const confirmCampBuy = () => {
     const c = campSheet.camp;
     const price = couponValue(c.price);
+    if (MANUAL_PAYNOW && campSheet.pay!=="card") {
+      submitPaymentProof({ kind:"camp", what:c.name, amt:price, proof:campSheet.proof, payload:{ campId:c.id } });
+      setCampSheet(null); setCoupon(""); setCouponMsg(null); return;
+    }
     setCamps(cs=>cs.map(x=>x.id!==c.id?x:{...x,spots:x.spots-1}));
     setMyCamps(m=>[...m, c.id]);
     setLedger(l=>[{id:nid(),who:"Sam Lee",what:c.name+(coupon?` (${coupon.toUpperCase()})`:""),amt:Math.round(price),method:campSheet.pay==="card"?"Card":"PayNow",status:"paid",d:"Today"},...l]);
@@ -1127,6 +1212,7 @@ export function AppProvider({ children }) {
   const pendingCounts = {
     exceptions: exceptionQueue.length,
     refunds: refundQueue.length,
+    payments: paymentQueue.length,
     noshows: noShowQueue.length,
     // Both need the admin. An approved-but-unpaid claim is a coach out of pocket,
     // which is exactly the kind of thing that goes quiet and then becomes a grievance.
@@ -1322,7 +1408,7 @@ export function AppProvider({ children }) {
     newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
     decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
-    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };

@@ -12,7 +12,7 @@ import MenuManagement, { buildDefault } from "./MenuManagement.jsx";
 import { fmtISO } from "../../lib/period.js";
 
 export default function AdminManage() {
-  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd } = useApp();
+  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, paymentQueue, resolvePayment, paynowConfig, setPaynowConfig } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
@@ -28,7 +28,7 @@ export default function AdminManage() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
                 // surface where the work is waiting, on the tab itself
-                const n = k==="money" ? pendingCounts.refunds + pendingCounts.expenses : 0;
+                const n = k==="money" ? pendingCounts.refunds + pendingCounts.expenses + pendingCounts.payments : 0;
                 return (
                 <button key={k} onClick={()=>setAdminSec(k)}
                   className="px-1.5 py-1.5 rounded-full text-xs font-semibold relative"
@@ -321,8 +321,29 @@ export default function AdminManage() {
             {adminSec==="money" && <div className="space-y-3">
               <Card style={{background:T.ink,color:T.paper,border:"none"}}>
                 <div className="text-xs" style={{color:"#B9B5A9"}}>PAYMENT METHODS</div>
-                <div className="text-sm mt-1">PayNow (UEN linked) ✓ · Card via Stripe ✓ · Cash ✓</div>
+                <div className="text-sm mt-1">Manual PayNow (QR / mobile) ✓ · proof-approval below · HitPay parked to save fees</div>
               </Card>
+
+              {/* ---- PAYMENT APPROVALS (manual PayNow, Danny's decision 27 Jul) ----
+                   The member paid by bank transfer and uploaded a screenshot. NOTHING is
+                   granted until the transfer is matched in the bank app and approved here.
+                   Approve = credits/booking/camp granted + ledger row + client notified.
+                   Deny = client notified with the reason; nothing was ever granted. */}
+              {paymentQueue.length > 0 && (
+                <ApprovalQueue
+                  label={`PAYMENT APPROVALS · ${paymentQueue.length} PayNow proof${paymentQueue.length===1?"":"s"} to verify`}
+                  items={paymentQueue.map(p=>({
+                    id: p.id,
+                    title: `${p.who} — $${p.amt} · ${p.what}`,
+                    sub: `${p.method} · proof: ${p.proof?.name || "⚠ no screenshot"} · check the bank app before approving`,
+                    meta: p.at,
+                  }))}
+                  onResolve={resolvePayment}
+                  approveLabel="Payment received" denyLabel="Not found" />)}
+              {paymentQueue.length === 0 && (
+                <Card className="!p-3"><div className="text-xs" style={{color:T.muted}}>
+                  No PayNow proofs waiting. Purchases paid by transfer land here for you to
+                  verify against the bank app before anything is granted.</div></Card>)}
               {/* ---- Queue 3 of 4: REFUNDS (Decisions 2, 6, 7) ----
                    Credit back is automatic on cancellation. Money back is not: the member asks,
                    the admin approves, and only then does the credit come off and the HitPay
@@ -434,6 +455,45 @@ export default function AdminManage() {
                 <div className="text-[11px] mt-1.5" style={{color:T.muted}}>
                   {gymHoursEnd-gymHoursStart}h window · calendar resizes automatically on all views
                 </div>
+              </div>
+
+              {/* ---- PayNow receiving details — what members see at checkout ---- */}
+              <div className="rounded-xl p-3" style={{background:T.card, border:`1.5px solid ${T.line}`}}>
+                <div className="text-xs font-bold mb-2" style={{color:T.muted}}>PAYNOW DETAILS · shown to members at checkout</div>
+                <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>UEN</div>
+                <input value={paynowConfig.uen} onChange={e=>setPaynowConfig(p=>({...p, uen:e.target.value.toUpperCase()}))}
+                  placeholder="e.g. 202412345A" className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-2"
+                  style={{border:`1.5px solid ${T.line}`,background:T.paper}}/>
+                <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>PAYNOW MOBILE</div>
+                <input value={paynowConfig.mobile} onChange={e=>setPaynowConfig(p=>({...p, mobile:e.target.value}))}
+                  placeholder="+65 8100 6608" inputMode="tel" className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-2"
+                  style={{border:`1.5px solid ${T.line}`,background:T.paper}}/>
+                <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>PAYNOW QR · upload the bank-generated image</div>
+                {paynowConfig.qrImage ? (
+                  <div className="flex items-center gap-3">
+                    <img src={paynowConfig.qrImage} alt="PayNow QR" style={{width:72,height:72,objectFit:"contain",borderRadius:8,border:`1.5px solid ${T.line}`,background:"#fff"}}/>
+                    <div className="flex-1">
+                      <div className="text-xs" style={{color:T.moss}}>✓ Real QR uploaded — members scan this one.</div>
+                      <button onClick={()=>setPaynowConfig(p=>({...p, qrImage:null}))}
+                        className="text-xs font-bold mt-1" style={{color:T.accent}}>Remove</button>
+                    </div>
+                  </div>
+                ) : (<>
+                  <input type="file" accept="image/*" id="paynow-qr-upload" style={{display:"none"}}
+                    onChange={e=>{ const f=e.target.files?.[0]; if(!f) return;
+                      const r = new FileReader();
+                      r.onload = () => setPaynowConfig(p=>({...p, qrImage:r.result}));
+                      r.readAsDataURL(f); }}/>
+                  <label htmlFor="paynow-qr-upload"
+                    className="block w-full py-2.5 rounded-xl text-sm font-bold text-center cursor-pointer"
+                    style={{border:`1.5px dashed ${T.line}`, color:T.muted}}>
+                    📎 Upload PayNow QR image
+                  </label>
+                  <div className="text-[10px] mt-1" style={{color:T.muted}}>
+                    Until you upload one, members see a placeholder pattern with the UEN — export
+                    the real QR from the bank app so scans hit the right account.
+                  </div>
+                </>)}
               </div>
 
               {/* Timetable lives here: creating classes and camps is setup, done
