@@ -6,7 +6,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Card, QR, Select } from "../ui/kit.jsx";
 
 export default function BookingSheets() {
-  const { applyCoupon, campSheet, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, exceptionSheet, justBooked, loc, locName, otherPlace, payMode, ping, policy, ptPool, reminderChannel, requestException, setCampSheet, setCoupon, setCouponMsg, setExceptionSheet, setJustBooked, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName } = useApp();
+  const { applyCoupon, campSheet, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, exceptionSheet, justBooked, loc, locName, otherPlace, payMode, ping, policy, ptPool, reminderChannel, requestException, setCampSheet, setCoupon, setCouponMsg, setExceptionSheet, setJustBooked, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName, myGroup, myGroupPack } = useApp();
 
   const bookedEvent = justBooked && {
     title: justBooked.title, start: eventStart(justBooked.weekOff, justBooked.day, justBooked.time),
@@ -34,13 +34,40 @@ export default function BookingSheets() {
                 {sheet.date && <span style={{color:T.ink, fontWeight:600}}>{sheet.date} · {sheet.time} · </span>}
                 {sheet.kind==="class" ? locName(sheet.loc) : (sheet.loc==="other" ? (otherPlace||"Other spot") : locName(sheet.loc))} · ${sheet.kind==="class"?CT[sheet.type].price:PT_PRICE[sheet.trainer]}</div>
               {sheet.note && <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>⏱ {sheet.note}</div>}
+
+              {/* Book as myself, or as my group — the choice only exists for
+                  group members; solo clients never see it. Group PT burns the
+                  SHARED pack, not a personal credit. */}
+              {myGroup && (
+                <div className="mb-3">
+                  <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>BOOKING FOR</div>
+                  <div className="flex gap-1.5">
+                    {[["me","Myself"],["group",`👥 ${myGroup.name}`]].map(([k,l])=>{
+                      const on = (sheet.bookAs||"me")===k;
+                      return (
+                      <button key={k} onClick={()=>{ setSheet(s=>({...s,bookAs:k}));
+                        if (sheet.kind==="pt") setPayMode(k==="group" ? "grouppack" : (credits[ptPool(sheet.trainer)]>0?"credit":"paynow")); }}
+                        className="flex-1 py-2 rounded-xl text-sm font-bold"
+                        style={{background:on?T.ink:T.card, color:on?T.paper:T.ink,
+                          border:`1.5px solid ${on?T.ink:T.line}`}}>{l}</button>);})}
+                  </div>
+                  {sheet.bookAs==="group" && sheet.kind==="class" && (
+                    <div className="text-[11px] mt-1.5 rounded-lg p-2" style={{background:"#FBF3EC", color:T.muted}}>
+                      Class seats are per person — this books YOUR seat; the rest of {myGroup.name} are
+                      notified to grab theirs. Group credits apply to PT sessions.
+                    </div>)}
+                </div>)}
+
               <div className="space-y-2 mb-3">
                 {(() => {
                   const pool = sheet.kind==="pt" ? ptPool(sheet.trainer) : null;
+                  const asGroup = sheet.bookAs==="group" && myGroup && sheet.kind==="pt";
+                  const gLeft = myGroupPack ? myGroupPack.size - myGroupPack.used : 0;
                   const opts = [];
+                  if (asGroup) opts.push(["grouppack", `Group pack · ${myGroup.name} (${gLeft} left)`, gLeft<=0]);
                   if (sheet.kind==="class" && classPass) opts.push(["pass", `${classPass.label} (unlimited)`, false]);
                   if (sheet.kind==="class") opts.push(["credit", `Class credit (${credits.classes} left)`, credits.classes<=0]);
-                  if (sheet.kind==="pt") opts.push(["credit", `${isHead(sheet.trainer)?"Head-coach":"Coach"} PT credit (${credits[pool]} left)`, credits[pool]<=0]);
+                  if (sheet.kind==="pt" && !asGroup) opts.push(["credit", `${isHead(sheet.trainer)?"Head-coach":"Coach"} PT credit (${credits[pool]} left)`, credits[pool]<=0]);
                   opts.push(["paynow","PayNow QR",false],["card","Card · coming soon",true]);
                   return opts.map(([k,label,dis])=>(
                     <button key={k} disabled={dis} onClick={()=>setPayMode(k)}
@@ -57,7 +84,7 @@ export default function BookingSheets() {
                 </div>)}
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
               {payMode==="paynow" && <QR/>}
-              <Btn full disabled={sheet.kind==="pt" && sheet.loc==="other" && !otherPlace} onClick={confirmBook}>{payMode==="credit"?"Confirm · 1 credit":payMode==="pass"?"Confirm · covered by pass":"Pay & book"}</Btn>
+              <Btn full disabled={(sheet.kind==="pt" && sheet.loc==="other" && !otherPlace) || (payMode==="grouppack" && myGroupPack && myGroupPack.size-myGroupPack.used<=0)} onClick={confirmBook}>{payMode==="grouppack"?"Confirm · 1 group credit":payMode==="credit"?"Confirm · 1 credit":payMode==="pass"?"Confirm · covered by pass":"Pay & book"}</Btn>
               {/* window is per booking type and read from Settings — never a constant in copy */}
               <div className="text-center text-xs mt-3" style={{color:T.muted}}>
                 Free cancellation until {sheet.kind==="class"?policy.classHrs:policy.ptHrs}h before. Inside that, you can request an exception.</div>

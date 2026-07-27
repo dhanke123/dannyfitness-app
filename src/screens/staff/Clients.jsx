@@ -10,7 +10,7 @@ export default function StaffClients() {
   const { credits, intakeRecords, isAdmin, isClient, measurements, noShowQueue, ping,
           resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tName, tab, user,
           sessionLog, addSessionLog, groupPacks, trainers,
-          clients, clientGroups, clientById, addClient, createGroup, importClientsCsv } = useApp();
+          clients, clientGroups, clientById, addClient, createGroup, importClientsCsv, editClient } = useApp();
   const [openIntake, setOpenIntake] = useState(null);
   const [openSessions, setOpenSessions] = useState(null);   // client name whose session history is expanded
   const [backfill, setBackfill] = useState(null);           // {who, date, time, tookBy, remark}
@@ -18,6 +18,7 @@ export default function StaffClients() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [newClient, setNewClient] = useState(null);         // {name, phone, email}
+  const [editSheet, setEditSheet] = useState(null);         // {id, name, phone, email} — admin edits any client
   return (<>
         {/* ==================== TRAINER / ADMIN: CLIENTS ==================== */}
         {!isClient && tab==="clients" && (
@@ -88,6 +89,8 @@ export default function StaffClients() {
                   <div className="flex gap-1.5">
                     <Btn small kind="ghost" onClick={()=>setMeasForm({who:n, weight:"", fat:""})}>+ Stats</Btn>
                     <Btn small kind="ghost" onClick={()=>setIntakeForm({who:n})}>+ Intake</Btn>
+                    {isAdmin && (()=>{ const c = clients.find(x=>x.name===n);
+                      return c ? <Btn small kind="ghost" onClick={()=>setEditSheet({id:c.id, name:c.name, phone:c.phone||"", email:c.email||""})}>Edit</Btn> : null; })()}
                   </div>
                 </div>
                 <div className="flex gap-1.5 mt-2">
@@ -257,6 +260,35 @@ export default function StaffClients() {
                 </div>
               </div>)}
 
+            {/* ---- admin: edit client details ---- */}
+            {editSheet && (
+              <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setEditSheet(null)}>
+                <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div style={{...disp,fontWeight:700,fontSize:20}}>Edit client</div>
+                    <button onClick={()=>setEditSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+                  </div>
+                  <div className="text-xs mb-3" style={{color:T.muted}}>
+                    The mobile number doubles as their login and WhatsApp. Changing it here changes
+                    how they sign in once Supabase auth is live.
+                  </div>
+                  <div className="space-y-2 mb-3">
+                    <div><div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>FULL NAME</div>
+                      <input value={editSheet.name} onChange={e=>setEditSheet(x=>({...x,name:e.target.value}))}
+                        className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                    <div><div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>MOBILE · LOGIN &amp; WHATSAPP</div>
+                      <input value={editSheet.phone} onChange={e=>setEditSheet(x=>({...x,phone:e.target.value}))} inputMode="tel"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                    <div><div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>EMAIL</div>
+                      <input value={editSheet.email} onChange={e=>setEditSheet(x=>({...x,email:e.target.value}))}
+                        className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                  </div>
+                  <Btn full disabled={!editSheet.name.trim()} onClick={()=>{
+                    editClient(editSheet.id, { name:editSheet.name.trim(), phone:editSheet.phone.replace(/\D/g,""), email:editSheet.email.trim() });
+                    setEditSheet(null);}}>Save changes</Btn>
+                </div>
+              </div>)}
+
             {/* ---- group builder: pick 2-3 people, star the primary ---- */}
             {groupBuilder && (
               <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setGroupBuilder(null)}>
@@ -266,8 +298,8 @@ export default function StaffClients() {
                     <button onClick={()=>setGroupBuilder(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
                   </div>
                   <div className="text-xs mb-3" style={{color:T.muted}}>
-                    Pick 2–3 clients who train together. Tap ★ to set the primary — they pay,
-                    own the shared pack and get the billing messages.
+                    Pick 2 or more clients who train together. Tap ★ to set the primary — they
+                    pay, own the shared pack and get the billing messages.
                   </div>
                   <div className="space-y-1 mb-3">
                     {clients.filter(c=>!clientGroups.some(g=>g.memberIds.includes(c.id))).map(c=>{
@@ -277,7 +309,7 @@ export default function StaffClients() {
                       <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5"
                         style={{background:on?"#EFF3EE":"transparent", border:`1.5px solid ${on?T.moss:T.line}`}}>
                         <button onClick={()=>setGroupBuilder(b=>({...b,
-                          memberIds: on ? b.memberIds.filter(x=>x!==c.id) : b.memberIds.length<3 ? [...b.memberIds,c.id] : b.memberIds,
+                          memberIds: on ? b.memberIds.filter(x=>x!==c.id) : [...b.memberIds,c.id],
                           primaryId: on && b.primaryId===c.id ? null : b.primaryId}))}
                           className="flex-1 text-left text-sm font-semibold">{on?"✓ ":""}{c.name}</button>
                         {on && <button onClick={()=>setGroupBuilder(b=>({...b, primaryId:c.id}))}

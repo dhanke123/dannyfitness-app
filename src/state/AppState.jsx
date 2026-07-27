@@ -337,6 +337,7 @@ export function AppProvider({ children }) {
     { id:"g1", name:"Swati & Supriya",       memberIds:["c14","c15"],       primaryId:"c14", trainer:"danny" },
     { id:"g2", name:"Shreyans & Pooja",      memberIds:["c16","c17"],       primaryId:"c16", trainer:"danny" },
     { id:"g3", name:"Mable & Wendy & Helen", memberIds:["c18","c19","c20"], primaryId:"c18", trainer:"danny" },
+    { id:"g4", name:"Sam & Ben",             memberIds:["c1","c2"],         primaryId:"c1",  trainer:"danny" },
   ]);
   const clientById = (id) => clients.find(c => c.id === id);
   const groupByName = (name) => clientGroups.find(g => g.name === name);
@@ -348,6 +349,10 @@ export function AppProvider({ children }) {
     const id = nid();
     setClientGroups(gs => [...gs, { id, name:gname, memberIds, primaryId: primaryId || memberIds[0], trainer: trainer || "danny" }]);
     return { id, name: gname };
+  };
+  const editClient = (id, patch) => {
+    setClients(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c));
+    ping("Client updated");
   };
   /* CSV import — one row per PERSON:
        name,phone,email,group_name,is_primary,sessions_remaining
@@ -425,7 +430,18 @@ export function AppProvider({ children }) {
     { id:"gp1", groupId:"g1", name:"Swati & Supriya",       members:["Swati","Supriya"],        size:10, used:6, trainer:"danny" },
     { id:"gp2", groupId:"g2", name:"Shreyans & Pooja",      members:["Shreyans","Pooja"],       size:10, used:2, trainer:"danny" },
     { id:"gp3", groupId:"g3", name:"Mable & Wendy & Helen", members:["Mable","Wendy","Helen"],  size:10, used:2, trainer:"danny" },
+    { id:"gp4", groupId:"g4", name:"Sam & Ben",             members:["Sam Lee","Ben"],          size:5,  used:1, trainer:"danny" },
   ]);
+  /* The logged-in CLIENT's group, if any. Drives the "book as myself / as my
+     group" choice — the option simply doesn't exist for solo clients.
+     (Defined AFTER groupPacks: this computes during render, so everything it
+     reads must already be initialised.) */
+  const myGroup = user?.role === "client"
+    ? clientGroups.find(g => g.memberIds.some(id => clientById(id)?.name === user.name)) || null
+    : null;
+  const myGroupPack = myGroup
+    ? groupPacks.find(p => p.groupId === myGroup.id || p.name === myGroup.name) || null
+    : null;
   const addSessionLog = (entry) => {
     setSessionLog(ls => [{ id: nid(), kind:"PT", remark:"", ...entry }, ...ls]);
     // a joint session burns one credit from the group's shared pack
@@ -807,11 +823,25 @@ export function AppProvider({ children }) {
     } else if (s.kind==="pt") {
       const locLabel = s.loc==="other" ? (otherPlace||"Other spot") : null;
       const pool = ptPool(s.trainer);
-      if (payMode==="credit") setCredits(c=>({...c, [pool]:c[pool]-1}));
+      const asGroup = s.bookAs === "group" && myGroup;
+      if (payMode==="grouppack" && asGroup) {
+        /* group booking burns ONE shared credit — the pack belongs to the group,
+           whoever of them taps Book */
+        setGroupPacks(gs => gs.map(g => (g.groupId === myGroup.id || g.name === myGroup.name)
+          ? { ...g, used: Math.min(g.size, g.used + 1) } : g));
+      }
+      else if (payMode==="credit") setCredits(c=>({...c, [pool]:c[pool]-1}));
       else setLedger(l=>[{id:nid(), who:"Sam Lee", what:`PT · ${tName(s.trainer)}${isHead(s.trainer)?" (Head Coach)":""}`, amt:PT_PRICE[s.trainer], method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]);
-      const bk = {id:nid(), day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, otherLabel:locLabel, mode:payMode, pool, date:s.date, weekOff:bookWeek};
-      notifyStaff(s.trainer, `${user?.name||"A member"} booked PT · ${s.date||DAYS[s.day]} ${s.time}${locLabel?` · ${locLabel}`:""}`);
-      notifyStaff("admin", `${user?.name||"A member"} booked PT with ${tName(s.trainer)} · ${s.date||DAYS[s.day]} ${s.time}`);
+      const bk = {id:nid(), day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, otherLabel:locLabel, mode:payMode, pool, date:s.date, weekOff:bookWeek,
+        who: asGroup ? myGroup.name : undefined, forGroup: asGroup ? myGroup.name : undefined};
+      const label = (s.bookAs==="group" && myGroup) ? `${user?.name} (for ${myGroup.name})` : (user?.name||"A member");
+      notifyStaff(s.trainer, `${label} booked PT · ${s.date||DAYS[s.day]} ${s.time}${locLabel?` · ${locLabel}`:""}`);
+      notifyStaff("admin", `${label} booked PT with ${tName(s.trainer)} · ${s.date||DAYS[s.day]} ${s.time}`);
+      if (s.bookAs==="group" && myGroup) myGroup.memberIds
+        .map(id => clientById(id)?.name).filter(nm => nm && nm !== user?.name)
+        .forEach(nm => setClientNotices(ns => [{ id:nid(), who:nm,
+          text:`${user?.name} booked a ${myGroup.name} PT session: ${s.date||DAYS[s.day]} ${s.time} with ${tName(s.trainer)}. 1 group credit used.`,
+          when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }, ...ns]));
       track(EVENTS.BOOK_CONFIRM, { kind:"pt", method:payMode });
       setMyPT(p=>[...p, bk]);
       if (s.loc!=="other") setPtBookings(pb=>[...pb, {id:bk.id, trainer:s.trainer, day:s.day, time:s.time, loc:s.loc, who:"Sam Lee", date:s.date, weekOff:bookWeek}]);
@@ -1292,7 +1322,7 @@ export function AppProvider({ children }) {
     newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
     decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
-    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, importClientsCsv, logGroupSession, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
