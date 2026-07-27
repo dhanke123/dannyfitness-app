@@ -110,7 +110,7 @@ export default function Login() {
   });
 
   return (
-    <div className="min-h-screen flex justify-center" style={{background:"#E6DFD3", ...body, color:T.ink}}>
+    <div className="min-h-screen flex justify-center overflow-x-hidden" style={{background:"#E6DFD3", ...body, color:T.ink}}>
       <style>{FONTS}</style>
       <div className="w-full max-w-md min-h-screen flex flex-col" style={{background:T.paper}}>
         {/* warm hero */}

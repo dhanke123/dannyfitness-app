@@ -24,7 +24,7 @@ export default function StaffMe() {
           const owed = myClaims.filter(c => c.status === "approved").reduce((t, c) => t + approvedTotal(c), 0);
           const drafts = myClaims.filter(c => c.status === "draft").length;
           return (
-          <main className="flex-1 overflow-y-auto pb-24 px-5 space-y-3">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5 space-y-3">
             <H>Me</H>
             {/* Expenses are a real part of a coach's account, not a button hidden on
                 another screen. The badge is what makes an unfinished draft or unpaid

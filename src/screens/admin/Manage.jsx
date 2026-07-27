@@ -16,7 +16,7 @@ export default function AdminManage() {
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
-          <main className="flex-1 overflow-y-auto pb-24 px-5">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5">
             {/* Six sections in a single no-wrap flex row overflowed the 448px shell, so
                 Settings sat off-screen and needed a horizontal scroll nobody could see.
                 A 3×2 grid fits, gives every section equal weight, and keeps the count

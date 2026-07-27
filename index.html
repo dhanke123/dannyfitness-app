@@ -2,7 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- maximum-scale=1 stops iOS Safari's auto-zoom when focusing inputs with
+         font-size < 16px — the zoom persisted and forced left-right panning.
+         Android ignores maximum-scale, so pinch-zoom still works there. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>ExerciseOnly</title>
     <meta name="description" content="Book classes, PT & camps, and log every workout — ExerciseOnly." />
 
@@ -20,6 +23,15 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="ExerciseOnly" />
+
+    <style>
+      /* Hard guarantee: the app never pans sideways. overflow-y:auto on the
+         screen <main>s computes overflow-x to auto, so any accidentally-wide
+         child would otherwise create horizontal scroll. */
+      html, body { overflow-x: hidden; width: 100%; -webkit-text-size-adjust: 100%; }
+      #root { width: 100%; overflow-x: clip; }
+      input, select, textarea { font-size: max(16px, 1em); } /* second guard vs iOS zoom */
+    </style>
   </head>
   <body>
     <div id="root"></div>

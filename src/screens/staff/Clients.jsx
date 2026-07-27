@@ -16,7 +16,7 @@ export default function StaffClients() {
   return (<>
         {/* ==================== TRAINER / ADMIN: CLIENTS ==================== */}
         {!isClient && tab==="clients" && (
-          <main className="flex-1 overflow-y-auto pb-24 px-5">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5">
             <H>Clients</H>
 
             {/* ---- Queue 2 of 4: NO-SHOWS (Decisions 5, 6, 7) ----

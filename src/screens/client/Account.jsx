@@ -8,7 +8,7 @@ export default function ClientAccount() {
   return (<>
         {/* ==================== CLIENT: ACCOUNT ==================== */}
         {isClient && tab==="account" && (
-          <main className="flex-1 overflow-y-auto pb-24 px-5 space-y-3">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5 space-y-3">
             <H>Account</H>
             <Card><div className="font-bold">Sam Lee</div><div className="text-xs" style={{color:T.muted}}>+65 9XXX XXXX · sam@email.com · OTP login</div></Card>
             <Card style={{background:T.ink,color:T.paper,border:"none"}}>

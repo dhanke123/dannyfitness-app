@@ -18,7 +18,7 @@
      sed -i "s/CACHE_VERSION = .*/CACHE_VERSION = \"v$(date +%Y%m%d%H%M)\";/" public/sw.js
    Failing to bump means existing users keep the old cache and never get the update. */
 
-const CACHE_VERSION = "v3";  // bumped 27 Jul 2026 — bump again on next deploy
+const CACHE_VERSION = "v4";  // bumped: iOS input-zoom fix && overflow guards
 const SHELL_CACHE = `eo-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `eo-assets-${CACHE_VERSION}`;
 

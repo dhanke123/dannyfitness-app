@@ -16,7 +16,7 @@ export default function AdminReports() {
   const { isAdmin, reportView, setReportView, tab } = useApp();
   if (!isAdmin || tab !== "reports") return null;
   return (
-    <main className="flex-1 overflow-y-auto pb-24 px-5">
+    <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5">
       <H>Reports</H>
       <div className="flex gap-2 pb-3">
         {[["analytics", "Analytics"], ["payouts", "Payouts"]].map(([k, l]) => (

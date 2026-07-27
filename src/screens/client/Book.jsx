@@ -25,7 +25,7 @@ export default function ClientBook() {
   return (<>
         {/* ==================== CLIENT: BOOK ==================== */}
         {isClient && tab==="book" && (
-          <main className="flex-1 overflow-y-auto pb-24">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24">
             <div className="px-5 flex gap-2 pb-2">
               {[["classes","Classes"],["pt","PT"],["camps","Camps"],["mine","Booked"]].map(([k,l])=>(
                 <Chip key={k} active={seg===k} onClick={()=>setSeg(k)}>{l}</Chip>))}
