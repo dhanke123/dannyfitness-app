@@ -38,30 +38,34 @@ const YN = [
   ["dietRestrict","Any dietary restrictions?"],
 ];
 
+/* Module-scope helpers: STABLE component identity. Defining these inside the
+   component gives them a new identity every render, which makes React unmount
+   and remount the subtree — the focused input disappears on every keystroke
+   and the phone keyboard collapses. Never define components inside components. */
+const field = { width:"100%", padding:"8px 10px", borderRadius:10, fontSize:14,
+  border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, outline:"none" };
+const lab = { fontSize:10, fontWeight:700, color:T.muted, marginBottom:2, display:"block" };
+const Input = ({f, set, k, ph, type="text", half}) => (
+  <div style={half?{flex:1,minWidth:0}:{}}>
+    <input value={f[k]||""} onChange={e=>set(k, e.target.value)} placeholder={ph} type={type} style={field}/>
+  </div>);
+const L = ({t, children}) => (<div className="mb-2"><span style={lab}>{t}</span>{children}</div>);
+const Row = ({children}) => <div className="flex gap-2 mb-2">{children}</div>;
+const YNBtn = ({f, set, k}) => (
+  <div className="flex gap-1">
+    {["Yes","No"].map(v=>(
+      <button key={v} onClick={()=>set(k, v)}
+        className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
+        style={{background:f[k]===v?T.ink:"transparent", color:f[k]===v?T.paper:T.ink,
+          border:`1.5px solid ${f[k]===v?T.ink:T.line}`}}>{v}</button>))}
+  </div>);
+
 export default function IntakeFormSheet() {
   const { intakeForm, setIntakeForm, saveIntake, trainers, locations, user, tName } = useApp();
   const [sec, setSec] = useState(0);
   if (!intakeForm) return null;
   const f = intakeForm;
   const set = (k, v) => setIntakeForm(x => ({ ...x, [k]: v }));
-
-  const field = { width:"100%", padding:"8px 10px", borderRadius:10, fontSize:14,
-    border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, outline:"none" };
-  const lab = { fontSize:10, fontWeight:700, color:T.muted, marginBottom:2, display:"block" };
-  const Input = ({k, ph, type="text", half}) => (
-    <div style={half?{flex:1,minWidth:0}:{}}>
-      <input value={f[k]||""} onChange={e=>set(k, e.target.value)} placeholder={ph} type={type} style={field}/>
-    </div>);
-  const L = ({t, children}) => (<div className="mb-2"><span style={lab}>{t}</span>{children}</div>);
-  const Row = ({children}) => <div className="flex gap-2 mb-2">{children}</div>;
-  const YNBtn = ({k}) => (
-    <div className="flex gap-1">
-      {["Yes","No"].map(v=>(
-        <button key={v} onClick={()=>set(k, v)}
-          className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
-          style={{background:f[k]===v?T.ink:"transparent", color:f[k]===v?T.paper:T.ink,
-            border:`1.5px solid ${f[k]===v?T.ink:T.line}`}}>{v}</button>))}
-    </div>);
 
   /* completeness: goals + name minimum for a saveable record */
   const canSave = !!(f.who && (f.goals || "").trim());
@@ -101,23 +105,23 @@ export default function IntakeFormSheet() {
               <L t="VENUE"><Select value={f.venue||""} onChange={v=>set("venue",v)}
                 options={[["","Pick venue…"],...locations.map(l=>[l.id,l.name])]}/></L>
             </Row>
-            <Row><Input k="dob" ph="DOB (e.g. 12 Mar 1990)" half/>
+            <Row><Input f={f} set={set} k="dob" ph="DOB (e.g. 12 Mar 1990)" half/>
               <L t=""><Select value={f.gender||""} onChange={v=>set("gender",v)}
                 options={[["","Gender…"],["F","Female"],["M","Male"],["-","Prefer not to say"]]}/></L></Row>
-            <L t="ADDRESS"><Input k="address" ph="Home address"/></L>
-            <Row><Input k="contact" ph="Mobile" half/><Input k="emergency" ph="Emergency contact" half/></Row>
-            <Row><Input k="email" ph="Email" half/><Input k="occupation" ph="Occupation" half/></Row>
+            <L t="ADDRESS"><Input f={f} set={set} k="address" ph="Home address"/></L>
+            <Row><Input f={f} set={set} k="contact" ph="Mobile" half/><Input f={f} set={set} k="emergency" ph="Emergency contact" half/></Row>
+            <Row><Input f={f} set={set} k="email" ph="Email" half/><Input f={f} set={set} k="occupation" ph="Occupation" half/></Row>
           </>)}
 
           {/* ---------- 2 · BODY ANALYSIS ---------- */}
           {sec===1 && (<>
             <div className="text-[11px] mb-2" style={{color:T.muted}}>Readings from the body-composition scale.</div>
-            <Row><Input k="age" ph="Age" half/><Input k="height" ph="Height (cm)" half/><Input k="weight" ph="Weight (kg)" half/></Row>
-            <Row><Input k="bmi" ph="BMI" half/><Input k="kgToLose" ph="KG to lose" half/><Input k="idealWeight" ph="Ideal weight" half/></Row>
-            <Row><Input k="bodyFat" ph="Body fat %" half/><Input k="visceralFat" ph="Visceral fat rating" half/></Row>
-            <Row><Input k="skeletalMuscle" ph="Skeletal muscle mass" half/><Input k="restingMetab" ph="Resting metabolism" half/></Row>
-            <Row><Input k="metabolicAge" ph="Metabolic / body age" half/></Row>
-            <Row><Input k="bedTime" ph="Bed time" half/><Input k="wakeTime" ph="Wake time" half/></Row>
+            <Row><Input f={f} set={set} k="age" ph="Age" half/><Input f={f} set={set} k="height" ph="Height (cm)" half/><Input f={f} set={set} k="weight" ph="Weight (kg)" half/></Row>
+            <Row><Input f={f} set={set} k="bmi" ph="BMI" half/><Input f={f} set={set} k="kgToLose" ph="KG to lose" half/><Input f={f} set={set} k="idealWeight" ph="Ideal weight" half/></Row>
+            <Row><Input f={f} set={set} k="bodyFat" ph="Body fat %" half/><Input f={f} set={set} k="visceralFat" ph="Visceral fat rating" half/></Row>
+            <Row><Input f={f} set={set} k="skeletalMuscle" ph="Skeletal muscle mass" half/><Input f={f} set={set} k="restingMetab" ph="Resting metabolism" half/></Row>
+            <Row><Input f={f} set={set} k="metabolicAge" ph="Metabolic / body age" half/></Row>
+            <Row><Input f={f} set={set} k="bedTime" ph="Bed time" half/><Input f={f} set={set} k="wakeTime" ph="Wake time" half/></Row>
           </>)}
 
           {/* ---------- 3 · HEALTH ---------- */}
@@ -129,19 +133,19 @@ export default function IntakeFormSheet() {
             <L t="3 · WHY CHANGE NOW?">
               <textarea value={f.whyNow||""} onChange={e=>set("whyNow",e.target.value)} rows={2} style={{...field,resize:"none"}}/></L>
             <div style={lab}>TYPICAL MEALS &amp; TIMES</div>
-            <Row><Input k="breakfast" ph="Breakfast + time" half/><Input k="lunch" ph="Lunch + time" half/></Row>
-            <Row><Input k="dinner" ph="Dinner + time" half/><Input k="supper" ph="Supper + time" half/></Row>
-            <Row><Input k="snacking" ph="Snacking habit?" half/><Input k="socialGathering" ph="Social gatherings?" half/></Row>
+            <Row><Input f={f} set={set} k="breakfast" ph="Breakfast + time" half/><Input f={f} set={set} k="lunch" ph="Lunch + time" half/></Row>
+            <Row><Input f={f} set={set} k="dinner" ph="Dinner + time" half/><Input f={f} set={set} k="supper" ph="Supper + time" half/></Row>
+            <Row><Input f={f} set={set} k="snacking" ph="Snacking habit?" half/><Input f={f} set={set} k="socialGathering" ph="Social gatherings?" half/></Row>
             {YN.map(([k,q])=>(
               <div key={k} className="flex items-center justify-between py-1.5" style={{borderBottom:`1px solid ${T.line}`}}>
-                <span className="text-xs">{q}</span><YNBtn k={k}/>
+                <span className="text-xs">{q}</span><YNBtn f={f} set={set} k={k}/>
               </div>))}
             <div className="mt-2"/>
-            <Row><Input k="exerciseFreq" ph="Exercise — how often?" half/><Input k="water" ph="Water per day (L / cups)" half/></Row>
-            <L t="VITAMINS / SUPPLEMENTS"><Input k="supplements" ph="Please specify"/></L>
-            <L t="ALLERGIES"><Input k="allergies" ph="Any allergies"/></L>
-            <L t="GASTRIC / CONSTIPATION"><Input k="gastric" ph="How serious?"/></L>
-            <L t="LONG-TERM MEDICATION"><Input k="medication" ph="What are they for?"/></L>
+            <Row><Input f={f} set={set} k="exerciseFreq" ph="Exercise — how often?" half/><Input f={f} set={set} k="water" ph="Water per day (L / cups)" half/></Row>
+            <L t="VITAMINS / SUPPLEMENTS"><Input f={f} set={set} k="supplements" ph="Please specify"/></L>
+            <L t="ALLERGIES"><Input f={f} set={set} k="allergies" ph="Any allergies"/></L>
+            <L t="GASTRIC / CONSTIPATION"><Input f={f} set={set} k="gastric" ph="How serious?"/></L>
+            <L t="LONG-TERM MEDICATION"><Input f={f} set={set} k="medication" ph="What are they for?"/></L>
             <L t="PAST INJURIES / ACHES & PAINS">
               <textarea value={f.injuries||""} onChange={e=>set("injuries",e.target.value)} rows={2} style={{...field,resize:"none"}}/></L>
           </>)}
@@ -177,7 +181,7 @@ export default function IntakeFormSheet() {
                         border:`1px solid ${f[k]===n?T.accent:T.line}`}}>{n}</button>))}
                 </div>
               </div>))}
-            <Row><Input k="mobility" ph="Mobility notes" half/><Input k="flexibility" ph="Flexibility notes" half/></Row>
+            <Row><Input f={f} set={set} k="mobility" ph="Mobility notes" half/><Input f={f} set={set} k="flexibility" ph="Flexibility notes" half/></Row>
             <div className="text-[11px] rounded-lg p-2 mt-1" style={{background:"#FBF3EC", color:T.muted}}>
               📷 Take 3 photos: ¾ front · ¾ right side · close-up face (white backdrop).
               Attach via the client's Measurements photos for now.
@@ -186,8 +190,8 @@ export default function IntakeFormSheet() {
 
           {/* ---------- 5 · PLAN ---------- */}
           {sec===4 && (<>
-            <L t="PREFERRED TRAINING DAYS & TIMES"><Input k="preferredTimes" ph="e.g. Mon / Wed / Fri mornings"/></L>
-            <L t="TRAINING FREQUENCY"><Input k="frequency" ph="e.g. 3× a week"/></L>
+            <L t="PREFERRED TRAINING DAYS & TIMES"><Input f={f} set={set} k="preferredTimes" ph="e.g. Mon / Wed / Fri mornings"/></L>
+            <L t="TRAINING FREQUENCY"><Input f={f} set={set} k="frequency" ph="e.g. 3× a week"/></L>
             <L t="TRAINING PLAN">
               <textarea value={f.trainingPlan||""} onChange={e=>set("trainingPlan",e.target.value)} rows={3}
                 placeholder="Programme outline for this client" style={{...field,resize:"none"}}/></L>

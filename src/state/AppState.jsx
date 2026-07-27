@@ -341,6 +341,16 @@ export function AppProvider({ children }) {
      hitpay/notify edge function → Twilio WhatsApp Business API here. */
   const [clientNotices, setClientNotices] = useState([]);
   const firstNameOf = (n) => String(n || "").split(" ")[0];
+  /* Staff notices — the other half of the scheduling loop. When a CLIENT books,
+     moves or cancels, the assigned coach AND the admin both hear about it in
+     their bell feed. target: "admin" or a trainer id. Together with
+     clientNotices this closes the client ↔ coach ↔ admin triangle in-app —
+     no WhatsApp (and no Twilio cost) needed for routine scheduling traffic. */
+  const [staffNotices, setStaffNotices] = useState([]);
+  const notifyStaff = (target, text) => {
+    setStaffNotices(ns => [{ id: nid(), target, text,
+      when: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }, ...ns]);
+  };
   const notifyClient = (who, text) => {
     setClientNotices(ns => [{ id: nid(), who, text,
       when: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }, ...ns]);
@@ -687,12 +697,16 @@ export function AppProvider({ children }) {
       setJustBooked({ title:`${CT[s.type].name} · ExerciseOnly`, weekOff:bookWeek, day:s.day, time:s.time,
         minutes:CT[s.type].dur, location:locName(s.loc), uid:`class-${s.id}-w${bookWeek}`,
         details:`Coach ${tName(s.trainer)}`, dateLabel:s.date });
+      sessTrainers(s).forEach(tid => notifyStaff(tid, `${user?.name||"A member"} booked ${CT[s.type].name} · ${s.date||DAYS[s.day]} ${s.time}`));
+      notifyStaff("admin", `${user?.name||"A member"} booked ${CT[s.type].name} · ${s.date||DAYS[s.day]} ${s.time} · ${locName(s.loc)}`);
     } else if (s.kind==="pt") {
       const locLabel = s.loc==="other" ? (otherPlace||"Other spot") : null;
       const pool = ptPool(s.trainer);
       if (payMode==="credit") setCredits(c=>({...c, [pool]:c[pool]-1}));
       else setLedger(l=>[{id:nid(), who:"Sam Lee", what:`PT · ${tName(s.trainer)}${isHead(s.trainer)?" (Head Coach)":""}`, amt:PT_PRICE[s.trainer], method:payMode==="paynow"?"PayNow":"Card", status:"paid", d:"Today"},...l]);
       const bk = {id:nid(), day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, otherLabel:locLabel, mode:payMode, pool, date:s.date, weekOff:bookWeek};
+      notifyStaff(s.trainer, `${user?.name||"A member"} booked PT · ${s.date||DAYS[s.day]} ${s.time}${locLabel?` · ${locLabel}`:""}`);
+      notifyStaff("admin", `${user?.name||"A member"} booked PT with ${tName(s.trainer)} · ${s.date||DAYS[s.day]} ${s.time}`);
       track(EVENTS.BOOK_CONFIRM, { kind:"pt", method:payMode });
       setMyPT(p=>[...p, bk]);
       if (s.loc!=="other") setPtBookings(pb=>[...pb, {id:bk.id, trainer:s.trainer, day:s.day, time:s.time, loc:s.loc, who:"Sam Lee", date:s.date, weekOff:bookWeek}]);
@@ -715,6 +729,8 @@ export function AppProvider({ children }) {
   const cancelClass = (sid) => {
     const s = sessions.find(x=>x.id===sid);
     const pay = bookPay[sid] || {mode:"credit", amt:0};
+    if (s) { sessTrainers(s).forEach(tid => notifyStaff(tid, `${user?.name||"A member"} cancelled out of ${CT[s.type].name} · ${bookDates[sid]||DAYS[s.day]} ${s.time}`));
+      notifyStaff("admin", `${user?.name||"A member"} cancelled ${CT[s.type].name} · ${bookDates[sid]||DAYS[s.day]} ${s.time}`); }
     track(EVENTS.BOOK_CANCEL, { kind:"class", method:pay.mode });
     setMyClassBookings(b=>b.filter(x=>x!==sid));
     if (pay.mode==="pass") { ping("Cancelled — your pass covers it, nothing deducted"); }
@@ -781,11 +797,15 @@ export function AppProvider({ children }) {
     setMyPT(p=>p.map(b=>b.id!==mv.id ? b : {...b, day:nd, time:nt, weekOff:nw, date:nDate}));
     setPtBookings(pb=>pb.map(b=>b.id!==mv.id ? b : {...b, day:nd, time:nt, weekOff:nw, date:nDate}));
     setClientMove(null);
+    notifyStaff(mv.trainer, `${user?.name||"A member"} moved their PT to ${nDate} ${nt} (was ${mv.date||DAYS[mv.day]} ${mv.time})`);
+    notifyStaff("admin", `${user?.name||"A member"} moved PT with ${tName(mv.trainer)} to ${nDate} ${nt}`);
     ping(`Moved to ${nDate} · ${nt} — Coach ${tName(mv.trainer)} notified`);
   };
   const cancelPT = (id) => {
     const b = myPT.find(x=>x.id===id);
     const pool = b.pool || "ptCoach";
+    notifyStaff(b.trainer, `${user?.name||"A member"} cancelled PT · ${b.date||DAYS[b.day]} ${b.time} — the slot is free again`);
+    notifyStaff("admin", `${user?.name||"A member"} cancelled PT with ${tName(b.trainer)} · ${b.date||DAYS[b.day]} ${b.time}`);
     track(EVENTS.BOOK_CANCEL, { kind:"pt", method:b.mode });
     setMyPT(p=>p.filter(x=>x.id!==id));
     setPtBookings(pb=>pb.filter(x=>x.id!==id));
@@ -1124,7 +1144,9 @@ export function AppProvider({ children }) {
     const mine = user.role === "client"
       ? clientNotices.filter(n => n.who === user.name || n.who === firstNameOf(user.name))
           .map(n => ({ id: `cn-${n.id}`, tone: "accent", title: "Booking update", body: `${n.text} · ${n.when}`, action: { tab: "book" } }))
-      : [];
+      : staffNotices.filter(n => user.role === "admin" ? n.target === "admin" : n.target === user.id)
+          .map(n => ({ id: `sn-${n.id}`, tone: "accent", title: "Schedule change", body: `${n.text} · ${n.when}`,
+            action: { tab: user.role === "admin" ? "schedule" : "schedule" } }));
     return [...mine, ...buildNotifications({
       role: user.role, user, myPT, myClassBookings, sessions, bookWeeks, routines,
       credits, refundables, exceptionQueue, refundQueue, noShowQueue, expenseClaims,
@@ -1133,7 +1155,7 @@ export function AppProvider({ children }) {
     })];
   }, [user, myPT, myClassBookings, sessions, bookWeeks, routines, credits, refundables,
       exceptionQueue, refundQueue, noShowQueue, expenseClaims, leads, camps, myCamps,
-      ptBookings, referralReward, trainers, locations, clientNotices]);
+      ptBookings, referralReward, trainers, locations, clientNotices, staffNotices]);
   const unreadNotifs = notifications.filter(n => !readNotifs.includes(n.id)).length;
   const markAllNotifsRead = () => setReadNotifs(notifications.map(n => n.id));
   // Tapping a notification must land on the thing itself, not just open a tab.
@@ -1165,7 +1187,7 @@ export function AppProvider({ children }) {
     newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
     decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
-    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };

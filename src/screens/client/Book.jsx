@@ -9,7 +9,7 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Select, Ticks } from "../../ui/kit.jsx";
 
 export default function ClientBook() {
-  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, otherPlace, ping, setBookingDetail, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
+  const { active, bookDates, bookWeek, bookWeeks, booked, campOpenId, camps, cancelCamp, cancelClass, cancelPT, classPass, credits, day, daySessions, hoursUntil, isClient, joinWaitlist, loc, locName, locations, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, memberClash, gymHoursStart, gymHoursEnd, otherPlace, ping, setBookingDetail, policy, ptByTrainer, ptLoc, ptPool, ptTrainers, refundables, requestRefund, seg, sessions, setBookWeek, setCampOpenId, setClientMove, setDay, setExceptionSheet, setLoc, setMyCalDay, setMySpan, setMyView, setMyWeek, setOtherPlace, setPayMode, setPtLoc, setPtTrainers, setSeg, setSheet, startCamp, tName, tab, trainers, travel } = useApp();
 
   /* One place that turns any booking into a calendar event (Decision 14). Both the .ics
      download and the Google URL are built from the same object, so they can never drift. */

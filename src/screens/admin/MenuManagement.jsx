@@ -130,8 +130,11 @@ export default function MenuManagement({ menuConfig, setMenuConfig }) {
   /* sections to show: all, or filtered to focusTab */
   const sections = SECTION_DEFS[role].filter(s => !focusTab || s.tab === focusTab);
   const tabs = TAB_DEFS[role];
+  return renderPanel({ role, setRole, setFocusTab, focusTab, cfg, toggleTab, toggleSection, resetToDefaults, sections, tabs });
+}
 
-  const Toggle = ({ on, onChange, size = 20 }) => (
+/* stable-identity toggle — module scope, not inner component */
+const Toggle = ({ on, onChange, size = 20 }) => (
     <button onClick={onChange}
       className="flex-shrink-0 rounded-full transition-colors"
       style={{
@@ -146,6 +149,7 @@ export default function MenuManagement({ menuConfig, setMenuConfig }) {
     </button>
   );
 
+function renderPanel({ role, setRole, setFocusTab, focusTab, cfg, toggleTab, toggleSection, resetToDefaults, sections, tabs }) {
   return (
     <div>
       {/* role picker */}

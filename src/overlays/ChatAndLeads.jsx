@@ -108,8 +108,11 @@ export default function ChatAndLeads() {
   const unreadTotal = chatThreads.reduce((n, t) => n + t.unread, 0);
   const activeThread = chatThreads.find(t => t.id === activeChatThread);
 
-  /* ======================================================= MEMBER CHAT */
-  const MemberChat = () => (
+  /* ======================================================= MEMBER CHAT
+     Plain JSX value, NOT an inner component — an inner component gets a new
+     identity every render, which unmounts the input mid-typing and dismisses
+     the phone keyboard. */
+  const memberChat = (
     <div className="fixed inset-0 z-30 flex items-end justify-center"
       style={{ background: "rgba(23,21,15,.55)" }} onClick={() => setChatOpen(false)}>
       <div className="w-full max-w-md rounded-t-3xl flex flex-col"
@@ -149,8 +152,8 @@ export default function ChatAndLeads() {
     </div>
   );
 
-  /* ======================================================= ADMIN INBOX */
-  const AdminInbox = () => (
+  /* ======================================================= ADMIN INBOX — plain JSX value, same reason as memberChat */
+  const adminInbox = (
     <div className="fixed inset-0 z-30 flex items-end justify-center"
       style={{ background: "rgba(23,21,15,.55)" }}
       onClick={() => { setAdminInboxOpen(false); setActiveChatThread(null); }}>
@@ -275,8 +278,8 @@ export default function ChatAndLeads() {
 
   /* ======================================================= RENDER */
   return (<>
-    {chatOpen && !isAdmin && <MemberChat />}
-    {adminInboxOpen && isAdmin && <AdminInbox />}
+    {chatOpen && !isAdmin && memberChat}
+    {adminInboxOpen && isAdmin && adminInbox}
 
     {addLead && (
       <div className="fixed inset-0 z-30 flex items-end justify-center"
