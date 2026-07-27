@@ -209,11 +209,16 @@ export default function StaffSchedule() {
                   </div>
                 </>)}
 
+                {/* gym-hours window: Settings claims it resizes "all views", but it was
+                    only reaching the client's Booked calendar — admin and coach saw a
+                    different grid to the member looking at the same day. */}
                 <WeekGrid
                   weekOff={calWeek}
                   columns={columns}
                   events={gridEvents}
                   hourPx={calSpan==="week" ? undefined : 64}
+                  hoursStart={gymHoursStart}
+                  hoursEnd={gymHoursEnd}
                   maxHeight={calSpan==="week" ? 460 : 430}
                   onSlotClick={bookAt}
                   onEventClick={openEvent}

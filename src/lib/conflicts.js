@@ -11,7 +11,7 @@
  */
 
 import { CT } from "../data/seed.js";
-import { DAYS } from "./dates.js";
+import { DAYS, TODAY } from "./dates.js";
 import { PT_DUR, sessTrainers, travelBetween } from "./scheduling.js";
 
 const toMin = (t) => { const [h, m] = String(t || "0:0").split(":").map(Number); return h * 60 + m; };
@@ -47,8 +47,14 @@ export function commitments(trainerId, day, ctx, ignoreSessionId, weekOff) {
 
   // Camp days a coach is running. Camps span days, so this maps each day-block
   // onto the weekday it actually falls on.
+  //
+  // `startInDays` is relative to TODAY, not to Monday. Omitting the TODAY anchor
+  // here (every other camp reader in the app includes it — memberBusy, Book,
+  // confirmCampBuy) mapped every camp block onto the wrong weekday, so the engine
+  // both invented clashes on a free day and cleared a coach who was actually on a
+  // camp. Same anchor as the rest of the app now.
   camps.forEach(c => (c.days || []).forEach((cd, i) => {
-    const abs = (c.startInDays ?? 0) + i;
+    const abs = TODAY + (c.startInDays ?? 0) + i;
     if (((abs % 7) + 7) % 7 !== day) return;
     (cd.sessions || []).forEach(cs => {
       // camp blocks can now carry more than one coach

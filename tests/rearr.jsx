@@ -39,8 +39,9 @@ ok("Payouts renders under Reports", txt().includes("PAYOUT TOTAL"));
 await navClick("Manage");
 const grid=[...document.querySelectorAll("div")].find(d=>typeof d.className==="string"&&d.className.includes("grid-cols-4")&&d.className.includes("pb-3"));
 const order=[...grid.querySelectorAll("button")].map(b=>b.textContent.replace(/\d+|9\+/g,"").trim());
-ok("Manage order is Dash·People·Products·Money·Settings",
-   JSON.stringify(order)===JSON.stringify(["Dash","People","Products","Money","Settings"]));
+// 🔐 Access was added as its own section after this was written.
+ok("Manage order is Dash·People·Products·Money·Access·Settings",
+   JSON.stringify(order)===JSON.stringify(["Dash","People","Products","Money","🔐 Access","Settings"]));
 ok("Payouts removed from Manage", !order.includes("Payouts"));
 ok("Reports removed from Manage", !order.includes("Reports"));
 await exact("Settings");

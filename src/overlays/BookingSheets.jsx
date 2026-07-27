@@ -4,7 +4,7 @@ import { CT, PT_PRICE, isHead } from "../data/seed.js";
 import { DAYS } from "../lib/dates.js";
 import { downloadIcs, eventStart, googleCalUrl } from "../lib/calendar.js";
 import { T, disp } from "../theme.js";
-import { Btn, Card, QR, Select } from "../ui/kit.jsx";
+import { Btn, Card, QR, Select, TimeInput } from "../ui/kit.jsx";
 
 /* Manual PayNow proof capture (module scope — stable identity, inputs keep focus).
    Shows the static QR AND the direct pay-to-mobile option, then takes the
@@ -40,7 +40,7 @@ function PayProof({ proof, onProof }) {
 }
 
 export default function BookingSheets() {
-  const { applyCoupon, campSheet, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, exceptionSheet, justBooked, loc, locName, otherPlace, payMode, ping, policy, ptPool, reminderChannel, requestException, setCampSheet, setCoupon, setCouponMsg, setExceptionSheet, setJustBooked, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName, myGroup, myGroupPack } = useApp();
+  const { applyCoupon, campSheet, classPass, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponMsg, couponValue, credits, day, exceptionSheet, justBooked, loc, locName, MANUAL_PAYNOW, otherPlace, payMode, ping, policy, ptPool, reminderChannel, requestException, setCampSheet, setCoupon, setCouponMsg, setExceptionSheet, setJustBooked, setOtherPlace, setPayMode, setSheet, setShopSheet, sheet, shopSheet, tName, myGroup, myGroupPack } = useApp();
 
   const bookedEvent = justBooked && {
     title: justBooked.title, start: eventStart(justBooked.weekOff, justBooked.day, justBooked.time),
@@ -52,7 +52,12 @@ export default function BookingSheets() {
         {/* booking sheet */}
         {sheet && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setSheet(null)}>
-            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+            {/* max-h + scroll, not optional. Bottom sheets grow upward off the top of
+                the viewport, and there is nothing to scroll them back — on a 667px
+                phone a group PT booking (booking-for row + 4 payment options + coupon
+                + QR + upload) pushed Confirm above the status bar and the member
+                simply could not book. */}
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[90dvh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
               <div className="flex items-start justify-between">
                 <div style={{...disp,fontWeight:700,fontSize:22}}>
                   {sheet.kind==="class"?`${CT[sheet.type].name} · ${DAYS[sheet.day]} ${sheet.time}`:`PT with ${tName(sheet.trainer)} · ${DAYS[sheet.day]} ${sheet.time}`}</div>
@@ -60,8 +65,12 @@ export default function BookingSheets() {
               </div>
               {sheet.kind==="pt" && sheet.loc==="other" ? (
                 <div className="flex items-center gap-2 mb-1">
-                  <input value={otherPlace} onChange={e=>setOtherPlace(e.target.value)} placeholder="Place name" className="flex-1 px-2 py-1.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`}}/>
-                  <input value={sheet.time} onChange={e=>setSheet(s=>({...s,time:e.target.value}))} className="w-20 px-2 py-1.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+                  <input value={otherPlace} onChange={e=>setOtherPlace(e.target.value)} placeholder="Place name" aria-label="Place name" className="flex-1 px-2 py-1.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+                  {/* The last free-text time box in the app. It accepted "9am" and
+                      "banana", both of which parse to NaN — and every NaN comparison
+                      is false, so memberClash found no clash and the booking went
+                      through unchecked. Native picker, same as every other time field. */}
+                  <TimeInput value={sheet.time} onChange={v=>setSheet(s=>({...s,time:v}))} style={{width:106,textAlign:"center"}}/>
                 </div>
               ) : null}
               <div className="text-sm mb-3" style={{color:T.muted}}>
@@ -130,7 +139,7 @@ export default function BookingSheets() {
              works for Apple, Outlook and Google, and there is nothing to revoke later. */}
         {justBooked && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setJustBooked(null)}>
-            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[90dvh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
               <div className="text-center mb-1" style={{fontSize:34}}>✅</div>
               <div className="text-center" style={{...disp,fontWeight:700,fontSize:22}}>You're booked</div>
               <div className="text-center text-sm mb-4" style={{color:T.muted}}>
@@ -157,7 +166,7 @@ export default function BookingSheets() {
              about the booking changes until it's approved. */}
         {exceptionSheet && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setExceptionSheet(null)}>
-            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[90dvh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
               <div className="flex items-start justify-between mb-1">
                 <div style={{...disp,fontWeight:700,fontSize:22}}>Request an exception</div>
                 <button onClick={()=>setExceptionSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg -mt-1" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
@@ -194,7 +203,7 @@ export default function BookingSheets() {
         {/* shop checkout sheet — bug 1: Buy now goes through a real PayNow/Card step */}
         {shopSheet && (
           <div className="fixed inset-0 z-20 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setShopSheet(null)}>
-            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[90dvh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <div style={{...disp,fontWeight:700,fontSize:22}}>Checkout</div>
                 <button onClick={()=>setShopSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
@@ -213,9 +222,12 @@ export default function BookingSheets() {
                 <Btn small kind="ghost" onClick={()=>applyCoupon(shopSheet.product.price)}>Apply</Btn>
               </div>
               {couponMsg && <div className="text-xs mb-2 font-semibold" style={{color:couponMsg.startsWith("Applied")?T.moss:T.accent}}>{couponMsg}</div>}
-              {payMode==="paynow" && <PayProof proof={shopSheet.proof} onProof={p=>setShopSheet(s=>({...s, proof:p}))}/>}
-              <Btn full disabled={payMode==="paynow" && !shopSheet.proof} onClick={confirmShopBuy}>
-                {payMode==="paynow" ? (shopSheet.proof ? `Submit $${Math.round(couponValue(shopSheet.product.price))} proof for approval` : "Upload proof to continue") : `Pay $${Math.round(couponValue(shopSheet.product.price))} & buy`}</Btn>
+              {(MANUAL_PAYNOW || payMode==="paynow") && <PayProof proof={shopSheet.proof} onProof={p=>setShopSheet(s=>({...s, proof:p}))}/>}
+              {/* Under manual PayNow a proof is required whatever payMode happens to be
+                  — payMode is shared with the booking sheet and can arrive here as
+                  "credit". Gate on MANUAL_PAYNOW, not on the mode. */}
+              <Btn full disabled={MANUAL_PAYNOW && !shopSheet.proof} onClick={confirmShopBuy}>
+                {MANUAL_PAYNOW ? (shopSheet.proof ? `Submit $${Math.round(couponValue(shopSheet.product.price))} proof for approval` : "Upload proof to continue") : `Pay $${Math.round(couponValue(shopSheet.product.price))} & buy`}</Btn>
               <div className="text-center text-xs mt-3" style={{color:T.muted}}>Receipt emailed via Resend. Card details never touch our servers.</div>
             </div>
           </div>)}

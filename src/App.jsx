@@ -84,7 +84,11 @@ function Shell() {
         {/* ---- modal sheets ---- */}
         <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/><NotificationPanel/><LegalSheets/><BookingDetailSheet/><EventSheet/><ExpenseClaimForm/><ExpenseReview/>
 
-        {toast && <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl text-sm font-semibold text-center"
+        {/* The toast is the app's only confirmation for most actions, so it has to be
+            announced rather than merely drawn — polite so it doesn't cut across
+            whatever the user is reading. */}
+        <div role="status" aria-live="polite" className="sr-only">{toast || ""}</div>
+        {toast && <div aria-hidden="true" className="fixed top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl text-sm font-semibold text-center"
           style={{background:T.ink,color:T.paper,maxWidth:"90%"}}>{toast}</div>}
       </div>
     </div>

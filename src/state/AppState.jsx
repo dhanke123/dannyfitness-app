@@ -268,9 +268,16 @@ export function AppProvider({ children }) {
 
   // Generate real sessions from a template rather than claiming to.
   const applyTemplate = (tpl) => {
+    /* Template rows must be shaped like every other session or they behave like a
+       different kind of object downstream: no `status` and the cancelled filter
+       can't exclude them, no `trainers` and the multi-coach conflict check only
+       sees the first, no `weekOff`/`date` and the week-aware engines treat them as
+       recurring forever. */
     const made = (tpl.blocks||[]).map(b => ({
-      id: nid(), day: b.day, time: b.start, type: b.type, loc: b.loc,
-      trainer: b.trainer, cap: b.cap || 8, attendees: [],
+      id: nid(), day: b.day, weekOff: 0, date: isoFor(0, b.day),
+      time: b.start, type: b.type, loc: b.loc,
+      trainer: b.trainer, trainers: b.trainers?.length ? [...b.trainers] : (b.trainer ? [b.trainer] : []),
+      cap: b.cap || 8, attendees: [], status: "scheduled",
     }));
     if (!made.length) { ping(`"${tpl.name}" has no class blocks yet — edit it first`); return; }
     setSessions(ss => [...ss, ...made]);
@@ -491,12 +498,19 @@ export function AppProvider({ children }) {
     const p = it.payload || {};
     if (it.kind === "shop") {
       const prod = p.product;
+      if (!prod) { ping("That purchase has no product attached — check the queue item."); return; }
       if (prod.kind==="classes") setCredits(c=>({...c, classes:c.classes+prod.sessions}));
       else if (prod.kind==="pthead") setCredits(c=>({...c, ptHead:c.ptHead+prod.sessions}));
       else if (prod.kind==="ptcoach") setCredits(c=>({...c, ptCoach:c.ptCoach+prod.sessions}));
       else if (prod.kind==="classpass") setClassPass({label:prod.name, period:prod.period, expires:`+${prod.validity}d`});
-      else if (prod.kind==="ptcombo") setGroupPacks(gs=>[...gs]); // group pack fulfilment is manual for now — admin creates the group + pack
+      // ptcombo: group-pack fulfilment is manual — the admin creates the group and
+      // its shared pack under People. Nothing to grant automatically here.
+      else if (prod.kind==="ptcombo") notifyStaff("admin", `${it.who} paid for ${prod.name} — create the group + shared pack under Manage → People`);
     } else if (it.kind === "camp") {
+      // never take a seat that isn't there: the camp may have filled while the
+      // proof sat in the queue
+      const camp = camps.find(x=>x.id===p.campId);
+      if (!camp || camp.spots <= 0) { ping("That camp is now full — deny the payment and refund instead."); return; }
       setCamps(cs=>cs.map(x=>x.id!==p.campId?x:{...x,spots:x.spots-1}));
       setMyCamps(m=>[...m, p.campId]);
     } else if (it.kind === "class") {
@@ -750,6 +764,19 @@ export function AppProvider({ children }) {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Escape closes the top overlay. Android back already did this; desktop and any
+     phone with a keyboard attached had no way out of a sheet except the ✕, which is
+     a 24px target in the corner. Same closeOverlays path, so the two agree. */
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      const st = backRef.current;
+      if (st.anyOverlay) { e.preventDefault(); st.closeOverlays(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const booked = (s)=>s.attendees.length + (myClassBookings.includes(s.id)?1:0);
 
   const ACCOUNTS = {
@@ -856,6 +883,10 @@ export function AppProvider({ children }) {
 
   // which PT credit pool applies to a given trainer
   const ptPool = (trainerId) => isHead(trainerId) ? "ptHead" : "ptCoach";
+  /* Every exit from a checkout clears the checkout. The manual-PayNow paths used to
+     `return` before the reset at the bottom of confirmBook, so a coupon applied to a
+     class stayed armed and silently discounted the next thing the member bought. */
+  const resetCheckout = () => { setCoupon(""); setCouponMsg(null); setOtherPlace(""); };
   const confirmBook = () => {
     const s = sheet;
     /* Filtering the slot list is presentation; this is the actual gate. The sheet
@@ -872,7 +903,7 @@ export function AppProvider({ children }) {
         submitPaymentProof({ kind:"class", what:`${CT[s.type].name} · ${s.date||DAYS[s.day]} ${s.time}`,
           amt: couponValue(CT[s.type].price), proof: s.proof,
           payload:{ sessionId:s.id, date:s.date, weekOff:bookWeek } });
-        setSheet(null); return;
+        setSheet(null); resetCheckout(); return;
       }
       if (payMode==="pass") { /* covered by active class pass — no deduction, no charge */ }
       else if (payMode==="credit") setCredits(c=>({...c, classes:c.classes-1}));
@@ -899,7 +930,7 @@ export function AppProvider({ children }) {
           payload:{ trainer:s.trainer, day:s.day, time:s.time, loc:s.loc,
             otherLabel: s.loc==="other" ? (otherPlace||"Other spot") : null,
             pool, date:s.date, weekOff:bookWeek } });
-        setSheet(null); return;
+        setSheet(null); resetCheckout(); return;
       }
       if (payMode==="grouppack" && asGroup) {
         /* group booking burns ONE shared credit — the pack belongs to the group,
@@ -928,7 +959,7 @@ export function AppProvider({ children }) {
         minutes:45, location:locLabel || locName(s.loc), uid:`pt-${bk.id}`,
         details:`Personal training with Coach ${tName(s.trainer)}`, dateLabel:s.date });
     }
-    setSheet(null); setCoupon(""); setCouponMsg(null); setOtherPlace("");
+    setSheet(null); resetCheckout();
   };
   /* Decision 2 — credit back by DEFAULT on every cancellation. A bank refund is not
      automatic: it is an explicit request that lands in the admin Refunds queue, and the
@@ -1015,6 +1046,9 @@ export function AppProvider({ children }) {
   };
   const cancelPT = (id) => {
     const b = myPT.find(x=>x.id===id);
+    // the row can be gone already — a second tap on a slow phone, or the sheet
+    // left open while the booking was cancelled somewhere else
+    if (!b) { ping("That session is no longer booked."); return; }
     const pool = b.pool || "ptCoach";
     notifyStaff(b.trainer, `${user?.name||"A member"} cancelled PT · ${b.date||DAYS[b.day]} ${b.time} — the slot is free again`);
     notifyStaff("admin", `${user?.name||"A member"} cancelled PT with ${tName(b.trainer)} · ${b.date||DAYS[b.day]} ${b.time}`);
@@ -1030,9 +1064,17 @@ export function AppProvider({ children }) {
   const confirmShopBuy = () => {
     const p = shopSheet.product;
     const price = applyCoupon(p.price);
-    if (MANUAL_PAYNOW && (payMode==="paynow"||payMode==="card"||!payMode)) {
+    /* Decision 30: nothing is granted until the admin verifies the transfer. A shop
+       purchase has no credit/pass path — it is always real money — so while
+       MANUAL_PAYNOW is on there is NO branch here that grants the product directly.
+       The old test enumerated payment modes (`paynow||card||!payMode`), and payMode
+       is shared state that survives the last sheet: a member who had just booked a
+       class on a credit arrived here with payMode==="credit", missed every arm of
+       that test, and fell through to the instant-grant path — free credits, and a
+       ledger row saying they'd paid. */
+    if (MANUAL_PAYNOW) {
       submitPaymentProof({ kind:"shop", what:p.name, amt:price, proof:shopSheet.proof, payload:{ product:p } });
-      setShopSheet(null); setCoupon(""); setCouponMsg(null); return;
+      setShopSheet(null); resetCheckout(); return;
     }
     if (p.kind==="classes") setCredits(c=>({...c, classes:c.classes+p.sessions}));
     else if (p.kind==="pthead") setCredits(c=>({...c, ptHead:c.ptHead+p.sessions}));
@@ -1040,7 +1082,7 @@ export function AppProvider({ children }) {
     else if (p.kind==="classpass") setClassPass({label:p.name, period:p.period, expires:`+${p.validity}d`});
     setLedger(l=>[{id:nid(), who:"Sam Lee", what:`${p.name}${coupon?` (${coupon.toUpperCase()})`:""}`, amt:Math.round(price), method:payMode==="card"?"Card":"PayNow", status:"paid", d:"Today"},...l]);
     ping(`${p.name} purchased — ${payMode==="card"?"card":"PayNow"} payment received`);
-    setShopSheet(null); setCoupon(""); setCouponMsg(null);
+    setShopSheet(null); resetCheckout();
   };
   const joinWaitlist = (sid) => { setMyWaitlist(w=>[...w,sid]); ping("Added to waitlist — we'll WhatsApp you if a spot opens"); };
   // Camp booking now opens a checkout (payment + kids waiver) instead of enrolling instantly.
@@ -1070,6 +1112,7 @@ export function AppProvider({ children }) {
   };
   const cancelCamp = (campId) => {
     const c = camps.find(x=>x.id===campId);
+    if (!c) { ping("That camp is no longer listed."); return; }
     setMyCamps(m=>m.filter(x=>x!==campId));
     setCamps(cs=>cs.map(x=>x.id!==campId?x:{...x,spots:x.spots+1}));
     // camps are a one-off payment with no credit pool, so the value is held as account
@@ -1088,17 +1131,18 @@ export function AppProvider({ children }) {
     }
     if (name==="Sam Lee" && status==="attended") {
       const s = sessions.find(x=>x.id===sid);
-      setLogs(l=>[{id:nid(),d:"Today", title:`${CT[s.type].name} · ${locName(s.loc)}`, detail:"Tap + Log exercises to add detail", kind:"class"},...l]);
+      if (s) setLogs(l=>[{id:nid(),d:"Today", title:`${CT[s.type]?.name||"Class"} · ${locName(s.loc)}`, detail:"Tap + Log exercises to add detail", kind:"class"},...l]);
     }
     if (status==="no_show") {
       const s = sessions.find(x=>x.id===sid);
-      setNoShowQueue(q=>[...q,{id:nid(), who:name, session:`${CT[s.type].name} · ${DAYS[s.day]} ${s.time} · ${locName(s.loc)}`, policy:"Forfeit 1 credit"}]);
+      if (s) setNoShowQueue(q=>[...q,{id:nid(), who:name, session:`${CT[s.type]?.name||"Class"} · ${DAYS[s.day]} ${s.time} · ${locName(s.loc)}`, policy:"Forfeit 1 credit"}]);
     }
   };
   const markAll = (sid) => {
     const s = sessions.find(x=>x.id===sid);
+    if (!s) { ping("That session is no longer on the timetable."); return; }
     setSessions(prev=>prev.map(x=>x.id!==sid?x:{...x, attendees:x.attendees.map(a=>({...a,status:"attended"}))}));
-    if (myClassBookings.includes(sid)) setLogs(l=>[{id:nid(),d:"Today", title:`${CT[s.type].name} · ${locName(s.loc)}`, detail:"Tap + Log exercises to add detail", kind:"class"},...l]);
+    if (myClassBookings.includes(sid)) setLogs(l=>[{id:nid(),d:"Today", title:`${CT[s.type]?.name||"Class"} · ${locName(s.loc)}`, detail:"Tap + Log exercises to add detail", kind:"class"},...l]);
     ping("All marked attended — client logs updated");
   };
   /* Decision 5 — a class no-show goes to the same admin queue as PT. Nothing auto-deducts:
@@ -1222,8 +1266,14 @@ export function AppProvider({ children }) {
   pendingCounts.receipts = pendingCounts.expenses;   // legacy alias
   pendingCounts.schedule = pendingCounts.exceptions;
   pendingCounts.clients  = pendingCounts.noshows;
-  pendingCounts.manage   = pendingCounts.refunds + pendingCounts.expenses + pendingCounts.deletions;
-  pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows + pendingCounts.expenses + pendingCounts.deletions;
+  /* `payments` was counted on the Money tab's own badge but left out of both
+     `manage` and `total` — so a PayNow proof, which is money already in the bank
+     and a member waiting on credits, raised no count on the nav and never appeared
+     under "Waiting on you". If it was the only thing pending the summary card
+     didn't render at all. It is the most time-critical queue of the five. */
+  pendingCounts.manage   = pendingCounts.refunds + pendingCounts.expenses + pendingCounts.deletions + pendingCounts.payments;
+  pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows
+                         + pendingCounts.expenses + pendingCounts.deletions + pendingCounts.payments;
 
   const addLocation = () => {
     if (!newLocName.trim()) return;

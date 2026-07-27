@@ -24,7 +24,12 @@ const grid=()=>document.querySelector(".wg-grid");
 const gutterLabels=()=>[...document.querySelectorAll(".wg-grid > div:first-child > div")]
   .map(d=>d.textContent).filter(t=>/^\d{1,2}:00$/.test(t));
 
-ok("hours run 5:00 to 23:00", D.CAL_HSTART===5 && D.CAL_HEND===23);
+/* The grid range comes from the admin gym-hours setting (default 06:00-22:00);
+   CAL_HSTART/CAL_HEND are the fallback when no window is supplied. The invariant
+   worth testing is that ALL THREE roles see the same range for the same day. */
+const GYM_START=6, GYM_END=22;
+const rangeOf=()=>{const l=gutterLabels(); return l.length?`${l[0]}-${l[l.length-1]}`:"";};
+ok("CAL_HSTART/CAL_HEND remain the no-window fallback", D.CAL_HSTART===5 && D.CAL_HEND===23);
 
 // ---------- ADMIN ----------
 await click("Owner console · not a trainer");
@@ -32,8 +37,9 @@ await navClick("Schedule");
 ok("ADMIN lands on the week grid by default", !!grid());
 ok("  ...all 7 day columns", document.querySelectorAll(".wg-col").length===7);
 const lbls=gutterLabels();
-ok("  ...gutter shows 5:00 through 23:00", lbls[0]==="5:00" && lbls[lbls.length-1]==="23:00");
-ok("  ...19 hour labels", lbls.length===19);
+ok("  ...gutter spans the configured gym hours", lbls[0]===`${GYM_START}:00` && lbls[lbls.length-1]===`${GYM_END}:00`);
+ok("  ...one label per hour, inclusive", lbls.length===GYM_END-GYM_START+1);
+const adminRange=rangeOf();
 ok("  ...today column highlighted", !!document.querySelector(".wg-col.wg-todaycol"));
 ok("  ...load dots on the day rail", document.querySelectorAll(".wg-load").length===7);
 // focus expand
@@ -49,14 +55,16 @@ ok("Now button offered on the current week", !!btns().find(b=>b.textContent.trim
 // ---------- TRAINER ----------
 await click("Log out"); await click("Coach · trainer view"); await navClick("Schedule");
 ok("TRAINER also lands on the week grid", !!grid());
-ok("  ...same 5:00–23:00 range", gutterLabels()[0]==="5:00" && gutterLabels().slice(-1)[0]==="23:00");
+ok("  ...same range as the admin", rangeOf()===adminRange);
 
 // ---------- CLIENT ----------
 await click("Log out"); await click("Member · class + PT credits");
 await navClick("Book"); await chip("Booked");
 ok("CLIENT lands on the CALENDAR, not the list", !!grid());
 ok("  ...same shared grid component", document.querySelectorAll(".wg-col").length===7);
-ok("  ...same 5:00–23:00 range", gutterLabels()[0]==="5:00" && gutterLabels().slice(-1)[0]==="23:00");
+/* REGRESSION: staff Schedule never passed the gym-hours window to WeekGrid, so a
+   member and their coach saw different hours for the same day. */
+ok("  ...same range as staff see", rangeOf()===adminRange);
 
 console.error=oe;
 let p=0; for(const[n,c] of ck){console.log((c?"  PASS  ":"  FAIL  ")+n); if(c)p++;}

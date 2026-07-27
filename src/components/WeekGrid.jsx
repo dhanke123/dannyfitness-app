@@ -21,7 +21,9 @@
  * same conflict engine the builders use, so an invalid drop is refused with the
  * reason rather than silently landing on top of another booking.
  *
- * Hours are fixed at CAL_HSTART..CAL_HEND (05:00–23:00).
+ * Hours default to CAL_HSTART..CAL_HEND (05:00–23:00) and can be narrowed by the
+ * admin's gym-hours setting — but never below what the events actually need. See
+ * the HS/HE comment below: a window that clips a booking hides it entirely.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -134,8 +136,28 @@ export default function WeekGrid({
 
   const N = cols.length;
   const PXH = hourPx || (N >= 6 ? 54 : N >= 3 ? 62 : 74);
-  const HS = hoursStart ?? CAL_HSTART;
-  const HE = hoursEnd ?? CAL_HEND;
+  /* The window is a FLOOR, not a clip.
+     `hoursStart`/`hoursEnd` come from the admin's gym-hours setting, and a booking
+     can legitimately sit outside them — a 06:30 class when the window opens at
+     07:00, or a 45-min PT starting 21:45 against a 22:00 close. Positioning is
+     `(start - HS*60)`, so anything earlier gets a negative top and anything later
+     a top past GRID_H; both are then clipped by the wrapper's overflow:hidden and
+     the block is simply NOT THERE. A booking you can't see is worse than a taller
+     grid, so the range widens to cover whatever it's asked to draw. */
+  const evBounds = useMemo(() => {
+    let lo = Infinity, hi = -Infinity;
+    events.forEach(e => {
+      if (!Number.isFinite(e.start)) return;
+      lo = Math.min(lo, e.start);
+      hi = Math.max(hi, e.start + (Number.isFinite(e.dur) ? e.dur : 0));
+    });
+    return { lo, hi };
+  }, [events]);
+
+  const baseHS = hoursStart ?? CAL_HSTART;
+  const baseHE = hoursEnd ?? CAL_HEND;
+  const HS = Math.max(0, Math.min(baseHS, Number.isFinite(evBounds.lo) ? Math.floor(evBounds.lo / 60) : baseHS));
+  const HE = Math.min(24, Math.max(baseHE, Number.isFinite(evBounds.hi) ? Math.ceil(evBounds.hi / 60) : baseHE, HS + 1));
   const GRID_H = (HE - HS) * PXH;
   const canFocus = focusable ?? N > 3;
 

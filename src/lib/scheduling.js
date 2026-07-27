@@ -29,7 +29,9 @@ export function trainerBusyBlocks(trainerId, dayIdx, { sessions, ptBookings, tim
   const blocks = [];
   // classes/camps this coach is assigned to (including as a second coach)
   sessions.filter(s => sessTrainers(s).includes(trainerId) && s.day===dayIdx && s.status!=="cancelled").forEach(s => {
-    blocks.push({ start: toMin(s.time), end: toMin(s.time)+CT[s.type].dur, loc: s.loc, label: CT[s.type].name });
+    // guarded like conflicts.js: an unknown/legacy type must not throw and take
+    // the whole availability list down with it
+    blocks.push({ start: toMin(s.time), end: toMin(s.time)+(CT[s.type]?.dur || 60), loc: s.loc, label: CT[s.type]?.name || "Class" });
   });
   ptBookings.filter(b => b.trainer===trainerId && b.day===dayIdx && b.status!=="cancelled").forEach(b => {
     blocks.push({ start: toMin(b.time), end: toMin(b.time)+PT_DUR, loc: b.loc, label: "PT session" });

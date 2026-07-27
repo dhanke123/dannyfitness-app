@@ -95,7 +95,11 @@ export default function AdminManage() {
                 <Card style={{background:"#F7EEE9"}}>
                   <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>WAITING ON YOU ({pendingCounts.total})</div>
                   <div className="space-y-1">
-                    {[["Exception requests", pendingCounts.exceptions, "schedule", "Schedule"],
+                    {[/* Payments first: the money is already in the bank and the member is
+                          waiting on credits they've paid for. It was missing from this list
+                          entirely (see pendingCounts). */
+                      ["PayNow proofs to verify", pendingCounts.payments, "money", "Manage → Money"],
+                      ["Exception requests", pendingCounts.exceptions, "schedule", "Schedule"],
                       ["No-show decisions", pendingCounts.noshows, "clients", "Clients"],
                       ["Refund requests", pendingCounts.refunds, "money", "Manage → Money"],
                       ["Expense claims", pendingCounts.expenses, "money", "Manage → Money"]]

@@ -31,8 +31,19 @@ for f in $SUITES; do
     || { echo "$f  BUILD FAILED"; fails=$((fails+1)); continue; }
 
   printf "%-10s " "$f"
-  out=$(node ".test-build/$f.mjs" 2>&1)
+  out=$(node ".test-build/$f.mjs" 2>&1); code=$?
   echo "$out" | grep -E "passed$" | tail -1
+
+  # A suite that THREW printed no summary and no "FAIL" line, so the old grep-only
+  # check counted it as clean. `refund` had been crashing on a renamed button for
+  # some time and the runner still said "all suites passed" — the exact failure
+  # mode a test runner exists to prevent. Exit code is the source of truth.
+  if [ "$code" -ne 0 ] && ! echo "$out" | grep -q "passed$"; then
+    echo "  CRASHED (exit $code)"
+    echo "$out" | tail -6 | sed 's/^/    /'
+    fails=$((fails+1))
+    continue
+  fi
   if echo "$out" | grep -q "FAIL"; then
     echo "$out" | grep "FAIL"
     fails=$((fails+1))

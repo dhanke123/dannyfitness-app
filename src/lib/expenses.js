@@ -77,9 +77,14 @@ export function lineErrors(l, today) {
   if (amt > 0 && amt > 5000) e.push("Over $5,000 — check the amount");
   if (!String(l.desc || "").trim()) e.push("Say what it was for");
 
-
-
+  /* THE RULE: a receipt, or a written reason there isn't one. Never neither.
+     This is the only audit control on the claim — `expenseReport` reports
+     no-receipt spend as a percentage precisely so someone can ask about it, and
+     a blank reason makes that number unanswerable. Ticking the box must cost
+     the coach a sentence. */
   if (!l.receipt && !l.noReceipt) e.push("Attach a receipt, or tick 'no receipt'");
+  if (!l.receipt && l.noReceipt && String(l.noReceiptReason || "").trim().length < 5)
+    e.push("Explain why there's no receipt");
   return e;
 }
 

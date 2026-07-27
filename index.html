@@ -2,10 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- maximum-scale=1 stops iOS Safari's auto-zoom when focusing inputs with
-         font-size < 16px — the zoom persisted and forced left-right panning.
-         Android ignores maximum-scale, so pinch-zoom still works there. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- No maximum-scale / user-scalable=no. Blocking pinch-zoom fails WCAG 1.4.4
+         and locks out anyone who needs to magnify — and it was only ever there to
+         stop iOS auto-zooming into inputs, which the `font-size: max(16px, 1em)`
+         rule below already prevents at the source. Keep that rule and zoom stays
+         available. viewport-fit=cover is what feeds env(safe-area-inset-*). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ExerciseOnly</title>
     <meta name="description" content="Book classes, PT & camps, and log every workout — ExerciseOnly." />
 

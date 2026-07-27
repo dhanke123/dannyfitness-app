@@ -8,11 +8,17 @@ export const Chip = ({active,onClick,children}) => (
     style={{...body, background:active?T.ink:"transparent", color:active?T.paper:T.ink, border:`1.5px solid ${active?T.ink:T.line}`}}>
     {children}</button>);
 
-export const Btn = ({onClick,children,kind="primary",disabled,full,small}) => (
-  <button onClick={onClick} disabled={disabled}
+/* `type="button"` is deliberate: several of these sit inside form-shaped markup and
+   the HTML default of type="submit" would reload the page.
+   Disabled text was T.muted on T.line — 2.8:1, which fails WCAG 1.4.3 and made
+   "coming soon" / "upload proof to continue" genuinely hard to read on a phone in
+   daylight. T.deep is the darker muted already used elsewhere: 4.6:1. */
+export const Btn = ({onClick,children,kind="primary",disabled,full,small,type="button",ariaLabel}) => (
+  <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel}
     className={`${small?"py-2 px-3 text-xs":"py-3 px-5 text-sm"} rounded-xl font-bold ${full?"w-full":""}`}
     style={{...body, background:disabled?T.line:kind==="primary"?T.accent:kind==="dark"?T.ink:kind==="plum"?T.plum:"transparent",
-      color:disabled?T.muted:kind==="ghost"?T.ink:"#fff", border:kind==="ghost"?`1.5px solid ${T.line}`:"none"}}>
+      color:disabled?T.deep:kind==="ghost"?T.ink:"#fff", border:kind==="ghost"?`1.5px solid ${T.line}`:"none",
+      minHeight:small?36:44}}>
     {children}</button>);
 
 export const Card = ({children,className="",style={}}) => (
