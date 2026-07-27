@@ -24,6 +24,7 @@ import LogSheets from "./overlays/LogSheets.jsx";
 import { NotificationBell, NotificationPanel } from "./components/Notifications.jsx";
 import LegalSheets from "./components/LegalSheets.jsx";
 import BookingDetailSheet from "./components/BookingDetailSheet.jsx";
+import IntakeRecordSheet from "./components/IntakeRecordSheet.jsx";
 import EventSheet from "./components/EventSheet.jsx";
 import ExpenseClaimForm from "./components/ExpenseClaimForm.jsx";
 import ExpenseReview from "./components/ExpenseReview.jsx";
@@ -82,7 +83,7 @@ function Shell() {
         </nav>
 
         {/* ---- modal sheets ---- */}
-        <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/><NotificationPanel/><LegalSheets/><BookingDetailSheet/><EventSheet/><ExpenseClaimForm/><ExpenseReview/>
+        <BookingSheets/><ChatAndLeads/><ScheduleSheets/><AdminSheets/><LogSheets/><NotificationPanel/><LegalSheets/><BookingDetailSheet/><IntakeRecordSheet/><EventSheet/><ExpenseClaimForm/><ExpenseReview/>
 
         {/* The toast is the app's only confirmation for most actions, so it has to be
             announced rather than merely drawn — polite so it doesn't cut across

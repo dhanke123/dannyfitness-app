@@ -67,8 +67,12 @@ await click("Intake records");
 ok("  ...shows a dated record", txt().includes("1 Jul 2026"));
 ok("  ...shows goals", txt().includes("prep for IPPT"));
 ok("  ...flags injuries", txt().includes("shoulder impingement"));
-ok("  ...explains the handover use", txt().includes("Export before a handover"));
-ok("  ...offers an export", !!btns().find(b=>b.textContent.includes("Export")));
+ok("  ...explains that records are never overwritten", txt().includes("never overwritten"));
+/* One "Export" button became two: Word is the paper form for a handover, Excel is
+   one row per assessment for the trend. Different questions, different files. */
+ok("  ...offers a Word export", !!btns().find(b=>b.textContent.includes("Word")));
+ok("  ...offers an Excel export", !!btns().find(b=>b.textContent.includes("Excel")));
+ok("  ...the record opens the full form back", !!btns().find(b=>b.textContent.includes("Open full form")));
 
 console.error=oe;
 let p=0; for(const[n,c] of ck){console.log((c?"  PASS  ":"  FAIL  ")+n); if(c)p++;}

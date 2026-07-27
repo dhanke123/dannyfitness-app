@@ -63,6 +63,7 @@ export function AppProvider({ children }) {
   const [logView, setLogView] = useState("train"); // Log sub-view: 'train' | 'progress'
   const [goal, setGoal] = useState({ workouts:4, kcal:2000 }); // client's weekly goal (Log → Progress)
   const [intakeForm, setIntakeForm] = useState(null);
+  const [intakeView, setIntakeView] = useState(null); // {id} — read a saved record back in full
   const [reportView, setReportView] = useState("analytics"); // Reports screen: analytics | payouts
   /* ---- flows that used to dead-end ----
      Each of these was a button that fired a toast and changed nothing. A control
@@ -306,9 +307,13 @@ export function AppProvider({ children }) {
   ]);
   const saveIntake = (rec) => {
     /* Full record: every field from the paper intake form is kept. Earlier
-       records are never overwritten — history is the point. */
+       records are never overwritten — history is the point.
+       `iso` is stored alongside the display date because "28 Jul 2026" sorts
+       alphabetically, which puts April before January. The exports order by it. */
+    const now = new Date();
     setIntakeRecords(rs => [{ ...rec, id:nid(), by:user?.id || "staff",
-      d:new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+      d:now.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}),
+      iso: toISO(now),
       goals:rec.goals||"", injuries:rec.injuries||"", notes:rec.notes||"" }, ...rs]);
     setIntakeForm(null);
     ping(`Intake saved for ${rec.who} — visible to any coach who takes them on`);
@@ -360,6 +365,75 @@ export function AppProvider({ children }) {
   const editClient = (id, patch) => {
     setClients(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c));
     ping("Client updated");
+  };
+  /* ---- editing an existing group ----
+     Groups could be created and never touched again: no rename, no way to add the
+     third person who joined, no way to move PRIMARY when the person who pays
+     changes. The only route was to make a second group, which splits the shared
+     pack and the payment history in half.
+
+     Two invariants the schema enforces (023_clients_groups.sql) and this must not
+     break: at least 2 members, and EXACTLY ONE primary. Removing the primary
+     promotes the first remaining member rather than leaving the group with none —
+     a group with no primary has nobody to bill.
+
+     The shared pack follows the group by `groupId`, so a rename must carry to the
+     pack's display name or the two stop matching in Clients and in reports. */
+  const updateGroup = (id, patch) => {
+    const g0 = clientGroups.find(x => x.id === id);
+    if (!g0) { ping("That group no longer exists"); return false; }
+    const next = { ...g0, ...patch };
+    next.memberIds = [...new Set(next.memberIds || [])];
+    if (next.memberIds.length < 2) { ping("A group needs at least 2 people — remove it instead"); return false; }
+    if (!next.memberIds.includes(next.primaryId)) next.primaryId = next.memberIds[0];
+    next.name = String(next.name || "").trim()
+      || next.memberIds.map(mid => clientById(mid)?.name).filter(Boolean).join(" & ");
+    if (clientGroups.some(x => x.id !== id && x.name.toLowerCase() === next.name.toLowerCase())) {
+      ping(`There's already a group called "${next.name}"`); return false;
+    }
+
+    setClientGroups(gs => gs.map(x => x.id === id ? next : x));
+    // keep the shared pack's label and members in step with the group
+    setGroupPacks(ps => ps.map(p => (p.groupId === id || p.name === g0.name)
+      ? { ...p, groupId:id, name:next.name, trainer:next.trainer || p.trainer,
+          members: next.memberIds.map(mid => clientById(mid)?.name).filter(Boolean) }
+      : p));
+
+    const added   = next.memberIds.filter(m => !g0.memberIds.includes(m)).map(m => clientById(m)?.name).filter(Boolean);
+    const removed = g0.memberIds.filter(m => !next.memberIds.includes(m)).map(m => clientById(m)?.name).filter(Boolean);
+    const bits = [
+      g0.name !== next.name ? `renamed from "${g0.name}"` : "",
+      added.length ? `added ${added.join(", ")}` : "",
+      removed.length ? `removed ${removed.join(", ")}` : "",
+      g0.primaryId !== next.primaryId ? `primary now ${clientById(next.primaryId)?.name}` : "",
+      g0.trainer !== next.trainer ? `coach now ${tName(next.trainer)}` : "",
+    ].filter(Boolean);
+    logAudit(`Group updated · ${next.name}${bits.length ? ` · ${bits.join(" · ")}` : ""}`);
+
+    // Decision 20: any change to a group is everyone's business, not just the editor's
+    if (bits.length) notifyClient(next.name, `Your group has been updated: ${bits.join(", ")}.`);
+    ping(bits.length ? `${next.name} updated` : "No changes");
+    return true;
+  };
+
+  /* Deleting unlinks people; it never deletes them. The clients stay, their
+     individual history stays, and the shared pack is what actually blocks: unused
+     credits on a group pack are money already taken, and dissolving the group would
+     strand them with no owner. */
+  const deleteGroup = (id) => {
+    const g = clientGroups.find(x => x.id === id);
+    if (!g) return false;
+    const pack = groupPacks.find(p => p.groupId === id || p.name === g.name);
+    const left = pack ? pack.size - pack.used : 0;
+    if (left > 0) {
+      ping(`${g.name} still has ${left} unused shared session${left===1?"":"s"} — use or refund them first`);
+      return false;
+    }
+    setClientGroups(gs => gs.filter(x => x.id !== id));
+    setGroupPacks(ps => ps.filter(p => !(p.groupId === id || p.name === g.name)));
+    logAudit(`Group removed · ${g.name} · ${g.memberIds.length} people unlinked (clients kept)`);
+    ping(`${g.name} removed — the ${g.memberIds.length} clients are kept as individuals`);
+    return true;
   };
   /* CSV import — one row per PERSON:
        name,phone,email,group_name,is_primary,sessions_remaining
@@ -745,11 +819,11 @@ export function AppProvider({ children }) {
     setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setNoteSheet(null); setAddLead(null); setWalkSheet(null); setBookFor(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null); setClaimEditor(null); setClaimReview(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null); setClaimEditor(null); setClaimReview(null); setIntakeView(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||claimEditor||claimReview||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||intakeView||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||claimEditor||claimReview||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -1458,7 +1532,7 @@ export function AppProvider({ children }) {
     newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
     decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
-    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, updateGroup, deleteGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, intakeView, setIntakeView, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };

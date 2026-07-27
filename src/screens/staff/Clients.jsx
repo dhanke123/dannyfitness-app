@@ -3,18 +3,25 @@ import { useApp } from "../../state/AppState.jsx";
 import { CLIENTS } from "../../data/seed.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import { downloadCsv } from "../../lib/analytics.js";
+import { buildIntakeCsv, buildIntakeDoc, downloadBlob, slug } from "../../lib/intake.js";
 import { T, disp } from "../../theme.js";
-import { Btn, Card, H } from "../../ui/kit.jsx";
+import { Btn, Card, H, Select } from "../../ui/kit.jsx";
 
 export default function StaffClients() {
   const { credits, intakeRecords, isAdmin, isClient, measurements, noShowQueue, ping,
           resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tName, tab, user,
           sessionLog, addSessionLog, groupPacks, trainers,
-          clients, clientGroups, clientById, addClient, createGroup, importClientsCsv, editClient } = useApp();
+          clients, clientGroups, clientById, addClient, createGroup, updateGroup, deleteGroup,
+          importClientsCsv, editClient, setIntakeView, locName } = useApp();
+  /* Records store ids for coach and venue; "danny" / "CDS" are database values.
+     Every surface that shows a record resolves them to names. */
+  const resolve = (kind, v) => kind === "trainer" ? tName(v) : kind === "location" ? locName(v) : v;
   const [openIntake, setOpenIntake] = useState(null);
   const [openSessions, setOpenSessions] = useState(null);   // client name whose session history is expanded
   const [backfill, setBackfill] = useState(null);           // {who, date, time, tookBy, remark}
   const [groupBuilder, setGroupBuilder] = useState(null);   // {memberIds:[], primaryId:null}
+  const [groupEdit, setGroupEdit] = useState(null);         // {id, name, memberIds, primaryId, trainer}
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [newClient, setNewClient] = useState(null);         // {name, phone, email}
@@ -69,6 +76,43 @@ export default function StaffClients() {
               </div>
             </Card>
 
+            {/* ---- GROUPS ----
+                 Groups could be created and then never touched: no list, no rename, no
+                 way to add the third person who joined, no way to move PRIMARY when the
+                 person paying changes. The only workaround was a second group, which
+                 splits the shared pack and the payment history down the middle. */}
+            <Card className="mb-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="text-xs font-bold" style={{color:T.blue}}>GROUPS · {clientGroups.length}</div>
+                <Btn small kind="ghost" onClick={()=>setGroupBuilder({memberIds:[], primaryId:null})}>+ Group</Btn>
+              </div>
+              {clientGroups.length === 0 && (
+                <div className="text-xs" style={{color:T.muted}}>
+                  No groups yet. A group links 2 or more clients so they share one pack and one payment —
+                  each of them still logs in as themselves.
+                </div>)}
+              {clientGroups.map(g=>{
+                const pack = groupPacks.find(p=>p.groupId===g.id || p.name===g.name);
+                const left = pack ? pack.size - pack.used : null;
+                return (
+                <button key={g.id} onClick={()=>setGroupEdit({
+                    id:g.id, name:g.name, memberIds:[...g.memberIds], primaryId:g.primaryId, trainer:g.trainer })}
+                  className="w-full text-left flex items-center gap-2 py-1.5"
+                  style={{borderTop:`1px solid ${T.line}`}}>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold truncate">{g.name}</div>
+                    <div className="text-[11px] truncate" style={{color:T.muted}}>
+                      {g.memberIds.map(id=>clientById(id)?.name).filter(Boolean).join(", ")}
+                      {" · ★ "}{clientById(g.primaryId)?.name || "no primary"} pays · Coach {tName(g.trainer)}
+                    </div>
+                  </div>
+                  {left != null && (
+                    <span className="text-[11px] font-bold whitespace-nowrap"
+                      style={{color: left<=2 ? T.accent : T.muted}}>{left} left</span>)}
+                  <span className="text-xs font-bold" style={{color:T.blue}}>Edit ›</span>
+                </button>);})}
+            </Card>
+
             {/* header actions: the registry is the source of truth now */}
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-bold" style={{color:T.muted}}>CLIENTS · {clients.length} people · {clientGroups.length} groups</div>
@@ -115,41 +159,75 @@ export default function StaffClients() {
                             : "No intake on file yet"}
                         </button>
                         {recs.length > 0 && (
-                          <button
-                            onClick={()=>{
-                              downloadCsv(`intake-${n.toLowerCase().replace(/\W+/g,"-")}.csv`,
-                                recs.map(r => ({ client:r.who, date:r.d, coach:tName(r.by),
-                                                 goals:r.goals, injuries:r.injuries, notes:r.notes })));
-                              ping(`${n}'s intake history exported — hand this to the new coach`);
-                            }}
-                            className="text-xs font-bold px-2 py-1 rounded-lg"
-                            style={{border:`1.5px solid ${T.line}`, color:T.ink}}>Export ↓</button>)}
+                          <div className="flex gap-1.5">
+                            {/* Word = the paper form, for a handover or the client's file.
+                                Excel = one row per dated assessment, for the trend. Two
+                                different questions, so two buttons rather than one
+                                "Export" that answers neither well. */}
+                            <button onClick={()=>{
+                                const r0 = recs[0];
+                                downloadBlob(`intake-${slug(n)}-${slug(r0.d)}.doc`,
+                                  buildIntakeDoc(r0, { client:n, coachName:tName(r0.by), resolve }),
+                                  "application/msword");
+                                ping(`${n}'s latest assessment as a Word document`);
+                              }}
+                              className="text-xs font-bold px-2 py-1 rounded-lg"
+                              style={{border:`1.5px solid ${T.line}`, color:T.ink}}>📄 Word</button>
+                            <button onClick={()=>{
+                                downloadBlob(`intake-${slug(n)}-all-assessments.csv`,
+                                  buildIntakeCsv(recs, { resolve }), "text/csv;charset=utf-8");
+                                ping(`${recs.length} assessment${recs.length===1?"":"s"} for ${n} — oldest first, ready to chart`);
+                              }}
+                              className="text-xs font-bold px-2 py-1 rounded-lg"
+                              style={{border:`1.5px solid ${T.line}`, color:T.ink}}>📊 Excel</button>
+                          </div>)}
                       </div>
 
                       {open && (
                         <div className="mt-2 space-y-2">
-                          {recs.map(r => (
-                            <div key={r.id} className="rounded-lg p-2 text-xs" style={{background:"#FBF3EC"}}>
+                          {/* A summary, not the record. Tapping opens the full form back —
+                              the body-composition panel, the 22-exercise assessment and the
+                              ratings all went in and previously had no way out. */}
+                          {recs.map((r, i) => {
+                            const prev = recs[i+1];   // recs are newest-first
+                            const delta = (k, unit, lowerIsBetter) => {
+                              const a = parseFloat(r[k]), b = prev && parseFloat(prev[k]);
+                              if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) return null;
+                              const d = Math.round((a - b) * 10) / 10;
+                              const good = lowerIsBetter ? d < 0 : d > 0;
+                              return <span key={k} style={{color: good ? T.moss : T.orange}}>
+                                {" "}{d > 0 ? "▲" : "▼"}{Math.abs(d)}{unit}</span>;
+                            };
+                            return (
+                            <button key={r.id} onClick={()=>setIntakeView({id:r.id})}
+                              className="w-full text-left rounded-lg p-2 text-xs" style={{background:"#FBF3EC"}}>
                               <div className="flex justify-between">
-                                <span style={{...disp, fontWeight:700}}>{r.d}</span>
-                                <span style={{color:T.muted}}>by {tName(r.by)}</span>
+                                <span style={{...disp, fontWeight:700}}>{r.d}{i===0 && recs.length>1 ? " · latest" : ""}</span>
+                                <span style={{color:T.muted}}>by {tName(r.by)} ›</span>
                               </div>
-                              {r.goals    && <div className="mt-1"><b>Goals:</b> {r.goals}</div>}
-                              {r.injuries && <div><b>Injuries:</b> <span style={{color:T.accent}}>{r.injuries}</span></div>}
-                              {(r.weight || r.bodyFat) && <div><b>Body:</b> {[r.weight&&`${r.weight}kg`, r.bodyFat&&`${r.bodyFat}% fat`, r.bmi&&`BMI ${r.bmi}`].filter(Boolean).join(" · ")}</div>}
-                              {r.medication && <div><b>Medication:</b> {r.medication}</div>}
-                              {r.allergies && <div><b>Allergies:</b> {r.allergies}</div>}
-                              {r.trainingPlan && <div><b>Plan:</b> {r.trainingPlan}</div>}
-                              {r.preferredTimes && <div style={{color:T.muted}}>Prefers: {r.preferredTimes}{r.frequency?` · ${r.frequency}`:""}</div>}
-                              {r.notes    && <div style={{color:T.muted}}>{r.notes}</div>}
-                            </div>))}
+                              {(r.weight || r.bodyFat || r.bmi) && (
+                                <div className="mt-1">
+                                  <b>Body:</b> {[r.weight&&`${r.weight}kg`, r.bodyFat&&`${r.bodyFat}% fat`, r.bmi&&`BMI ${r.bmi}`].filter(Boolean).join(" · ")}
+                                  {/* movement since the previous assessment — the only
+                                      number a coach actually reads a re-assessment for */}
+                                  {prev && <>{delta("weight","kg",true)}{delta("bodyFat","%",true)}</>}
+                                </div>)}
+                              {r.goals    && <div className="mt-0.5 truncate"><b>Goals:</b> {r.goals}</div>}
+                              {r.injuries && <div className="truncate"><b>Injuries:</b> <span style={{color:T.accent}}>{r.injuries}</span></div>}
+                              {(r.medication || r.allergies) && (
+                                <div className="truncate" style={{color:T.accent}}>
+                                  {[r.medication&&`Medication: ${r.medication}`, r.allergies&&`Allergies: ${r.allergies}`].filter(Boolean).join(" · ")}
+                                </div>)}
+                              <div className="mt-1 font-bold" style={{color:T.blue}}>Open full form →</div>
+                            </button>);})}
                           {stats.length > 0 && (
                             <div className="text-xs" style={{color:T.muted}}>
                               Body stats on file: {stats.map(m=>`${m.d} — ${m.weight}kg${m.fat?` / ${m.fat}%`:""}`).join(" · ")}
                             </div>)}
-                          <div className="text-[11px]" style={{color:T.muted}}>
-                            Oldest to newest shows how the picture has changed. Export before a handover
-                            so the next coach starts with the history, not a blank page.
+                          <div className="text-[11px]" style={{color:T.deep}}>
+                            Records are never overwritten — open one and tap <b>Re-assess</b> to record a
+                            change. Excel gives one row per assessment, oldest first, so you can chart
+                            weight, body fat and the assessment scores over time.
                           </div>
                         </div>)}
                     </div>);
@@ -288,6 +366,110 @@ export default function StaffClients() {
                     setEditSheet(null);}}>Save changes</Btn>
                 </div>
               </div>)}
+
+            {/* ---- edit an existing group ----
+                 Two invariants the schema enforces and this must not break: at least 2
+                 members, and exactly one primary. Both are guarded in updateGroup as well
+                 as here — validating only in the UI is validating nowhere. ---- */}
+            {groupEdit && (() => {
+              const pack = groupPacks.find(p=>p.groupId===groupEdit.id || p.name===clientGroups.find(g=>g.id===groupEdit.id)?.name);
+              const left = pack ? pack.size - pack.used : 0;
+              const inThisGroup = (cid) => groupEdit.memberIds.includes(cid);
+              /* Selectable = this group's members plus anyone not already in another
+                 group. A person in two groups has two shared packs and no answer to
+                 "which one does this session come out of". */
+              const pickable = clients.filter(c => inThisGroup(c.id)
+                || !clientGroups.some(g => g.id !== groupEdit.id && g.memberIds.includes(c.id)));
+              const autoName = groupEdit.memberIds.map(id=>clientById(id)?.name).filter(Boolean).join(" & ");
+              return (
+              <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>{setGroupEdit(null); setConfirmDelete(false);}}>
+                <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[90dvh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div style={{...disp,fontWeight:700,fontSize:20}}>Edit group</div>
+                    <button onClick={()=>{setGroupEdit(null); setConfirmDelete(false);}} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+                  </div>
+                  <div className="text-xs mb-3" style={{color:T.muted}}>
+                    Everyone in the group is told when it changes. The shared pack follows the
+                    group, so a rename carries over to it.
+                  </div>
+
+                  <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>GROUP NAME</div>
+                  <input value={groupEdit.name} onChange={e=>setGroupEdit(x=>({...x,name:e.target.value}))}
+                    placeholder={autoName || "Group name"}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm outline-none mb-1"
+                    style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                  {groupEdit.name.trim() !== autoName && autoName && (
+                    <button onClick={()=>setGroupEdit(x=>({...x,name:autoName}))}
+                      className="text-[11px] font-bold mb-2" style={{color:T.blue}}>
+                      Use "{autoName}"</button>)}
+
+                  <div className="text-[10px] font-bold mt-2 mb-1" style={{color:T.muted}}>
+                    MEMBERS · tap to add or remove · ★ sets who pays</div>
+                  <div className="space-y-1 mb-3 max-h-56 overflow-y-auto">
+                    {pickable.map(c=>{
+                      const on = inThisGroup(c.id);
+                      const isPrimary = groupEdit.primaryId === c.id;
+                      return (
+                      <div key={c.id} className="flex items-center gap-2">
+                        <button onClick={()=>setGroupEdit(b=>{
+                            const next = on ? b.memberIds.filter(x=>x!==c.id) : [...b.memberIds, c.id];
+                            /* Removing the primary must promote someone, not leave the
+                               group with nobody to bill. */
+                            const primaryId = next.includes(b.primaryId) ? b.primaryId : (next[0] || null);
+                            return {...b, memberIds:next, primaryId};
+                          })}
+                          className="flex-1 text-left px-3 py-2 rounded-lg text-sm font-semibold"
+                          style={{background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${on?T.ink:T.line}`}}>
+                          {c.name}{isPrimary?" ★":""}
+                        </button>
+                        {on && !isPrimary && (
+                          <button onClick={()=>setGroupEdit(b=>({...b, primaryId:c.id}))}
+                            className="text-xs font-bold px-2 py-2" style={{color:T.muted}}>★</button>)}
+                      </div>);})}
+                  </div>
+
+                  <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>COACH</div>
+                  <Select value={groupEdit.trainer || "danny"} onChange={v=>setGroupEdit(x=>({...x,trainer:v}))}
+                    options={trainers.filter(t=>t.active!==false).map(t=>[t.id,t.name])} style={{width:"100%", marginBottom:12}}/>
+
+                  {groupEdit.memberIds.length < 2 && (
+                    <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>
+                      A group needs at least 2 people.</div>)}
+
+                  <Btn full disabled={groupEdit.memberIds.length < 2} onClick={()=>{
+                    if (updateGroup(groupEdit.id, { name:groupEdit.name, memberIds:groupEdit.memberIds,
+                        primaryId:groupEdit.primaryId, trainer:groupEdit.trainer })) {
+                      setGroupEdit(null); setConfirmDelete(false); }
+                  }}>Save group</Btn>
+
+                  {/* Removing is unlinking, not deleting people — and it is refused while
+                      the shared pack still holds unused sessions, because those are money
+                      already taken and would be left with no owner. */}
+                  <div className="mt-3 pt-3" style={{borderTop:`1px solid ${T.line}`}}>
+                    {left > 0 ? (
+                      <div className="text-[11px]" style={{color:T.muted}}>
+                        This group can't be removed yet — the shared pack still has <b>{left} unused
+                        session{left===1?"":"s"}</b>. Use them or refund them first.
+                      </div>
+                    ) : !confirmDelete ? (
+                      <button onClick={()=>setConfirmDelete(true)} className="text-xs font-bold"
+                        style={{color:T.accent}}>Remove this group</button>
+                    ) : (
+                      <div>
+                        <div className="text-[11px] mb-1.5" style={{color:T.deep}}>
+                          Unlinks {groupEdit.memberIds.length} people. They stay as individual clients
+                          with their own history — only the group and its empty shared pack go.
+                        </div>
+                        <div className="flex gap-2">
+                          <Btn small kind="ghost" full onClick={()=>setConfirmDelete(false)}>Keep it</Btn>
+                          <Btn small kind="dark" full onClick={()=>{
+                            if (deleteGroup(groupEdit.id)) { setGroupEdit(null); setConfirmDelete(false); }
+                          }}>Remove group</Btn>
+                        </div>
+                      </div>)}
+                  </div>
+                </div>
+              </div>);})()}
 
             {/* ---- group builder: pick 2-3 people, star the primary ---- */}
             {groupBuilder && (
