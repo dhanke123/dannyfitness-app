@@ -12,7 +12,7 @@ import MenuManagement, { buildDefault } from "./MenuManagement.jsx";
 import { fmtISO } from "../../lib/period.js";
 
 export default function AdminManage() {
-  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig } = useApp();
+  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
@@ -407,6 +407,35 @@ export default function AdminManage() {
                 permanent slot in a five-item nav was expensive. */}
 
             {adminSec==="settings" && <div className="space-y-3">
+              {/* ---- Calendar hours ---- */}
+              <div className="rounded-xl p-3" style={{background:T.card, border:`1.5px solid ${T.line}`}}>
+                <div className="text-xs font-bold mb-2" style={{color:T.muted}}>CALENDAR HOURS</div>
+                <div className="flex gap-3 items-center">
+                  <div className="flex-1">
+                    <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>FROM</div>
+                    <select value={gymHoursStart} onChange={e=>setGymHoursStart(Number(e.target.value))}
+                      className="w-full px-2 py-2 rounded-lg text-sm"
+                      style={{border:`1.5px solid ${T.line}`,background:T.card,color:T.ink}}>
+                      {[4,5,6,7,8,9,10].map(h=>(
+                        <option key={h} value={h}>{h}:00 {h<12?"am":"pm"}</option>))}
+                    </select>
+                  </div>
+                  <div className="text-sm font-bold" style={{color:T.muted}}>–</div>
+                  <div className="flex-1">
+                    <div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>TO</div>
+                    <select value={gymHoursEnd} onChange={e=>setGymHoursEnd(Number(e.target.value))}
+                      className="w-full px-2 py-2 rounded-lg text-sm"
+                      style={{border:`1.5px solid ${T.line}`,background:T.card,color:T.ink}}>
+                      {[18,19,20,21,22,23,24].map(h=>(
+                        <option key={h} value={h}>{h<=12?h:h-12}:00 {h<12?"am":"pm"}</option>))}
+                    </select>
+                  </div>
+                </div>
+                <div className="text-[11px] mt-1.5" style={{color:T.muted}}>
+                  {gymHoursEnd-gymHoursStart}h window · calendar resizes automatically on all views
+                </div>
+              </div>
+
               {/* Timetable lives here: creating classes and camps is setup, done
                   occasionally, not day-to-day running. */}
               <div className="flex items-center justify-between">

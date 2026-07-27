@@ -29,7 +29,7 @@ import ExpenseClaimForm from "./components/ExpenseClaimForm.jsx";
 import ExpenseReview from "./components/ExpenseReview.jsx";
 
 function Shell() {
-  const { user, logout, tab, setTab, isClient, isAdmin, navItems, pendingCounts, toast } = useApp();
+  const { user, logout, tab, setTab, isClient, isAdmin, navItems, pendingCounts, toast, adminInboxOpen, setAdminInboxOpen, chatThreads } = useApp();
   if (!user) return <Login/>;
   return (
     <div className="h-[100dvh] flex justify-center overflow-hidden" style={{background:"#E6DFD3", ...body, color:T.ink}}>
@@ -45,6 +45,19 @@ function Shell() {
           </div>
           <div className="flex items-center gap-2">
             <NotificationBell/>
+            {isAdmin && (() => {
+              const unread = chatThreads?.reduce((n,t)=>n+t.unread,0) || 0;
+              return (
+                <button onClick={()=>setAdminInboxOpen(true)}
+                  className="relative text-lg leading-none px-1"
+                  aria-label="Member messages">
+                  💬
+                  {unread > 0 && (
+                    <span className="absolute -top-1 -right-1 text-[9px] font-bold rounded-full flex items-center justify-center"
+                      style={{minWidth:14,height:14,background:"#FF5A3C",color:"#fff",padding:"0 2px",lineHeight:"14px"}}>
+                      {unread > 9 ? "9+" : unread}
+                    </span>)}
+                </button>);})()}
             <button onClick={logout} className="text-xs font-bold px-3 py-2 rounded-lg"
               style={{...disp, border:`1.5px solid ${T.line}`, color:T.muted}}>Log out</button>
           </div>

@@ -9,7 +9,7 @@ import { Btn, Card, Chip, H, Select } from "../../ui/kit.jsx";
 
 export default function StaffSchedule() {
   const { setEventSheet, previewMove, moveBooking, lastMove, undoMove,
-          cancelSession, restoreSession, showCancelled, setShowCancelled, openClassBuilder, setClassBuilder, active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
+          cancelSession, restoreSession, showCancelled, setShowCancelled, openClassBuilder, setClassBuilder, active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user, gymHoursStart, gymHoursEnd } = useApp();
   return (<>
         {/* ==================== TRAINER / ADMIN: SCHEDULE ==================== */}
         {!isClient && tab==="schedule" && (

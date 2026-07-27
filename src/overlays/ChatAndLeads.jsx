@@ -16,7 +16,7 @@
  * the full-screen-overlay pattern and are rarely open at the same time.
  */
 
-import { useRef } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useApp } from "../state/AppState.jsx";
 import EnquirySheet from "../components/EnquirySheet.jsx";
 import { nid } from "../lib/util.js";
@@ -48,6 +48,32 @@ export default function ChatAndLeads() {
   } = useApp();
 
   const adminReplyRef = useRef(null);
+
+  /* Mobile keyboard fix: when the virtual keyboard appears the visual viewport
+     shrinks. We track it and size chat panels to the actual visible area so the
+     input is never pushed off screen. Falls back to 70vh on browsers that don't
+     support visualViewport (desktop). */
+  const [panelH, setPanelH] = useState("70dvh");
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setPanelH(`${Math.round(vv.height * 0.92)}px`);
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => { vv.removeEventListener("resize", update); vv.removeEventListener("scroll", update); };
+  }, []);
+
+  /* Body scroll lock: when a chat panel is open the fixed overlay is the only
+     scroll surface. Without this, focusing the input on iOS scrolls the <body>,
+     which pushes the overlay off-screen. */
+  const anyOpen = (chatOpen && !isAdmin) || (adminInboxOpen && isAdmin);
+  useEffect(() => {
+    if (!anyOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [anyOpen]);
 
   /* send from member side */
   const sendMemberMsg = () => {
@@ -87,8 +113,8 @@ export default function ChatAndLeads() {
     <div className="fixed inset-0 z-30 flex items-end justify-center"
       style={{ background: "rgba(23,21,15,.55)" }} onClick={() => setChatOpen(false)}>
       <div className="w-full max-w-md rounded-t-3xl flex flex-col"
-        style={{ background: T.paper, height: "70vh" }} onClick={e => e.stopPropagation()}>
-        <div className="px-5 pt-4 pb-2 flex items-center justify-between"
+        style={{ background: T.paper, height: panelH, maxHeight: "92dvh" }} onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-4 pb-2 flex items-center justify-between shrink-0"
           style={{ borderBottom: `1.5px solid ${T.line}` }}>
           <div>
             <div style={{ ...disp, fontWeight: 700, fontSize: 18 }}>Chat · ExerciseOnly</div>
@@ -111,7 +137,7 @@ export default function ChatAndLeads() {
             </div>
           ))}
         </div>
-        <div className="p-3 flex gap-2" style={{ borderTop: `1.5px solid ${T.line}` }}>
+        <div className="p-3 flex gap-2 shrink-0" style={{ borderTop: `1.5px solid ${T.line}`, paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
           <input value={chatInput} onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMemberMsg(); } }}
             placeholder="Message ExerciseOnly…"
@@ -129,7 +155,7 @@ export default function ChatAndLeads() {
       style={{ background: "rgba(23,21,15,.55)" }}
       onClick={() => { setAdminInboxOpen(false); setActiveChatThread(null); }}>
       <div className="w-full max-w-md rounded-t-3xl flex flex-col"
-        style={{ background: T.paper, height: "80vh" }} onClick={e => e.stopPropagation()}>
+        style={{ background: T.paper, height: panelH, maxHeight: "95dvh" }} onClick={e => e.stopPropagation()}>
 
         {/* header */}
         <div className="px-5 pt-4 pb-2 flex items-center justify-between shrink-0"

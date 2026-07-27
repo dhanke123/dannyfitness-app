@@ -28,7 +28,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CAL_HEND, CAL_HSTART, DAYS, FULLDAYS, TODAY, dateFor, fmtDM } from "../lib/dates.js";
 import { T, disp } from "../theme.js";
 
-const HS = CAL_HSTART, HE = CAL_HEND;
+// HS / HE are now per-instance (see props hoursStart / hoursEnd)
 const GUT = 46;
 const SNAP = 15;                 // drag snaps to quarter hours, like Google Calendar
 const HOLD_MS = 300;             // long-press before a drag starts, so scrolling still works
@@ -121,7 +121,9 @@ export default function WeekGrid({
   onEventDrop,                   // ({ev, colKey, start}) => void — only called when validateDrop says ok
   emptyNote = "Nothing scheduled this week.",
   hourPx,                        // override row height (day/coach views get more room)
-  maxHeight = 460,
+  hoursStart,         // override CAL_HSTART so a shorter day shrinks the grid automatically
+  hoursEnd,           // override CAL_HEND
+  maxHeight,          // kept for API compat; grid now sizes itself automatically — ignored
   focusable,                     // tap-a-column-to-expand; defaults on for >3 columns
 }) {
   /* Default column set: the week. Everything downstream reads `columns`, so the
@@ -132,6 +134,8 @@ export default function WeekGrid({
 
   const N = cols.length;
   const PXH = hourPx || (N >= 6 ? 54 : N >= 3 ? 62 : 74);
+  const HS = hoursStart ?? CAL_HSTART;
+  const HE = hoursEnd ?? CAL_HEND;
   const GRID_H = (HE - HS) * PXH;
   const canFocus = focusable ?? N > 3;
 
@@ -142,6 +146,7 @@ export default function WeekGrid({
   const [nowM, setNowM] = useState(nowMinutes);
 
   const scrollRef = useRef(null);
+  const scrollerRef = useRef(null); // closest scrollable ancestor (<main>)
   const colRefs = useRef({});
   const holdRef = useRef(null);             // {timer, id, x, y, armed}
   /* A pointerup that ends a tap already opened the sheet; the browser then fires a
@@ -160,11 +165,18 @@ export default function WeekGrid({
     return () => clearInterval(t);
   }, []);
 
-  // open near the working day rather than at 05:00, which is always empty
+  // Discover the closest scrollable ancestor (<main>) and scroll to current time.
+  // The grid no longer has its own scroll container — the page scrolls instead.
   useEffect(() => {
-    const el = scrollRef.current; if (!el) return;
+    let el = scrollRef.current?.parentElement;
+    while (el) {
+      const { overflowY } = window.getComputedStyle(el);
+      if (overflowY === 'auto' || overflowY === 'scroll') { scrollerRef.current = el; break; }
+      el = el.parentElement;
+    }
+    const scroller = scrollerRef.current; if (!scroller) return;
     const target = weekOff === 0 ? nowMinutes() : 8 * 60;
-    el.scrollTop = Math.max(0, (target - HS * 60) / 60 * PXH - el.clientHeight / 3);
+    scroller.scrollTop = Math.max(0, (target - HS * 60) / 60 * PXH - scroller.clientHeight / 3);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gridCols = focusCol === null
@@ -184,7 +196,7 @@ export default function WeekGrid({
   const jumpNow = () => {
     setFocusCol(null);
     const t = cols.find(c => c.isToday); if (t) setSel(t.key);
-    const el = scrollRef.current; if (!el) return;
+    const el = scrollerRef.current; if (!el) return;
     el.scrollTo({ top: Math.max(0, (nowMinutes() - HS * 60) / 60 * PXH - el.clientHeight / 2), behavior: "smooth" });
     setPulse(false); requestAnimationFrame(() => setPulse(true));
     setTimeout(() => setPulse(false), 1000);
@@ -268,7 +280,7 @@ export default function WeekGrid({
     const colKey = hitColumn(e.clientX);
     const start = startFor(e.clientY, ev);
     // auto-scroll near the edges, otherwise you can't reach 07:00 from 19:00
-    const sc = scrollRef.current;
+    const sc = scrollerRef.current;
     if (sc) {
       const r = sc.getBoundingClientRect();
       if (e.clientY < r.top + 36) sc.scrollTop -= 10;
@@ -343,9 +355,9 @@ export default function WeekGrid({
             Show full week</button>
         </div>)}
 
-      <div ref={scrollRef} style={{ height: maxHeight, overflowY: "auto", overscrollBehavior: "none", WebkitOverflowScrolling: "touch",
+      <div ref={scrollRef} style={{ height: GRID_H + 16,
         border: `1.5px solid ${T.line}`, borderRadius: 14, background: T.card, paddingBottom: 8,
-        touchAction: drag ? "none" : "auto" }}>
+        overflow: "hidden", touchAction: drag ? "none" : "pan-y" }}>
         <div className="wg-grid">
           {/* gutter */}
           <div style={{ position: "relative" }}>

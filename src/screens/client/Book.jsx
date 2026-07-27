@@ -396,7 +396,9 @@ export default function ClientBook() {
                     columns={cols}
                     events={mySpan==="day" ? dayEvs : evs}
                     hourPx={mySpan==="day" ? 64 : undefined}
-                    onEventClick={(e)=>evClick(e._src)}
+                    hoursStart={gymHoursStart}
+                  hoursEnd={gymHoursEnd}
+                  onEventClick={(e)=>evClick(e._src)}
                     emptyNote={mySpan==="day" ? "Nothing booked on this day." : "Nothing booked this week — browse Classes, PT or Camps above."}
                   />
                   <div className="text-[10px] mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5" style={{color:T.muted}}>
