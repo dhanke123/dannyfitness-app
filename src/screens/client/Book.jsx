@@ -89,8 +89,12 @@ export default function ClientBook() {
                     {(() => {
                       // a class the member can't attend because they're already busy
                       const clash = mine ? null : memberClash(bookWeek, s.day, s.time, ct.dur);
+                      // clients can't book a class that has already started today
+                      const now = new Date();
+                      const started = bookWeek===0 && day===TODAY && toMin(s.time) <= now.getHours()*60 + now.getMinutes();
                       return mine ? <span className="text-xs font-bold" style={{color:T.moss}}>BOOKED ✓</span> :
                        waited ? <span className="text-xs font-bold" style={{color:T.accent}}>WAITLISTED</span> :
+                       started ? <span className="text-[11px] font-bold" style={{color:T.muted}}>STARTED</span> :
                        clash ? <span className="text-[11px] font-bold" style={{color:T.muted}}>CLASHES<br/>{clash.label}</span> :
                        full ? <Btn small kind="ghost" onClick={()=>joinWaitlist(s.id)}>Waitlist</Btn> :
                        <Btn small onClick={()=>{setSheet({kind:"class",...s, date:fmtFull(dateFor(bookWeek,day))}); setPayMode(classPass?"pass":credits.classes>0?"credit":"paynow");}}>Book</Btn>;

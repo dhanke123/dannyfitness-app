@@ -106,7 +106,7 @@ export const isHead = (trainerId) => !!TRAINERS.find(t=>t.id===trainerId)?.head;
 // seed PT booking by *another* client at Gardens by the Bay — demonstrates same-location
 // back-to-back (0 gap) vs. cross-location travel buffer (auto-shift) on Danny's Monday.
 // Registered clients (demo roster) — used for the "book for an existing client" pickers.
-export const CLIENTS = ["Sam Lee","Ben","Cheryl","Priya","Kumar","Elaine","Ivan","Nadia","Sarah T","Gireesh","Wen Jie","Dominic","Jaiveer"];
+export const CLIENTS = ["Sam Lee","Ben","Cheryl","Priya","Kumar","Elaine","Ivan","Nadia","Sarah T","Gireesh","Wen Jie","Dominic","Jaiveer","Swati & Supriya","Shreyans & Pooja","Mable & Wendy & Helen"];
 
 export const seedPtBookings = [
   // Danny's PT book — populated across the week for the demo (within his shift hours)
@@ -139,6 +139,12 @@ export const seedProducts = [
   { id:"passM",name:"Monthly Pass",         kind:"classpass",period:"month", price:230, validity:30, active:true },
   { id:"ptH",  name:"10 PT Pack — Head Coach (Danny)", kind:"pthead",  sessions:10, price:1100, validity:120, active:true },
   { id:"ptC",  name:"10 PT Pack — Coach",   kind:"ptcoach",  sessions:10, price:850,  validity:120, active:true },
+  /* Combo packs: 2-3 people train TOGETHER on one shared pack — one payment,
+     each joint session deducts 1 credit from the group pool. Priced per pack
+     (not per head): cheaper than 2 solo packs, dearer than 1. PROD: confirm
+     prices with Danny before go-live. */
+  { id:"ptD2", name:"10 PT Combo — 2 pax (shared)", kind:"ptcombo", pax:2, sessions:10, price:1500, validity:120, active:true },
+  { id:"ptD3", name:"10 PT Combo — 3 pax (shared)", kind:"ptcombo", pax:3, sessions:10, price:1800, validity:120, active:true },
 ];
 
 /* ---------- camps: builder data — days -> session blocks, not a flat date range ---------- */

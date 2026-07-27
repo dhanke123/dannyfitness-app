@@ -8,7 +8,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Card, Select } from "../ui/kit.jsx";
 
 export default function ScheduleSheets() {
-  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, commitClientMove, day, doneSheet, hoursUntil, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
+  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, commitClientMove, day, doneSheet, hoursUntil, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet, notifyClient } = useApp();
   return (<>
         {/* time off sheet */}
         {timeOffSheet && (
@@ -21,17 +21,21 @@ export default function ScheduleSheets() {
           const nt = moveSheet.newTime || moveSheet.time;
           const nl = moveSheet.newLoc || moveSheet.loc;
           const isPt = moveSheet.kind==="pt";
+          const nw = moveSheet.newWeek ?? moveSheet.weekOff ?? 0;   // PT can move to any future week
           const dur = isPt ? PT_DUR : CT[sessions.find(s=>s.id===moveSheet.id)?.type]?.dur || 60;
           const ns = toMin(nt), ne = ns+dur;
           // conflict: overlap with another commitment for this coach on the *target* day (exclude self)
           const others = trainerBusyBlocks(moveSheet.trainer, nd, ptCtx)
             .filter(b => !(nd===moveSheet.day && b.start===toMin(moveSheet.time)));
           const conflict = others.find(b => ns < b.end && ne > b.start);
-          const moved = nd!==moveSheet.day || nt!==moveSheet.time || nl!==moveSheet.loc;
+          const moved = nd!==moveSheet.day || nt!==moveSheet.time || nl!==moveSheet.loc || (isPt && nw!==(moveSheet.weekOff??0));
           const doCancel = () => {
             if (isPt) { setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,status:"cancelled"}));
+              const target = ptBookings.find(b=>b.id===moveSheet.id);
+              if (target?.who) notifyClient(target.who.replace(/ \(non-client\)$/,""),
+                `Your PT session with ${tName(moveSheet.trainer)} on ${target.date||DAYS[moveSheet.day]} ${moveSheet.time} was cancelled. Contact us to rebook.`);
               if (isAdmin) logAudit(`Cancelled ${moveSheet.label} · was ${DAYS[moveSheet.day]} ${moveSheet.time}`);
-              ping("Cancelled — booked clients notified (audited)"); }
+              ping("Cancelled — client notified in-app (audited)"); }
             // A class is CANCELLED, never deleted: it stays on the calendar struck
             // through so the record of what was scheduled survives.
             else cancelSession(moveSheet.id, moveSheet.cancelReason);
@@ -56,13 +60,21 @@ export default function ScheduleSheets() {
                 <button onClick={doCancel} className="w-full font-bold rounded-xl py-3 mb-2" style={{background:T.accent,color:"#fff"}}>Yes, cancel it</button>
                 <button onClick={()=>setMoveSheet(m=>({...m,confirmingCancel:false}))} className="w-full text-sm font-bold" style={{color:T.muted}}>Keep it</button>
               </>) : (<>
+                {isPt && (
+                  <div className="flex items-center justify-between mb-2">
+                    <button onClick={()=>setMoveSheet(m=>({...m,newWeek:Math.max(0,(m.newWeek??m.weekOff??0)-1)}))}
+                      className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:nw===0?T.line:T.ink}}>‹</button>
+                    <div className="text-sm font-bold" style={disp}>{nw===0?"This week":nw===1?"Next week":`+${nw} weeks`}</div>
+                    <button onClick={()=>setMoveSheet(m=>({...m,newWeek:Math.min(12,(m.newWeek??m.weekOff??0)+1)}))}
+                      className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`, color:nw>=12?T.line:T.ink}}>›</button>
+                  </div>)}
                 <div className="text-xs font-bold mb-1" style={{color:T.muted}}>NEW DAY</div>
                 <div className="flex gap-1.5 mb-3 overflow-x-auto">
                   {[0,1,2,3,4,5,6].map(d=>{ const on=nd===d; return (
                     <button key={d} onClick={()=>setMoveSheet(m=>({...m,newDay:d}))} className="rounded-lg text-center" style={{flex:"1 0 auto", minWidth:40, padding:"6px 8px",
                       background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${on?T.ink:T.line}`}}>
                       <div className="text-[11px] font-bold leading-none">{DAYS[d]}</div>
-                      <div className="text-[9px] leading-none mt-0.5" style={{opacity:.75}}>{fmtDM(upcomingDate(d))}</div>
+                      <div className="text-[9px] leading-none mt-0.5" style={{opacity:.75}}>{fmtDM(isPt ? dateFor(nw, d) : upcomingDate(d))}</div>
                     </button>);})}
                 </div>
                 <div className="flex gap-2 mb-3">
@@ -75,10 +87,17 @@ export default function ScheduleSheets() {
                 <div className="text-xs mb-3" style={{color:T.muted}}>Re-checked against this coach's other sessions and the travel-time buffer — booked clients are notified if it moves.</div>
                 {conflict && <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>⚠ Conflicts with {conflict.label} ({fromMin(conflict.start)}–{fromMin(conflict.end)}) on {DAYS[nd]}. Move that one too, or pick another slot.</div>}
                 <Btn full disabled={!moved} onClick={()=>{
-                  if (isPt) setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,day:nd,time:nt,loc:nl, date: b.date?fmtFull(dateFor(b.weekOff??0,nd)):b.date}));
+                  const newDate = fmtFull(dateFor(nw, nd));
+                  if (isPt) {
+                    setPtBookings(pb=>pb.map(b=>b.id!==moveSheet.id?b:{...b,day:nd,time:nt,loc:nl, weekOff:nw, date:newDate}));
+                    // the client whose booking just moved gets told the new date & time
+                    const target = ptBookings.find(b=>b.id===moveSheet.id);
+                    if (target?.who) notifyClient(target.who.replace(/ \(non-client\)$/,""),
+                      `Your PT session with ${tName(moveSheet.trainer)} was moved to ${newDate} at ${nt} (${locName(nl)}).`);
+                  }
                   else setSessions(ss=>ss.map(s=>s.id!==moveSheet.id?s:{...s,day:nd,time:nt,loc:nl}));
-                  if (isAdmin) logAudit(`Moved ${moveSheet.label} · ${DAYS[moveSheet.day]} ${moveSheet.time} → ${DAYS[nd]} ${nt} · ${locName(nl)}`);
-                  ping(conflict ? `Moved to ${DAYS[nd]} ${nt} despite a conflict — resolve the overlap (audited)` : `Moved to ${DAYS[nd]} ${nt} — booked clients notified (audited)`);
+                  if (isAdmin) logAudit(`Moved ${moveSheet.label} · ${DAYS[moveSheet.day]} ${moveSheet.time} → ${isPt?newDate:DAYS[nd]} ${nt} · ${locName(nl)}`);
+                  ping(conflict ? `Moved to ${DAYS[nd]} ${nt} despite a conflict — resolve the overlap (audited)` : `Moved to ${isPt?newDate:DAYS[nd]} ${nt} — client notified in-app (WhatsApp when Twilio is live)`);
                   setMoveSheet(null);}}>{conflict?"Move anyway":"Confirm move"}</Btn>
                 <button onClick={()=>setMoveSheet(m=>({...m,confirmingCancel:true}))} className="w-full text-sm font-bold mt-2" style={{color:T.accent}}>Cancel this {isPt?"session":"class"}</button>
               </>)}
@@ -93,7 +112,9 @@ export default function ScheduleSheets() {
           const working = !!workWindow(shifts, mv.trainer, nd);
           const slots = isOther ? [] : ptSlotsFor(mv.trainer, nd, mv.loc, travel, ptCtx, locName)
             .filter(sl => !(nw===(mv.weekOff??0) && sl.time===mv.time))       // current slot isn't a "move"
-            .filter(sl => !myPT.some(b=>b.id!==mv.id && (b.weekOff??0)===nw && b.day===nd && b.time===sl.time));
+            .filter(sl => !myPT.some(b=>b.id!==mv.id && (b.weekOff??0)===nw && b.day===nd && b.time===sl.time))
+            // no rescheduling ONTO a time that has already passed today
+            .filter(sl => !(nw===0 && nd===TODAY && toMin(sl.time) <= new Date().getHours()*60 + new Date().getMinutes()));
           const pastDay = nw===0 && nd<TODAY;
           const changed = !(nw===(mv.weekOff??0) && nd===mv.day && nt===mv.time);
           const valid = changed && !pastDay && hoursUntil(nw,nd,nt) > policy.ptHrs;
@@ -304,6 +325,8 @@ export default function ScheduleSheets() {
                 const locShown = otherLabel || locName(bookFor.loc);
                 setPtBookings(pb=>[...pb,{id:nid(), trainer:bookFor.trainer, day:bookFor.day, time:bookFor.time, loc:bookFor.loc, otherLabel, who:who+(bookFor.nonClient?" (non-client)":""), date, weekOff:bookFor.weekOff, byAdmin:isAdmin, nonClient:bookFor.nonClient}]);
                 if (isAdmin) logAudit(`Booked PT · ${who}${bookFor.nonClient?" (non-client)":""} with ${tName(bookFor.trainer)} · ${date} ${bookFor.time} · ${locShown}`);
+                if (!bookFor.nonClient && !bookFor.self) notifyClient(who,
+                  `A PT session with ${tName(bookFor.trainer)} was booked for you: ${date} at ${bookFor.time} (${locShown}).`);
                 ping(`Booked ${who} · ${tName(bookFor.trainer)}${isAdmin?" · audit-logged":""}`); setBookFor(null);}}>Confirm booking</Btn>
             </div>
           </div>)}

@@ -24,7 +24,45 @@ import { FONTS, T, body, disp } from "../theme.js";
 const RESEND_SECONDS = 45;
 
 export default function Login() {
-  const { locations, login, openEnquiry, sendOtp, verifyOtp } = useApp();
+  const { locations, login, openEnquiry, sendOtp, verifyOtp, setLeads } = useApp();
+
+  /* Guest chat — a lead-capture chat with Danny & the admin team, no account
+     needed. Messages land in the admin Leads queue with source "Guest chat";
+     a canned auto-reply sets the expectation of a human follow-up. */
+  const [guestChat, setGuestChat] = useState(false);
+  const [gcMsgs, setGcMsgs] = useState([
+    { from: "team", text: "Hi! 👋 You're chatting with the ExerciseOnly team (Danny & admin). Ask us about classes, PT, camps or prices — leave your number and we'll get back to you personally." },
+  ]);
+  const [gcInput, setGcInput] = useState("");
+  const [gcName, setGcName] = useState("");
+  const [gcPhone, setGcPhone] = useState("");
+  const [gcSent, setGcSent] = useState(false);
+  const sendGuestMsg = () => {
+    const q = gcInput.trim(); if (!q) return;
+    setGcMsgs(m => [...m, { from: "me", text: q }]);
+    setGcInput("");
+    setTimeout(() => setGcMsgs(m => [...m, { from: "team",
+      text: gcSent ? "Got it — added to your enquiry. Anything else?" :
+        "Thanks! Leave your name and number below so Danny or the admin team can reply to you on WhatsApp." }]), 600);
+    if (gcName.trim()) {
+      // every message updates the lead note so nothing said in chat is lost
+      setGcSent(true);
+      setLeads(ls => {
+        const ex = ls.find(l => l.source === "Guest chat" && l.name === gcName.trim());
+        if (ex) return ls.map(l => l === ex ? { ...l, note: (l.note ? l.note + " · " : "") + q } : l);
+        return [{ id: "gc" + Date.now(), name: gcName.trim(), phone: gcPhone.replace(/\D/g, ""),
+          source: "Guest chat", status: "new", note: q }, ...ls];
+      });
+    }
+  };
+  const saveGuestContact = () => {
+    if (!gcName.trim()) return;
+    setGcSent(true);
+    const said = gcMsgs.filter(m => m.from === "me").map(m => m.text).join(" · ");
+    setLeads(ls => [{ id: "gc" + Date.now(), name: gcName.trim(), phone: gcPhone.replace(/\D/g, ""),
+      source: "Guest chat", status: "new", note: said || "Guest chat enquiry" }, ...ls]);
+    setGcMsgs(m => [...m, { from: "team", text: `Thanks ${gcName.trim().split(" ")[0]}! We have your number — Danny or the team will WhatsApp you shortly. 💪` }]);
+  };
 
   const [step, setStep] = useState("phone");
   const [phone, setPhone] = useState("");
@@ -162,14 +200,57 @@ export default function Login() {
             <div style={{...disp,fontWeight:700,letterSpacing:".04em",fontSize:11,color:T.muted}} className="mb-1 text-center">CONNECT WITH EXERCISEONLY</div>
             <div className="text-xs mb-3 text-center" style={{color:T.muted}}>New here? Message us or send an enquiry — no account needed.</div>
             <ConnectRow onEnquire={openEnquiry}/>
+            <button onClick={()=>setGuestChat(true)}
+              className="w-full mt-2 py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2"
+              style={{...disp, background:T.ink, color:"#fff"}}>
+              💬 Chat with Danny &amp; the team
+            </button>
             <div className="text-[11px] mt-2 text-center" style={{color:T.muted}}>
-              Instagram · Facebook · WhatsApp · Email · <b style={{color:T.ink}}>Enquiry form</b>
+              Instagram · Facebook · WhatsApp · Email · <b style={{color:T.ink}}>Enquiry form</b> · <b style={{color:T.ink}}>Live chat</b>
             </div>
           </div>
           <div className="text-center text-xs mt-5" style={{color:T.muted}}>
             {isConfigured ? "Signed-in data is saved to your account." : "Demo build — data resets on refresh."}</div>
         </div>
       </div>
+
+      {/* Guest chat — pre-login lead capture styled as a conversation */}
+      {guestChat && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}}
+          onClick={()=>setGuestChat(false)}>
+          <div className="w-full max-w-md rounded-t-3xl flex flex-col" style={{background:T.paper, height:"78dvh", maxHeight:"92dvh"}}
+            onClick={e=>e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-2 flex items-center justify-between shrink-0" style={{borderBottom:`1.5px solid ${T.line}`}}>
+              <div>
+                <div style={{...disp,fontWeight:700,fontSize:18}}>Chat · ExerciseOnly</div>
+                <div className="text-xs" style={{color:T.muted}}>Danny &amp; admin team · replies via WhatsApp</div>
+              </div>
+              <button onClick={()=>setGuestChat(false)} className="text-xs font-bold px-2 py-1 rounded"
+                style={{border:`1.5px solid ${T.line}`,color:T.muted}}>Close</button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+              {gcMsgs.map((m,i)=>(
+                <div key={i} className={"max-w-[82%] px-3 py-2 rounded-2xl text-sm" + (m.from==="me"?" ml-auto":"")}
+                  style={{background:m.from==="me"?T.ink:"#EFEBE3", color:m.from==="me"?T.paper:T.ink}}>{m.text}</div>))}
+            </div>
+            {!gcSent && (
+              <div className="px-5 pb-1 shrink-0 flex gap-2">
+                <input value={gcName} onChange={e=>setGcName(e.target.value)} placeholder="Your name"
+                  className="flex-1 px-3 py-2 rounded-lg text-xs outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <input value={gcPhone} onChange={e=>setGcPhone(e.target.value)} placeholder="Mobile (for WhatsApp)" inputMode="tel"
+                  className="flex-1 px-3 py-2 rounded-lg text-xs outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                <button onClick={saveGuestContact} disabled={!gcName.trim()}
+                  className="text-xs font-bold px-2.5 rounded-lg" style={{border:`1.5px solid ${gcName.trim()?T.accent:T.line}`, color:gcName.trim()?T.accent:T.muted}}>Save</button>
+              </div>)}
+            <div className="p-3 flex gap-2 shrink-0" style={{borderTop:`1.5px solid ${T.line}`, paddingBottom:"max(12px, env(safe-area-inset-bottom))"}}>
+              <input value={gcInput} onChange={e=>setGcInput(e.target.value)}
+                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendGuestMsg(); } }}
+                placeholder="Ask about classes, PT, prices…"
+                className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+              <button onClick={sendGuestMsg} className="text-sm font-bold px-4 rounded-lg" style={{background:T.accent,color:"#fff"}}>Send</button>
+            </div>
+          </div>
+        </div>)}
 
       {/* Rendered here, not with the other overlays: the app shell (and every
           overlay in it) only mounts once someone is signed in, and the whole

@@ -21,6 +21,7 @@ export default function ClientShop() {
                   ["Class credit packs", products.filter(p=>p.active&&p.kind==="classes")],
                   ["Class passes — unlimited within the period", products.filter(p=>p.active&&p.kind==="classpass")],
                   ["Personal training", products.filter(p=>p.active&&(p.kind==="pthead"||p.kind==="ptcoach"))],
+                  ["PT combo — train together, one shared pack", products.filter(p=>p.active&&p.kind==="ptcombo")],
                 ];
                 return groups.map(([label, list]) => list.length===0 ? null : (
                   <div key={label} className="mb-4">
@@ -34,7 +35,7 @@ export default function ClientShop() {
                               {p.kind==="classpass"
                                 ? `Unlimited classes for ${p.validity===1?"1 day":p.validity===7?"7 days":"30 days"}`
                                 : `${p.sessions} sessions · valid ${p.validity} days`}
-                              {p.kind==="pthead" ? " · head coach only" : p.kind==="ptcoach" ? " · any coach (not Danny)" : ""}</div>
+                              {p.kind==="pthead" ? " · head coach only" : p.kind==="ptcoach" ? " · any coach (not Danny)" : p.kind==="ptcombo" ? ` · ${p.pax} people share the pack — one payment, each joint session uses 1 credit` : ""}</div>
                           </div>
                           <div className="text-right">
                             <div className="font-bold">${p.price}</div>
