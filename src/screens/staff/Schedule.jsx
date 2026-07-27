@@ -8,7 +8,8 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, H, Select } from "../../ui/kit.jsx";
 
 export default function StaffSchedule() {
-  const { cancelSession, restoreSession, showCancelled, setShowCancelled, openClassBuilder, setClassBuilder, active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
+  const { setEventSheet, previewMove, moveBooking, lastMove, undoMove,
+          cancelSession, restoreSession, showCancelled, setShowCancelled, openClassBuilder, setClassBuilder, active, audit, booked, calDay, calSpan, calTrainer, calWeek, day, exceptionQueue, isAdmin, isClient, loc, locName, locations, ping, ptBookings, removeTimeOff, resolveException, schedView, sessions, setBookFor, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setMoveDay, setMoveSheet, setSchedView, setShiftEditor, setTimeOff, setTimeOffSheet, shifts, staffSessions, staffTimeOff, tName, tab, trainers, user } = useApp();
   return (<>
         {/* ==================== TRAINER / ADMIN: SCHEDULE ==================== */}
         {!isClient && tab==="schedule" && (
@@ -34,7 +35,11 @@ export default function StaffSchedule() {
               </div>)}
 
             <div className="flex gap-2 pb-2 items-center flex-wrap">
-              {[["cal","Calendar"],["week","List"],["coach",isAdmin?"By coach":"Availability"]].map(([k,l])=>(
+              {/* "Availability" for admin too. It used to be "By coach", which now
+                  collides with the calendar's coach-column span — two different
+                  controls with the same name is how you click the wrong one. This
+                  tab is the shifts and time-off editor; that's what it should say. */}
+              {[["cal","Calendar"],["week","List"],["coach","Availability"]].map(([k,l])=>(
                 <Chip key={k} active={schedView===k} onClick={()=>setSchedView(k)}>{l}</Chip>))}
               {isAdmin && <Btn small onClick={()=>openClassBuilder({})}>+ Class</Btn>}
             </div>
@@ -49,157 +54,183 @@ export default function StaffSchedule() {
                 </div>
               </div>)}
 
-            {/* ---- CALENDAR: Google-Calendar-style time-grid — day or full-week ---- */}
+            {/* ---- CALENDAR ----
+                 Three shapes of the same grid, all rendered by WeekGrid:
+                   Day       — one wide column
+                   Week      — seven columns, tap one to expand it
+                   By coach  — one column per coach for a single day (admin)
+                 "By coach" is the view Google Calendar can't give Danny without a
+                 separate calendar per trainer. Side by side is how you see that
+                 Sarah has four back-to-back and Marcus has a two-hour hole.
+
+                 Every block is draggable. The drop is validated by the same conflict
+                 engine the builders use, live, while the finger is still down. ---- */}
             {schedView==="cal" && (() => {
               const toMin = (t)=>{ const [h,m]=t.split(":").map(Number); return h*60+m; };
-              const HSTART=CAL_HSTART, HEND=CAL_HEND, PXH=52, GUT=46, HEADH=34;
-              const gridH=(HEND-HSTART)*PXH;
-              // events for a weekday, respecting role + admin trainer filter, with lane packing
-              const evsForDay = (d) => {
-                const inFilter = (tid)=> isAdmin ? (calTrainer==="all"||tid===calTrainer) : tid===user.id;
-                const cls = sessions.filter(s=>s.day===d && sessTrainers(s).some(inFilter))
+              const inFilter = (tid)=> isAdmin ? (calTrainer==="all"||tid===calTrainer) : tid===user.id;
+              const coachCols = calSpan==="coach";
+              // "By coach" is inherently all-coaches: filtering to one would leave one column.
+              const visibleCoaches = trainers.filter(t=>!t.admin && t.active!==false);
+
+              /* One event list for a weekday, role- and filter-aware. `col` is filled in
+                 by the caller because it means a different thing in each view. */
+              const evsForDay = (d, filterFn) => {
+                const keep = filterFn || inFilter;
+                const cls = sessions.filter(s=>s.day===d && sessTrainers(s).some(keep))
                                     .filter(s=>showCancelled || s.status!=="cancelled");
-                const pts = ptBookings.filter(b=>b.day===d && b.status!=="cancelled" && inFilter(b.trainer));
-                const extras = weekExtras(calWeek).filter(x=>x.day===d && inFilter(x.trainer));
-                const evs = [
-                  ...cls.map(s=>({start:toMin(s.time), dur:CT[s.type].dur, color:CT[s.type].color, title:CT[s.type].name,
-                    time:s.time, code:s.type, who:null, locId:s.loc,
-                    cancelled:s.status==="cancelled", coaches:sessTrainers(s).length, sid:s.id,
-                    sub:`${locName(s.loc)} · ${sessTrainers(s).map(tName).join(" + ")}`,
-                    move:{kind:"class", id:s.id, day:s.day, time:s.time, trainer:s.trainer, loc:s.loc, label:CT[s.type].name}})),
-                  ...pts.map(b=>({start:toMin(b.time), dur:PT_DUR, color:b.byAdmin?T.plum:T.navy, title:`PT · ${b.who}`,
-                    time:b.time, code:"PT", who:b.who, locId:b.loc,
-                    sub:`${b.otherLabel||locName(b.loc)} · ${tName(b.trainer)}`,
-                    move:{kind:"pt", id:b.id, day:b.day, time:b.time, trainer:b.trainer, loc:b.loc, label:`PT · ${b.who}`}})),
-                  ...extras.map(x=>({start:toMin(x.time), dur:PT_DUR, color:"#8A7CC0", title:`PT · ${x.who}`,
-                    time:x.time, code:"PT", who:x.who, locId:x.loc, demo:true,
-                    sub:`${locName(x.loc)} · ${tName(x.trainer)}`, move:null})),
-                ].sort((a,b)=>a.start-b.start);
-                const laneEnds=[]; evs.forEach(e=>{ let i=0; for(;i<laneEnds.length;i++){ if(laneEnds[i]<=e.start) break; } e.lane=i; laneEnds[i]=e.start+e.dur; });
-                evs._lanes=Math.max(1,laneEnds.length);
-                return evs;
+                const pts = ptBookings.filter(b=>b.day===d && b.status!=="cancelled" && keep(b.trainer));
+                const extras = weekExtras(calWeek).filter(x=>x.day===d && keep(x.trainer));
+                return [
+                  ...cls.map(s=>({ key:`c${s.id}`, kind:"class", id:s.id, day:d,
+                    start:toMin(s.time), dur:CT[s.type].dur, color:CT[s.type].color,
+                    code:s.type, title:CT[s.type].name, time:s.time, locId:s.loc,
+                    trainer:s.trainer, trainers:sessTrainers(s),
+                    cancelled:s.status==="cancelled", coaches:sessTrainers(s).length,
+                    sub:`${locName(s.loc)} · ${sessTrainers(s).map(tName).join(" + ")}` })),
+                  ...pts.map(b=>({ key:`p${b.id}`, kind:"pt", id:b.id, day:d,
+                    start:toMin(b.time), dur:PT_DUR, color:b.byAdmin?T.plum:T.navy,
+                    code:"PT", title:`PT · ${b.who}`, time:b.time, locId:b.loc,
+                    trainer:b.trainer, trainers:[b.trainer], coaches:1,
+                    sub:`${b.otherLabel||locName(b.loc)} · ${tName(b.trainer)}` })),
+                  /* Sample rows that illustrate a busy week. Not real bookings, so they
+                     are locked: draggable demo data that can't be saved would be a lie. */
+                  ...extras.map((x,i)=>({ key:`x${d}-${i}`, kind:"demo", id:null, day:d,
+                    start:toMin(x.time), dur:PT_DUR, color:"#8A7CC0", code:"PT",
+                    title:`PT · ${x.who}`, time:x.time, locId:x.loc, trainer:x.trainer,
+                    trainers:[x.trainer], coaches:1, locked:true,
+                    sub:`${locName(x.loc)} · ${tName(x.trainer)}` })),
+                ];
               };
-              const bookAt = (d,hr) => {
-                const trainer = isAdmin ? (calTrainer!=="all"?calTrainer:trainers[0]?.id) : user.id;
-                setBookFor({trainer, day:d, time:`${String(hr).padStart(2,"0")}:00`, weekOff:calWeek, loc:locations[0]?.id, self:!isAdmin, who:"", nonClient:false});
+
+              /* ---- columns + events, per view ---- */
+              let columns, gridEvents;
+              if (coachCols) {
+                columns = visibleCoaches.map(t=>({
+                  key:t.id, day:calDay, label:firstName(t.name).toUpperCase()+(isHead(t.id)?" ★":""),
+                  big:null, aria:t.name, dropLabel:firstName(t.name),
+                  isToday: calWeek===0 && calDay===TODAY }));
+                // a class with two coaches shows in both columns — that IS the shared load
+                gridEvents = visibleCoaches.flatMap(t =>
+                  evsForDay(calDay, (tid)=>tid===t.id).map(e=>({...e, col:t.id, id:`${t.id}|${e.key}`, _src:e })));
+              } else if (calSpan==="day") {
+                columns = [{ key:calDay, day:calDay, label:FULLDAYS[calDay].toUpperCase(),
+                  isToday: calWeek===0 && calDay===TODAY }];
+                gridEvents = evsForDay(calDay).map(e=>({...e, col:calDay, id:e.key, _src:e }));
+              } else {
+                columns = undefined; // WeekGrid's default 7-day rail
+                gridEvents = [0,1,2,3,4,5,6].flatMap(d =>
+                  evsForDay(d).map(e=>({...e, col:d, id:e.key, _src:e })));
+              }
+
+              const bookAt = (colKey, mins) => {
+                const trainer = coachCols ? colKey
+                  : isAdmin ? (calTrainer!=="all"?calTrainer:trainers[0]?.id) : user.id;
+                const d = coachCols ? calDay : colKey;
+                setBookFor({trainer, day:d, time:`${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`,
+                  weekOff:calWeek, loc:locations[0]?.id, self:!isAdmin, who:"", nonClient:false});
               };
-              const evClick = (e)=>{ if(e.demo) ping("Sample demo booking — illustrative data for this week"); else setMoveSheet(e.move); };
-              // one day's vertical grid. `wide` = roomy single-day; `compact` = narrow week column.
-              const DayGrid = ({d, wide, compact}) => { const evs=evsForDay(d); const lanes=evs._lanes; return (
-                <div style={{position:"relative", height:gridH, flex: wide?"1 1 auto":"1 1 0", width: wide?"auto":"auto", minWidth:0, borderLeft: wide?"none":`1px solid ${T.line}`}}>
-                  {Array.from({length:HEND-HSTART}).map((_,i)=>{ const hr=HSTART+i; return (
-                    <div key={hr} onClick={()=>bookAt(d,hr)}
-                      className="absolute left-0 right-0" style={{top:i*PXH, height:PXH, borderTop:`1px solid ${T.line}`, cursor:"pointer"}}/>);})}
-                  {/* closes the final hour so 22:00–23:00 reads as a full row, not an open edge */}
-                  <div className="absolute left-0 right-0" style={{top:gridH, borderTop:`1px solid ${T.line}`}}/>
-                  {/* "now" line — the single most useful thing Google Calendar puts on a
-                      day grid: it tells you where you are without reading any labels. */}
-                  {calWeek===0 && d===TODAY && (() => {
-                    const now=new Date(); const mins=now.getHours()*60+now.getMinutes();
-                    if (mins < HSTART*60 || mins > HEND*60) return null;
-                    const top=(mins-HSTART*60)/60*PXH;
-                    return (<div className="absolute left-0 right-0" style={{top, zIndex:3, pointerEvents:"none"}}>
-                      <div style={{height:2, background:T.accent}}/>
-                      <div style={{position:"absolute", left:-3, top:-3, width:8, height:8, borderRadius:4, background:T.accent}}/>
-                    </div>);})()}
-                  {evs.map((e,i)=>{ const top=(e.start-HSTART*60)/60*PXH;
-                    /* Clamp to the grid bottom. A 45-min PT starting 22:30 runs to 23:15,
-                       past CAL_HEND, and would be clipped by the wrapper's overflow-hidden
-                       — the block simply wouldn't be there. Better to show it slightly
-                       short than to lose it. */
-                    const h=Math.max(20, Math.min(e.dur/60*PXH-2, gridH-top-2));
-                    const left=`${(e.lane/lanes)*100}%`; const w=`${100/lanes}%`;
-                    /* A cancelled class stays on the grid, struck through and faded,
-                       rather than disappearing. Removing it erases the reason a coach's
-                       week looks light and hides a pattern of cancellations. */
-                    const strike = e.cancelled ? {textDecoration:"line-through"} : null;
-                    const blockStyle = e.cancelled
-                      ? {background:"transparent", color:e.color, border:`1.5px dashed ${e.color}`, opacity:.75}
-                      : {background:e.color, color:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,.15)"};
-                    return compact ? (
-                    <div key={i} onClick={(ev)=>{ev.stopPropagation(); evClick(e);}}
-                      className="absolute rounded overflow-hidden" style={{top:top+1, height:h, left, width:w, padding:"1px 2px",
-                        fontSize:8.5, lineHeight:1.08, cursor:"pointer", ...blockStyle}}>
-                      <div style={{fontWeight:800, ...strike}}>{e.time}</div>
-                      <div style={{fontWeight:700, ...strike}}>{e.who ? firstName(e.who) : e.code}</div>
-                      {h>26 && <div style={{opacity:.85}}>{e.coaches>1 ? `👥${e.coaches}` : locAbbr(e.locId)}</div>}
-                    </div>) : (
-                    <div key={i} onClick={(ev)=>{ev.stopPropagation(); evClick(e);}}
-                      className="absolute rounded-md px-1 py-0.5 overflow-hidden" style={{top:top+1, height:h, left, width:w,
-                        fontSize:10, lineHeight:1.1, cursor:"pointer", ...blockStyle}}>
-                      <div style={{fontWeight:700, ...strike}}>
-                        {e.time} {e.title}{e.coaches>1 ? ` · ${e.coaches} coaches` : ""}</div>
-                      {h>32 && <div style={{opacity:.9}}>{e.cancelled ? "CANCELLED" : e.sub}</div>}
-                    </div>);})}
-                </div>);};
-              // Hour labels CAL_HSTART:00 … CAL_HEND:00 (5:00 … 23:00). First and last are
-              // nudged inside the box — at top:-5 the first label was clipped by the
-              // wrapper's overflow-hidden, and the last was never drawn, so the grid
-              // appeared to stop an hour early.
-              const TimeGutter = ({top}) => (
-                <div style={{width:GUT, flex:"none"}}>
-                  {top && <div style={{height:HEADH}}/>}
-                  <div style={{position:"relative", height:gridH}}>
-                    {Array.from({length:HEND-HSTART+1}).map((_,i)=>{
-                      const last = i===HEND-HSTART;
-                      return (
-                      <div key={i} className="absolute text-[10px]"
-                        style={{top: last ? gridH-11 : Math.max(0, i*PXH-5), left:2,
-                                color:T.muted, whiteSpace:"nowrap"}}>{HSTART+i}:00</div>);})}
-                  </div>
-                </div>);
-              const dayCount = (d)=>evsForDay(d).length;
+
+              const openEvent = (e) => {
+                const s = e._src || e;
+                if (s.kind==="demo") { ping("Sample demo booking — illustrative data for this week"); return; }
+                setEventSheet({ kind:s.kind, id:s.id, weekOff:calWeek });
+              };
+
+              /* Drag: resolve the column back into a day (and, in coach view, a coach)
+                 then ask the conflict engine. Reassigning a session by dragging it into
+                 another coach's column is the whole reason the coach view exists. */
+              const dropTarget = (e, colKey, start) => {
+                const s = e._src || e;
+                const time = `${String(Math.floor(start/60)).padStart(2,"0")}:${String(start%60).padStart(2,"0")}`;
+                return { kind:s.kind, id:s.id, weekOff:calWeek, time,
+                  day: coachCols ? calDay : colKey,
+                  trainer: coachCols && colKey!==s.trainer ? colKey : undefined };
+              };
+              const canDrag = isAdmin || !isClient;
+              const validateDrop = ({ev, colKey, start}) => {
+                const s = ev._src || ev;
+                if (s.kind==="demo") return {ok:false, message:"Sample data — not a real booking"};
+                if (!isAdmin && !s.trainers.includes(user.id))
+                  return {ok:false, message:`That's ${tName(s.trainer)}'s session`};
+                if (s.coaches>1 && coachCols)
+                  return {ok:false, message:"Multi-coach class — reassign it in Edit class"};
+                return previewMove(dropTarget(ev, colKey, start));
+              };
+              const commitDrop = ({ev, colKey, start}) => moveBooking(dropTarget(ev, colKey, start));
+
+              const dayCount = (d)=>evsForDay(d).filter(e=>!e.cancelled).length;
+              const weekMins = gridEvents.filter(e=>!e.cancelled).reduce((t,e)=>t+e.dur,0);
+
               return (
               <div>
-                {/* controls: admin trainer filter, then day/week span toggle */}
-                {isAdmin && (
+                {/* controls: admin coach filter (not in coach view — it shows them all) */}
+                {isAdmin && !coachCols && (
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-xs font-bold" style={{color:T.muted}}>COACH</span>
                     <Select value={calTrainer} onChange={setCalTrainer} options={[["all","All coaches"], ...trainers.map(t=>[t.id,t.name+(isHead(t.id)?" ★":"")])]}/>
                   </div>)}
-                <div className="flex gap-2 mb-2">
-                  {[["day","Day"],["week","Full week"]].map(([k,l])=>(
+
+                <div className="flex gap-2 mb-2 items-center">
+                  {[["day","Day"],["week","Week"],...(isAdmin?[["coach","By coach"]]:[])].map(([k,l])=>(
                     <Chip key={k} active={calSpan===k} onClick={()=>setCalSpan(k)}>{l}</Chip>))}
-                </div>
-                <div className="flex items-center justify-between mb-2">
-                  <button onClick={()=>setCalWeek(w=>w-1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>‹</button>
-                  <div className="text-sm font-bold" style={disp}>{weekLabel(calWeek)}{calWeek===0?" · this week":""}</div>
-                  <button onClick={()=>setCalWeek(w=>w+1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
+                  {calWeek!==0 && (
+                    <button onClick={()=>{setCalWeek(0); setCalDay(TODAY);}}
+                      className="ml-auto text-[11px] font-bold px-2.5 py-1.5 rounded-lg"
+                      style={{border:`1.5px solid ${T.accent}`, color:T.accent}}>Today</button>)}
                 </div>
 
-                {calSpan==="day" ? (<>
-                  <div className="flex gap-1.5 pb-3 overflow-x-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <button onClick={()=>setCalWeek(w=>w-1)} aria-label="Previous week"
+                    className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>‹</button>
+                  <div className="text-sm font-bold text-center" style={disp}>
+                    {weekLabel(calWeek)}{calWeek===0?" · this week":""}
+                    <div className="text-[11px] font-medium" style={{color:T.muted}}>
+                      {gridEvents.filter(e=>!e.cancelled).length} session{gridEvents.filter(e=>!e.cancelled).length!==1?"s":""} · {(weekMins/60).toFixed(1)}h
+                    </div>
+                  </div>
+                  <button onClick={()=>setCalWeek(w=>w+1)} aria-label="Next week"
+                    className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
+                </div>
+
+                {/* day picker — needed by Day and By-coach, both of which show one date */}
+                {calSpan!=="week" && (<>
+                  <div className="flex gap-1.5 pb-2 overflow-x-auto">
                     {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(calWeek,d); const isToday=(calWeek===0&&d===TODAY); const on=calDay===d; return (
                       <button key={d} onClick={()=>setCalDay(d)} className="rounded-xl py-1.5 text-center" style={{flex:"1 0 auto", minWidth:44,
                         background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${isToday&&!on?T.accent:on?T.ink:T.line}`}}>
                         <div className="text-[10px] font-bold leading-none" style={{opacity:.7}}>{DAYS[d]}</div>
                         <div style={{...disp,fontWeight:700,fontSize:16,lineHeight:1.1}}>{dt.getDate()}</div>
+                        <div className="text-[9px] leading-none" style={{opacity:.65}}>{dayCount(d)||"·"}</div>
                       </button>);})}
                   </div>
-                  <div className="text-xs mb-1.5" style={{color:T.muted}}>{FULLDAYS[calDay]} {fmtDM(dateFor(calWeek,calDay))} · {dayCount(calDay)} session{dayCount(calDay)!==1?"s":""} · tap a slot to book, tap a session to modify</div>
-                  {/* paddingBottom: the final hour label sits a few px below gridH and
-                      was being clipped by the wrapper's overflow-hidden, so the last
-                      hour looked missing. */}
-                  <div className="flex rounded-xl overflow-hidden" style={{border:`1.5px solid ${T.line}`, background:T.card, paddingBottom:6}}>
-                    <TimeGutter top={false}/>
-                    <DayGrid d={calDay} wide/>
+                  <div className="text-xs mb-1.5" style={{color:T.muted}}>
+                    {FULLDAYS[calDay]} {fmtDM(dateFor(calWeek,calDay))}
+                    {coachCols ? ` · ${visibleCoaches.length} coaches side by side` : ` · ${dayCount(calDay)} session${dayCount(calDay)!==1?"s":""}`}
                   </div>
-                </>) : (<>
-                  {/* Design A — one shared grid so the client and staff calendars can't
-                      drift apart the way the two hand-rolled copies did. Tapping a day
-                      expands it in place: readable, without leaving the week. */}
-                  <WeekGrid
-                    weekOff={calWeek}
-                    events={[0,1,2,3,4,5,6].flatMap(d => evsForDay(d).map((e,i) => ({
-                      id:`${d}-${i}-${e.time}-${e.code}`,
-                      day:d, start:e.start, dur:e.dur, color:e.color, code:e.code,
-                      title:e.title, sub:e.sub, cancelled:!!e.cancelled,
-                      coaches:e.coaches||1, _src:e })))}
-                    onSlotClick={(d,hr)=>bookAt(d,hr)}
-                    onEventClick={(e)=>evClick(e._src)}
-                    emptyNote="No sessions this week."
-                  />
                 </>)}
+
+                <WeekGrid
+                  weekOff={calWeek}
+                  columns={columns}
+                  events={gridEvents}
+                  hourPx={calSpan==="week" ? undefined : 64}
+                  maxHeight={calSpan==="week" ? 460 : 430}
+                  onSlotClick={bookAt}
+                  onEventClick={openEvent}
+                  validateDrop={canDrag ? validateDrop : undefined}
+                  onEventDrop={canDrag ? commitDrop : undefined}
+                  emptyNote={coachCols ? "No one is booked on this day." : "No sessions this week."}
+                />
+
+                {/* Undo. A drag makes a wrong move one slip of the thumb away, so the
+                    way back has to be visible rather than remembered. */}
+                {lastMove && (
+                  <div className="flex items-center gap-2 mt-2 rounded-xl px-3 py-2"
+                    style={{background:"#EEF1F6", border:`1px solid ${T.line}`}}>
+                    <span className="text-xs flex-1" style={{color:T.ink}}>
+                      Moved <b>{lastMove.label}</b> from {DAYS[lastMove.from.day]} {lastMove.from.time}</span>
+                    <button onClick={undoMove} className="text-xs font-bold" style={{color:T.blue}}>↩ Undo</button>
+                  </div>)}
 
                 {(isAdmin || !isClient) && <div className="mt-3"><Btn small full kind="ghost"
                   onClick={()=>{ const trainer=isAdmin?(calTrainer!=="all"?calTrainer:trainers[0]?.id):user.id;

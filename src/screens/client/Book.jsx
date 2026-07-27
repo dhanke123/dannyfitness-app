@@ -350,28 +350,61 @@ export default function ClientBook() {
                   Inside that, request an exception and we'll review it.</div>}
                 </div>}
 
-                {myView==="cal" && <div>
-                  <div className="flex gap-2 mb-2">
-                    {[["day","Day"],["week","Full week"]].map(([k,l])=>(
+                {myView==="cal" && (() => {
+                  /* Day / Week actually switch now. The chips existed before but both
+                     rendered the same seven columns — a control that changes nothing is
+                     worse than no control, because you stop believing the ones that work. */
+                  const evs = evsWeek(myWeek);
+                  const dayEvs = evs.filter(e=>e.day===myCalDay);
+                  const cols = mySpan==="day"
+                    ? [{ key:myCalDay, day:myCalDay, label:FULLDAYS[myCalDay].toUpperCase(),
+                         isToday: myWeek===0 && myCalDay===TODAY }]
+                    : undefined;
+                  return (<div>
+                  <div className="flex gap-2 mb-2 items-center">
+                    {[["day","Day"],["week","Week"]].map(([k,l])=>(
                       <Chip key={k} active={mySpan===k} onClick={()=>setMySpan(k)}>{l}</Chip>))}
+                    {myWeek!==0 && (
+                      <button onClick={()=>{setMyWeek(0); setMyCalDay(TODAY);}}
+                        className="ml-auto text-[11px] font-bold px-2.5 py-1.5 rounded-lg"
+                        style={{border:`1.5px solid ${T.accent}`, color:T.accent}}>Today</button>)}
                   </div>
                   <div className="flex items-center justify-between mb-2">
-                    <button onClick={()=>setMyWeek(w=>w-1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>‹</button>
-                    <div className="text-sm font-bold" style={disp}>{weekLabel(myWeek)}{myWeek===0?" · this week":""}</div>
-                    <button onClick={()=>setMyWeek(w=>w+1)} className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
+                    <button onClick={()=>setMyWeek(w=>w-1)} aria-label="Previous week" className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>‹</button>
+                    <div className="text-sm font-bold text-center" style={disp}>{weekLabel(myWeek)}{myWeek===0?" · this week":""}
+                      <div className="text-[11px] font-medium" style={{color:T.muted}}>
+                        {evs.filter(e=>!e.cancelled).length} booked this week</div>
+                    </div>
+                    <button onClick={()=>setMyWeek(w=>w+1)} aria-label="Next week" className="px-2.5 py-1.5 rounded-lg text-sm font-bold" style={{border:`1.5px solid ${T.line}`}}>›</button>
                   </div>
-                  {/* Design A, same shared component as the staff Schedule. */}
+                  {mySpan==="day" && (
+                    <div className="flex gap-1.5 pb-2 overflow-x-auto">
+                      {[0,1,2,3,4,5,6].map(d=>{ const dt=dateFor(myWeek,d); const isToday=(myWeek===0&&d===TODAY);
+                        const on=myCalDay===d; const n=evs.filter(e=>e.day===d&&!e.cancelled).length; return (
+                        <button key={d} onClick={()=>setMyCalDay(d)} className="rounded-xl py-1.5 text-center" style={{flex:"1 0 auto", minWidth:44,
+                          background:on?T.ink:T.card, color:on?T.paper:T.ink, border:`1.5px solid ${isToday&&!on?T.accent:on?T.ink:T.line}`}}>
+                          <div className="text-[10px] font-bold leading-none" style={{opacity:.7}}>{DAYS[d]}</div>
+                          <div style={{...disp,fontWeight:700,fontSize:16,lineHeight:1.1}}>{dt.getDate()}</div>
+                          <div className="text-[9px] leading-none" style={{opacity:.65}}>{n||"·"}</div>
+                        </button>);})}
+                    </div>)}
+                  {/* Design A, same shared component as the staff Schedule. Members can
+                      open a block but not drag it — moving a booking has a cancellation
+                      window and a credit attached, so it goes through the sheet. */}
                   <WeekGrid
                     weekOff={myWeek}
-                    events={evsWeek(myWeek)}
+                    columns={cols}
+                    events={mySpan==="day" ? dayEvs : evs}
+                    hourPx={mySpan==="day" ? 64 : undefined}
                     onEventClick={(e)=>evClick(e._src)}
-                    emptyNote="Nothing booked this week — browse Classes, PT or Camps above."
+                    emptyNote={mySpan==="day" ? "Nothing booked on this day." : "Nothing booked this week — browse Classes, PT or Camps above."}
                   />
                   <div className="text-[10px] mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5" style={{color:T.muted}}>
                     <span style={{color:T.navy}}>■ PT</span><span style={{color:T.plum}}>■ Camp</span><span>■ Class (type colour)</span>
+                    <span>Tap a session to change or cancel it</span>
                   </div>
                   {none && <div className="text-center py-6 text-sm" style={{color:T.muted}}>Nothing booked in this week yet.</div>}
-                </div>}
+                </div>);})()}
               </div>);})()}
           </main>)}
 

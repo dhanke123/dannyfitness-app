@@ -134,6 +134,86 @@ export function AppProvider({ children }) {
     ping("Class restored — members are not re-booked automatically");
   };
 
+  /* ---------------- moving a booking ----------------
+     One commit path, used by the reschedule sheet AND by drag-and-drop on the
+     calendar. Two ways to move a session is two places for the audit line, the
+     conflict re-check and the weekOff bookkeeping to disagree.
+
+     Re-checks conflicts at commit time even though the caller already did: on a
+     drag the check ran against state as it was when the finger went down, and a
+     drag is slow. Validating only where the gesture starts is validating nowhere. */
+  const [lastMove, setLastMove] = useState(null);   // {kind, id, from:{...}, label}
+
+  const moveBooking = ({ kind, id, day, time, loc, trainer, weekOff, force }) => {
+    const isPt = kind === "pt";
+    const item = isPt ? ptBookings.find(b => b.id === id) : sessions.find(s => s.id === id);
+    if (!item) { ping("That booking no longer exists — refresh the week"); return false; }
+
+    const from = { day: item.day, time: item.time, loc: item.loc, weekOff: item.weekOff ?? 0,
+                   trainer: item.trainer, trainers: item.trainers };
+    const to = { day: day ?? from.day, time: time ?? from.time, loc: loc ?? from.loc,
+                 weekOff: weekOff ?? from.weekOff };
+    if (to.day === from.day && to.time === from.time && to.loc === from.loc
+        && to.weekOff === from.weekOff && !trainer) return false;
+
+    const coaches = trainer ? [trainer] : (isPt ? [item.trainer] : sessTrainers(item));
+    const durMin = isPt ? PT_DUR : (CT[item.type]?.dur || 60);
+    const found = allConflicts({ trainers: coaches, day: to.day, weekOff: to.weekOff,
+      time: to.time, durMin, loc: to.loc }, { sessions, ptBookings, timeOff, camps, travel },
+      tName, locName, id);
+    if (hasBlocking(found) && !force) { ping(found.find(f => f.severity === "block").message); return false; }
+
+    const label = isPt ? `PT · ${item.who}` : (CT[item.type]?.name || "Class");
+    if (isPt) setPtBookings(pb => pb.map(b => b.id !== id ? b : {
+      ...b, day: to.day, time: to.time, loc: to.loc, weekOff: to.weekOff,
+      trainer: trainer || b.trainer, date: b.date ? fmtFull(dateFor(to.weekOff, to.day)) : b.date }));
+    else setSessions(ss => ss.map(s => s.id !== id ? s : {
+      ...s, day: to.day, time: to.time, loc: to.loc, weekOff: to.weekOff,
+      date: s.date ? isoFor(to.weekOff, to.day) : s.date,
+      ...(trainer ? { trainer, trainers: [trainer, ...(s.trainers || []).filter(t => t !== trainer)] } : {}) }));
+
+    setLastMove({ kind, id, from, label });
+    logAudit(`Moved ${label} · ${DAYS[from.day]} ${from.time} → ${DAYS[to.day]} ${to.time}${to.loc!==from.loc?` · ${locName(to.loc)}`:""}${trainer&&trainer!==from.trainer?` · now ${tName(trainer)}`:""}`);
+    const warn = found.find(f => f.severity === "warn");
+    ping(`${label} → ${DAYS[to.day]} ${to.time}${warn ? ` · ${warn.message}` : ""}`);
+    return true;
+  };
+
+  /* Undo exists because drag-and-drop makes accidental moves easy in a way that a
+     confirm dialog never did. Cheaper to allow the mistake and offer the way back
+     than to put a modal in front of every drag. */
+  const undoMove = () => {
+    if (!lastMove) return;
+    const { kind, id, from, label } = lastMove;
+    if (kind === "pt") setPtBookings(pb => pb.map(b => b.id !== id ? b : {
+      ...b, day: from.day, time: from.time, loc: from.loc, weekOff: from.weekOff,
+      trainer: from.trainer, date: b.date ? fmtFull(dateFor(from.weekOff, from.day)) : b.date }));
+    else setSessions(ss => ss.map(s => s.id !== id ? s : {
+      ...s, day: from.day, time: from.time, loc: from.loc, weekOff: from.weekOff,
+      trainer: from.trainer, trainers: from.trainers,
+      date: s.date ? isoFor(from.weekOff, from.day) : s.date }));
+    logAudit(`Undid move · ${label} back to ${DAYS[from.day]} ${from.time}`);
+    setLastMove(null);
+    ping(`${label} put back — ${DAYS[from.day]} ${from.time}`);
+  };
+
+  /* Dry run for the drag ghost: same engine, no side effects. Called on every
+     pointer move, so it must stay pure and cheap. */
+  const previewMove = ({ kind, id, day, time, loc, trainer, weekOff }) => {
+    const isPt = kind === "pt";
+    const item = isPt ? ptBookings.find(b => b.id === id) : sessions.find(s => s.id === id);
+    if (!item) return { ok: false, message: "Booking not found" };
+    const coaches = trainer ? [trainer] : (isPt ? [item.trainer] : sessTrainers(item));
+    const durMin = isPt ? PT_DUR : (CT[item.type]?.dur || 60);
+    const found = allConflicts({ trainers: coaches, day, weekOff: weekOff ?? item.weekOff ?? 0,
+      time, durMin, loc: loc ?? item.loc }, { sessions, ptBookings, timeOff, camps, travel },
+      tName, locName, id);
+    const block = found.find(f => f.severity === "block");
+    if (block) return { ok: false, message: block.message };
+    const warn = found.find(f => f.severity === "warn");
+    return { ok: true, message: warn ? warn.message : "" };
+  };
+
   // Clipboard with a truthful fallback — navigator.clipboard is unavailable on
   // insecure origins and in some in-app browsers, and silently failing there is
   // exactly the pattern being removed.
@@ -374,6 +454,7 @@ export function AppProvider({ children }) {
   const [measForm, setMeasForm] = useState(null);
   const [timeOffSheet, setTimeOffSheet] = useState(null); // {trainer}
   const [moveSheet, setMoveSheet] = useState(null); // {kind:'class'|'pt', ...item}
+  const [eventSheet, setEventSheet] = useState(null); // {kind, id, weekOff} — staff: open a block before acting on it
   const [newLocName, setNewLocName] = useState("");
   const [campOpenId, setCampOpenId] = useState(null); // itinerary expand (client)
   const [campBuilder, setCampBuilder] = useState(null); // camp being edited/created (admin)
@@ -388,11 +469,11 @@ export function AppProvider({ children }) {
     setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null); setBookFor(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -900,7 +981,8 @@ export function AppProvider({ children }) {
     ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["reports","Reports"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+  const store = { eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
