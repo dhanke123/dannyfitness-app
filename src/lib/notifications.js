@@ -101,7 +101,7 @@ function clientFeed(s) {
 
 /* --------------------------------------------------------------- trainer ---- */
 function trainerFeed(s, user) {
-  const { sessions, ptBookings, incidentals, locName, dateFor, sessTrainers } = s;
+  const { sessions, ptBookings, expenseClaims = [], locName, dateFor, sessTrainers } = s;
   const out = [];
   const mine = sessions.filter(x => sessTrainers(x).includes(user.id));
 
@@ -128,10 +128,21 @@ function trainerFeed(s, user) {
       { tab: "today" }));
   });
 
-  incidentals.filter(i => i.trainer === user.id && i.status !== "pending").forEach(i => {
-    out.push(N(`t-inc-${i.id}`, i.status === "approved" ? "good" : "warn",
-      i.status === "approved" ? "Receipt approved" : "Receipt declined",
-      `${i.label} · $${i.amt}${i.reason ? ` — "${i.reason}"` : ""}`, { tab: "me" }));
+  /* A coach hears about their claim twice: when it's decided, and when the money
+     actually arrives. Before, "approved" was the last thing they ever heard, which
+     left them unable to tell an approval from a payment. */
+  expenseClaims.filter(c => c.trainer === user.id).forEach(c => {
+    const amt = (c.lines || []).filter(l => !l.excluded)
+      .reduce((t, l) => t + (Number(l.amount) || 0), 0);
+    if (c.status === "approved") out.push(N(`t-exp-${c.id}`, "info",
+      "Expense claim approved",
+      `${c.ref} · $${amt.toFixed(2)} approved — you'll be told again when it's paid`, { tab: "me" }));
+    if (c.status === "paid") out.push(N(`t-exp-${c.id}`, "good",
+      "Expenses reimbursed",
+      `${c.ref} · $${amt.toFixed(2)} paid${c.paidRef ? ` · ref ${c.paidRef}` : ""}`, { tab: "me" }));
+    if (c.status === "rejected") out.push(N(`t-exp-${c.id}`, "warn",
+      "Expense claim not approved",
+      `${c.ref}${c.reason ? ` — ${c.reason}` : ""}`, { tab: "me" }));
   });
 
   return sort(out);
@@ -140,7 +151,7 @@ function trainerFeed(s, user) {
 /* ----------------------------------------------------------------- admin ---- */
 /* The important one. Every queue item is money or a member waiting on a human. */
 function adminFeed(s) {
-  const { exceptionQueue, refundQueue, noShowQueue, incidentals, leads, tName } = s;
+  const { exceptionQueue, refundQueue, noShowQueue, expenseClaims = [], leads, tName } = s;
   const out = [];
 
   exceptionQueue.forEach(e => out.push(N(`a-exc-${e.id}`, "urgent",
@@ -156,9 +167,15 @@ function adminFeed(s) {
     "No-show waiting on you",
     `${q.who} · ${q.session}. Nothing is deducted until you decide.`, { tab: "clients" })));
 
-  incidentals.filter(i => i.status === "pending").forEach(i => out.push(N(`a-inc-${i.id}`, "warn",
-    "Trainer receipt to approve",
-    `${tName(i.trainer)} · ${i.label} · $${i.amt}`, { tab: "manage", adminSec: "money" })));
+  expenseClaims.filter(c => c.status === "submitted").forEach(c => out.push(N(`a-exp-${c.id}`, "warn",
+    "Expense claim to review",
+    `${tName(c.trainer)} · ${c.ref} · $${(c.lines||[]).reduce((t,l)=>t+(Number(l.amount)||0),0).toFixed(2)}`, { tab: "manage", adminSec: "money" })));
+
+  /* Approved-but-unpaid nags too. It's the state that goes quiet: the admin has
+     said yes and moved on, and the coach is still out of pocket. */
+  expenseClaims.filter(c => c.status === "approved").forEach(c => out.push(N(`a-exppay-${c.id}`, "info",
+    "Expense approved — not yet paid",
+    `${tName(c.trainer)} · ${c.ref} · $${(c.lines||[]).filter(l=>!l.excluded).reduce((t,l)=>t+(Number(l.amount)||0),0).toFixed(2)} owed`, { tab: "manage", adminSec: "money" })));
 
   // New enquiries — a lead that sits unread is the one that costs Danny a client.
   leads.filter(l => l.status === "new").forEach(l => out.push(N(`a-lead-${l.id}`, "good",

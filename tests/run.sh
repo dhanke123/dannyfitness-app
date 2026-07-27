@@ -18,7 +18,7 @@
 set -u
 cd "$(dirname "$0")/.."
 
-ALL="smoke refund payout clash cal tiles enquiry notif reports rearr deadends classes builders weekgrid calmove"
+ALL="smoke refund payout clash cal tiles enquiry notif reports rearr deadends classes builders weekgrid calmove expenses"
 SUITES="${*:-$ALL}"
 mkdir -p .test-build
 fails=0

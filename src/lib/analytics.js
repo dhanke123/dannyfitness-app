@@ -17,18 +17,32 @@
 
 import { CT, PT_PRICE, isHead } from "../data/seed.js";
 import { DAYS, TODAY } from "./dates.js";
+import { approvedTotal, expenseReport, outstandingOf } from "./expenses.js";
+import { inRange } from "./period.js";
 import { DEFAULT_TRAVEL, PT_DUR, sessTrainers, travelBetween } from "./scheduling.js";
 
 const sum = (a, f = x => x) => a.reduce((t, x) => t + (f(x) || 0), 0);
+
+/* Every money report takes an optional range. Passing nothing means "everything",
+   which is what the screens did before ranges existed — so adding the argument
+   can't silently change an existing caller's numbers.
+
+   Ledger rows without a date are KEPT, not dropped. Excluding them would make the
+   ranged total quietly smaller than the all-time total with no explanation on
+   screen; `undatedRows` surfaces the gap instead. */
+const ledgerIn = (ledger, range) =>
+  !range || range.key === "all" ? ledger : ledger.filter(l => !l.date || inRange(l.date, range));
+const undatedCount = (ledger) => ledger.filter(l => !l.date).length;
 const round = (n) => Math.round(n * 100) / 100;
 const pct = (n, d) => d > 0 ? Math.round((n / d) * 100) : 0;
 
 /* ------------------------------------------------------------------ A · MONEY */
 
 /* A1 — P&L. Revenue by stream, minus what it cost to deliver. */
-export function profitAndLoss(s) {
-  const { ledger, incidentals, trainers, rates, sessions, ptBookings } = s;
-  const paid = ledger.filter(l => l.status === "paid" && l.amt > 0);
+export function profitAndLoss(s, range) {
+  const { ledger, expenseClaims = [], trainers, rates, sessions, ptBookings } = s;
+  const scoped = ledgerIn(ledger, range);
+  const paid = scoped.filter(l => l.status === "paid" && l.amt > 0);
 
   const stream = (test) => round(sum(paid.filter(test), l => l.amt));
   const revenue = {
@@ -59,7 +73,15 @@ export function profitAndLoss(s) {
   };
   const payouts = trainers.filter(t => !t.admin).map(t => ({ id: t.id, name: t.name, amt: payoutFor(t.id) }));
   const trainerCost = round(sum(payouts, p => p.amt));
-  const incidentalCost = round(sum(incidentals.filter(i => i.status === "approved"), i => i.amt));
+  /* Expenses hit the P&L on APPROVAL, not on payment. An approved claim is money
+     owed whether or not it has left the bank yet; waiting for the payment to
+     recognise the cost would make a month look profitable purely because the admin
+     hadn't got round to paying anyone. `expenseOutstanding` is reported alongside
+     so the cash position stays visible. */
+  const expenseCost = round(sum(expenseClaims.filter(c => c.status === "approved" || c.status === "paid"),
+                                approvedTotal));
+  const expenseOutstanding = round(sum(expenseClaims, outstandingOf));
+  const incidentalCost = expenseCost;   // legacy name, same number
 
   // Processing fees: HitPay PayNow is 0.9% (min $0.20) under $100, 0.65% + $0.30 at or above.
   const feeFor = (l) => l.method === "PayNow"
@@ -69,9 +91,12 @@ export function profitAndLoss(s) {
 
   const cost = round(trainerCost + incidentalCost + processingFees);
   return {
-    revenue, totalRevenue, payouts, trainerCost, incidentalCost, processingFees,
+    revenue, totalRevenue, payouts, trainerCost,
+    expenseCost, expenseOutstanding, incidentalCost, processingFees,
     cost, grossMargin: round(totalRevenue - cost),
     marginPct: pct(totalRevenue - cost, totalRevenue),
+    range: range || null, undatedRows: undatedCount(ledger),
+    paidRows: paid,
   };
 }
 
@@ -112,9 +137,9 @@ export function deferredRevenue(s) {
 /* A3 — Payment channel mix. Answers "how many pay in the app vs outside it".
    Cash and walk-ins never touch the app, so they're inferred from attendance
    without a matching ledger row — that gap IS the finding. */
-export function paymentMix(s) {
+export function paymentMix(s, range) {
   const { ledger, sessions } = s;
-  const paid = ledger.filter(l => l.status === "paid" && l.amt > 0);
+  const paid = ledgerIn(ledger, range).filter(l => l.status === "paid" && l.amt > 0);
   const by = (m) => ({ n: paid.filter(l => l.method === m).length, amt: round(sum(paid.filter(l => l.method === m), l => l.amt)) });
 
   const inApp = by("PayNow");
@@ -134,9 +159,9 @@ export function paymentMix(s) {
 }
 
 /* A4 — coupon cost. A5 — credits sold and never used. */
-export function couponImpact(s) {
+export function couponImpact(s, range) {
   const { ledger } = s;
-  const used = ledger.filter(l => l.status === "paid" && /\(([A-Z0-9]+)\)/.test(l.what));
+  const used = ledgerIn(ledger, range).filter(l => l.status === "paid" && /\(([A-Z0-9]+)\)/.test(l.what));
   const map = {};
   used.forEach(l => {
     const code = l.what.match(/\(([A-Z0-9]+)\)/)[1];
@@ -149,7 +174,7 @@ export function couponImpact(s) {
 /* ---------------------------------------------------------------- B · TRAINERS */
 
 export function trainerScorecards(s) {
-  const { trainers, sessions, ptBookings, incidentals, rates, travel, ledger } = s;
+  const { trainers, sessions, ptBookings, expenseClaims = [], rates, travel, ledger } = s;
   return trainers.filter(t => !t.admin).map(t => {
     const mine = sessions.filter(x => sessTrainers(x).includes(t.id));
     const delivered = mine.filter(x => x.done);
@@ -195,7 +220,8 @@ export function trainerScorecards(s) {
       classes: mine.length, delivered: delivered.length, unmarked: unmarked.length,
       fillRate: pct(booked, seats), attendanceRate: pct(attended, booked),
       noShows, ptBooked: pts.length, ptDone: ptDone.length,
-      incidentals: round(sum(incidentals.filter(i => i.trainer === t.id && i.status === "approved"), i => i.amt)),
+      expenses: round(sum(expenseClaims.filter(c => c.trainer === t.id && (c.status === "approved" || c.status === "paid")), approvedTotal)),
+      expensesOwed: round(sum(expenseClaims.filter(c => c.trainer === t.id), outstandingOf)),
       travelMin, travelHrs: round(travelMin / 60),
       payout, revenue,
       margin: round(revenue - payout),
@@ -286,7 +312,7 @@ export function capacity(s) {
 /* E5 — the one that's launch-blocking. Everything here is a real inconsistency
    that costs money or misleads a report if left alone. */
 export function integrityAudit(s) {
-  const { sessions, ptBookings, ledger, incidentals, credits } = s;
+  const { sessions, ptBookings, ledger, expenseClaims = [], credits } = s;
   const findings = [];
 
   const unmarked = sessions.filter(x => x.day < TODAY && !x.done && x.status !== "cancelled");
@@ -314,12 +340,36 @@ export function integrityAudit(s) {
     items: zero.map(l => `${l.who} · ${l.what}`),
   });
 
-  const stale = incidentals.filter(i => i.status === "pending");
+  const stale = expenseClaims.filter(c => c.status === "submitted");
   if (stale.length) findings.push({
-    severity: "low", code: "PENDING_RECEIPTS",
-    title: `${stale.length} trainer receipt${stale.length === 1 ? "" : "s"} awaiting approval`,
-    why: "Trainers are out of pocket until these are actioned.",
-    items: stale.map(i => `${i.label} · $${i.amt}`),
+    severity: "low", code: "PENDING_EXPENSE_CLAIMS",
+    title: `${stale.length} expense claim${stale.length === 1 ? "" : "s"} awaiting approval`,
+    why: "Coaches are out of pocket until these are actioned.",
+    items: stale.map(c => `${c.ref} · $${approvedTotal(c).toFixed(2)}`),
+  });
+
+  /* Approved-but-unpaid is the finding that didn't exist before, because
+     "approved" and "reimbursed" used to be the same state. A claim can now sit
+     approved indefinitely with nobody noticing the coach is still out of pocket. */
+  const owed = expenseClaims.filter(c => c.status === "approved");
+  if (owed.length) findings.push({
+    severity: owed.length > 3 ? "medium" : "low", code: "APPROVED_NOT_REIMBURSED",
+    title: `${owed.length} approved claim${owed.length === 1 ? "" : "s"} not yet paid · $${round(sum(owed, approvedTotal)).toFixed(2)}`,
+    why: "Approved means agreed, not repaid. Until it's marked paid the coach is still out of pocket.",
+    items: owed.map(c => `${c.ref} · $${approvedTotal(c).toFixed(2)}${c.decidedAt ? ` · approved ${c.decidedAt}` : ""}`),
+  });
+
+  /* No-receipt claims are legitimate — ERP has no slip — but the proportion is the
+     number an accountant asks for, so it should be on the page rather than
+     something you have to go and compute. */
+  const noRec = expenseClaims
+    .filter(c => c.status === "approved" || c.status === "paid")
+    .flatMap(c => c.lines.filter(l => !l.excluded && !l.receipt).map(l => ({ ...l, ref: c.ref })));
+  if (noRec.length) findings.push({
+    severity: "low", code: "EXPENSES_WITHOUT_RECEIPT",
+    title: `${noRec.length} approved expense line${noRec.length === 1 ? "" : "s"} with no receipt · $${round(sum(noRec, l => Number(l.amount) || 0)).toFixed(2)}`,
+    why: "Each carries a written reason, but this is the figure to be able to defend at year end.",
+    items: noRec.map(l => `${l.ref} · $${l.amount} · ${l.desc} — "${l.noReceiptReason}"`),
   });
 
   const negative = Object.entries(credits).filter(([, v]) => v < 0);
@@ -336,6 +386,14 @@ export function integrityAudit(s) {
     high: findings.filter(f => f.severity === "high").length,
     refundedTotal: round(Math.abs(sum(refunded, l => l.amt))),
   };
+}
+
+/* ------------------------------------------------------------- F · EXPENSES */
+
+/* Thin wrapper so callers don't each have to remember to pass `inRange`. The real
+   work is in lib/expenses.js, which knows nothing about React or ranges. */
+export function expenses(s, range) {
+  return expenseReport(s.expenseClaims || [], range, inRange, s.tName || (x => x));
 }
 
 /* ------------------------------------------------------------------ G · LEADS */

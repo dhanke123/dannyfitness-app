@@ -5,8 +5,8 @@
 
    1. **Every line traces to an event that already happened.** A class only pays
       once attendance has been marked (`session.done`), a PT session only once the
-      coach hit Complete (`status === 'done'`), and an incidental only once the
-      admin approved it. Nothing is inferred from a booking — a booking is a
+      coach hit Complete (`status === 'done'`). Expense reimbursements are
+      deliberately NOT here — see the note in linesFor. Nothing is inferred from a booking — a booking is a
       promise, not delivered work, and paying on bookings would pay for no-shows
       and cancellations.
 
@@ -29,7 +29,7 @@ import { Btn, Card, Chip } from "../ui/kit.jsx";
 const money = (n) => `$${(Math.round(n * 100) / 100).toFixed(2)}`;
 
 export default function PayoutReport() {
-  const { incidentals, locName, ping, ptBookings, rates, sessions, tName, trainers } = useApp();
+  const { expenseClaims, owedTo, locName, ping, ptBookings, rates, sessions, tName, trainers } = useApp();
   const [openId, setOpenId] = useState(null);
   const [basis, setBasis] = useState("delivered"); // delivered | booked — see note below
 
@@ -71,23 +71,21 @@ export default function PayoutReport() {
         });
       });
 
-    // --- incidentals: approved only ---
-    incidentals
-      .filter(i => i.trainer === tid && i.status === "approved")
-      .forEach(i => lines.push({
-        kind: "inc", when: "—", item: `Incidental · ${i.label}`, where: "",
-        detail: "approved", rateLabel: money(i.amt), pay: i.amt,
-      }));
+    /* Expenses are NOT on the payout run.
+       A payout is earnings; a reimbursement is the coach's own money coming back.
+       Adding them together produces a figure that is neither, and that nobody can
+       reconcile against a rate card or against a receipt. Approved claims are paid
+       separately by the admin and shown below as an outstanding balance. */
 
     const classPay = lines.filter(l => l.kind === "class").reduce((a, b) => a + b.pay, 0);
     const ptPay    = lines.filter(l => l.kind === "pt").reduce((a, b) => a + b.pay, 0);
-    const incPay   = lines.filter(l => l.kind === "inc").reduce((a, b) => a + b.pay, 0);
+    const owed     = owedTo(tid);   // approved expenses, reimbursed separately
     // salary is a flat monthly figure, independent of the lines above
     const salary   = rt.type === "salary" ? (rt.monthly || 0) : 0;
 
     return {
-      lines, classPay, ptPay, incPay, salary,
-      total: classPay + ptPay + incPay + salary,
+      lines, classPay, ptPay, owed, salary,
+      total: classPay + ptPay + salary,
       nClasses: lines.filter(l => l.kind === "class").length,
       nPt: lines.filter(l => l.kind === "pt").length,
       basisLabel: rt.type === "salary" ? `${money(rt.monthly || 0)}/month salary`
@@ -99,6 +97,7 @@ export default function PayoutReport() {
   const coaches = trainers.filter(t => !t.admin);
   const report = coaches.map(t => ({ t, ...linesFor(t.id) }));
   const grand = report.reduce((a, r) => a + r.total, 0);
+  const grandOwed = report.reduce((a, r) => a + r.owed, 0);
 
   /* CSV is what actually gets handed over — Danny's accountant wants a file, not
      a screen. Kept as one row per line item so anything can be re-derived. */
@@ -107,7 +106,8 @@ export default function PayoutReport() {
     report.forEach(r => {
       r.lines.forEach(l => rows.push([r.t.name, r.basisLabel, l.when, l.item, l.where, l.detail, l.rateLabel, l.pay.toFixed(2)]));
       if (r.salary) rows.push([r.t.name, r.basisLabel, "—", "Monthly salary", "", "", "", r.salary.toFixed(2)]);
-      rows.push([r.t.name, "", "", "TOTAL DUE", "", "", "", r.total.toFixed(2)]);
+      rows.push([r.t.name, "", "", "TOTAL DUE (payout)", "", "", "", r.total.toFixed(2)]);
+      if (r.owed) rows.push([r.t.name, "", "", "Approved expenses — reimbursed separately", "", "", "", r.owed.toFixed(2)]);
     });
     rows.push([], ["PAYOUT TOTAL", "", "", "", "", "", "", grand.toFixed(2)]);
     const csv = rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -126,8 +126,15 @@ export default function PayoutReport() {
         <div className="text-xs font-bold mb-1" style={{ color: "#B9B5A9" }}>PAYOUT TOTAL · this period</div>
         <div style={{ ...disp, fontWeight: 800, fontSize: 34 }}>{money(grand)}</div>
         <div className="text-xs mt-1" style={{ color: "#B9B5A9" }}>
-          {coaches.length} coaches · every line traces to a marked attendance, a completed PT session, or an approved receipt.
+          {coaches.length} coaches · every line traces to a marked attendance or a completed PT session.
         </div>
+        {/* Shown here, added nowhere. Danny needs to know he also owes this money,
+            without it contaminating a figure that has to reconcile to a rate card. */}
+        {grandOwed > 0 && (
+          <div className="text-xs mt-2 pt-2" style={{ color: "#B9B5A9", borderTop: "1px solid #3A362B" }}>
+            Plus <b style={{ color: "#FFA53D" }}>{money(grandOwed)}</b> of approved expenses awaiting
+            reimbursement — paid separately, not part of the payout above.
+          </div>)}
       </Card>
 
       {/* The distinction that decides whether Danny overpays. */}
@@ -158,7 +165,8 @@ export default function PayoutReport() {
 
           <div className="grid grid-cols-4 gap-2 mt-2 text-center">
             {[["Classes", r.nClasses, r.classPay], ["PT", r.nPt, r.ptPay],
-              ["Receipts", r.incPay > 0 ? "✓" : "—", r.incPay], ["Salary", r.salary ? "✓" : "—", r.salary]]
+              ["Salary", r.salary ? "✓" : "—", r.salary],
+              ["Expenses owed", r.owed > 0 ? "separate" : "—", r.owed]]
               .map(([l, n, v]) => (
               <div key={l} className="rounded-lg py-1.5" style={{ background: "#FBF3EC" }}>
                 <div className="text-[10px] font-bold" style={{ color: T.muted }}>{l}</div>
@@ -204,7 +212,7 @@ export default function PayoutReport() {
         <div className="text-xs space-y-1" style={{ color: T.ink }}>
           <div>· <b>Per-class or per-head</b>, and the real numbers per coach and class type.</div>
           <div>· <b>PT split</b> — flat coach rate, a percentage of the session fee, or per package. Currently a flat rate per completed session.</div>
-          <div>· Are approved <b>incidentals reimbursed on the same run</b>, or separately? Currently included.</div>
+          <div>· Reimbursements are <b>paid separately from the payout run</b>, and the admin marks each claim paid. Say if you would rather they were combined into one payment.</div>
           <div>· Do <b>no-shows count</b> toward per-head pay? Currently they don't — only confirmed attendance.</div>
           <div>· <b>Swimming</b> — same basis as other classes, or its own rate?</div>
         </div>

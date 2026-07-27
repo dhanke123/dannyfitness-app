@@ -6,10 +6,12 @@ import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import CampsSection from "./Camps.jsx";
 import { nid } from "../../lib/util.js";
 import { T, disp } from "../../theme.js";
-import { Btn, Card, Chip } from "../../ui/kit.jsx";
+import { Btn, Card, Chip, Pill } from "../../ui/kit.jsx";
+import { STATUS, approvedTotal } from "../../lib/expenses.js";
+import { fmtISO } from "../../lib/period.js";
 
 export default function AdminManage() {
-  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, incidentals, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveIncidental, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
+  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
@@ -25,7 +27,7 @@ export default function AdminManage() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
                 // surface where the work is waiting, on the tab itself
-                const n = k==="money" ? pendingCounts.refunds + pendingCounts.receipts : 0;
+                const n = k==="money" ? pendingCounts.refunds + pendingCounts.expenses : 0;
                 return (
                 <button key={k} onClick={()=>setAdminSec(k)}
                   className="px-1.5 py-1.5 rounded-full text-xs font-semibold relative"
@@ -54,7 +56,10 @@ export default function AdminManage() {
               };
               const payouts = trainers.map(t=>({t, amt:payoutFor(t.id)}));
               const totalPayout = payouts.reduce((a,b)=>a+b.amt,0);
-              const approvedInc = incidentals.filter(i=>i.status==="approved").reduce((a,b)=>a+b.amt,0);
+              /* Approved AND paid both count: an approved claim is money owed, so
+                 leaving it out until someone pays it would flatter the week. */
+              const approvedInc = expenseClaims.filter(c=>c.status==="approved"||c.status==="paid")
+                .reduce((a,c)=>a+approvedTotal(c),0);
               const profit = revenue - totalPayout - approvedInc;
               return (
               <div className="space-y-3">
@@ -66,7 +71,7 @@ export default function AdminManage() {
                 <div className="text-xs font-bold mb-2" style={{color:"#B9B5A9"}}>REVENUE vs COST (this week)</div>
                 <div className="flex justify-between text-sm"><span>Revenue collected</span><span className="font-bold" style={{color:"#8FD9B6"}}>${revenue}</span></div>
                 <div className="flex justify-between text-sm"><span>Trainer payout (est.)</span><span className="font-bold" style={{color:T.accent}}>-${totalPayout}</span></div>
-                {approvedInc>0 && <div className="flex justify-between text-sm"><span>Approved incidentals</span><span className="font-bold" style={{color:T.accent}}>-${approvedInc}</span></div>}
+                {approvedInc>0 && <div className="flex justify-between text-sm"><span>Approved expenses</span><span className="font-bold" style={{color:T.accent}}>-${approvedInc.toFixed(2)}</span></div>}
                 <div className="flex justify-between text-sm mt-1 pt-1" style={{borderTop:"1px solid #3A362B"}}><span className="font-bold">Gross margin</span><span className="font-bold">${profit}</span></div>
                 <div className="mt-2 space-y-0.5">
                   {payouts.map(({t,amt})=>(
@@ -92,7 +97,7 @@ export default function AdminManage() {
                     {[["Exception requests", pendingCounts.exceptions, "schedule", "Schedule"],
                       ["No-show decisions", pendingCounts.noshows, "clients", "Clients"],
                       ["Refund requests", pendingCounts.refunds, "money", "Manage → Money"],
-                      ["Trainer receipts", pendingCounts.receipts, "money", "Manage → Money"]]
+                      ["Expense claims", pendingCounts.expenses, "money", "Manage → Money"]]
                       .filter(([,n])=>n>0).map(([label,n,,where])=>(
                       <div key={label} className="flex items-center justify-between text-sm">
                         <span>{label} <span className="font-bold">({n})</span></span>
@@ -309,15 +314,43 @@ export default function AdminManage() {
                   onResolve={resolveRefund}
                   approveLabel="Approve refund" denyLabel="Deny (keep credit)" />)}
 
-              {/* ---- Queue 4 of 4: RECEIPTS / INCIDENTALS (Decisions 6, 7) ---- */}
-              {incidentals.filter(i=>i.status==="pending").length>0 && (
-                <ApprovalQueue
-                  label="RECEIPTS · trainer-submitted incidentals"
-                  items={incidentals.filter(i=>i.status==="pending").map(i=>({
-                    id:i.id, title:`${i.label} · $${i.amt}`, sub:i.note, meta:tName(i.trainer),
-                  }))}
-                  onResolve={resolveIncidental}
-                  approveLabel="Approve" denyLabel="Deny" />)}
+              {/* ---- Queue 4 of 4: EXPENSE CLAIMS ----
+                   Not an ApprovalQueue: a claim isn't a yes/no. It holds several
+                   lines, each of which the admin may want to read, question or
+                   exclude, and after approving there is still a payment to record.
+                   Squeezing that into approve/deny would force the all-or-nothing
+                   rejection this workflow exists to avoid. */}
+              {(pendingClaims.length>0 || approvedUnpaid.length>0) && (
+                <div>
+                  <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>
+                    EXPENSE CLAIMS · {pendingClaims.length} to review
+                    {approvedUnpaid.length>0 && <span style={{color:T.blue}}> · {approvedUnpaid.length} approved, unpaid</span>}
+                  </div>
+                  <div className="space-y-2">
+                    {[...pendingClaims, ...approvedUnpaid].map(c=>{
+                      const st = STATUS[c.status]; const net = approvedTotal(c);
+                      const noRec = c.lines.filter(l=>!l.excluded && !l.receipt).length;
+                      return (
+                        <Card key={c.id} className="!p-3">
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-bold">{tName(c.trainer)}</span>
+                                <Pill tone={st.tone}>{st.label}</Pill>
+                              </div>
+                              <div className="text-[11px]" style={{color:T.muted}}>
+                                {c.ref} · {c.lines.length} item{c.lines.length===1?"":"s"}
+                                {c.submittedAt ? ` · sent ${fmtISO(c.submittedAt)}` : ""}
+                                {noRec>0 && <span style={{color:T.orange}}> · {noRec} no receipt</span>}
+                              </div>
+                            </div>
+                            <div style={{...disp,fontWeight:800,fontSize:17}}>${net.toFixed(2)}</div>
+                          </div>
+                          <Btn small full kind="ghost" onClick={()=>setClaimReview(c.id)}>
+                            {c.status==="approved" ? "Record payment" : "Review claim"}</Btn>
+                        </Card>);})}
+                  </div>
+                </div>)}
 
               {/* DECISION 15 — deletion is a PDPA right with a real queue behind it. */}
               {deletionRequests.length>0 && (
@@ -328,9 +361,9 @@ export default function AdminManage() {
                   onResolve={resolveDeletion}
                   approveLabel="Anonymise" denyLabel="Decline" />)}
 
-              {refundQueue.length===0 && incidentals.filter(i=>i.status==="pending").length===0 && deletionRequests.length===0 && (
+              {refundQueue.length===0 && pendingClaims.length===0 && approvedUnpaid.length===0 && deletionRequests.length===0 && (
                 <div className="text-xs" style={{color:T.muted}}>
-                  No refund or receipt approvals waiting. No-shows are under Clients; exception requests are under Schedule.</div>)}
+                  No refunds or expense claims waiting. No-shows are under Clients; exception requests are under Schedule.</div>)}
               <div className="text-xs font-bold pt-1" style={{color:T.muted}}>LEDGER · export CSV for accountant</div>
               {ledger.map(l=>(
                 <Card key={l.id} className="flex items-center gap-3 !p-3">

@@ -54,8 +54,18 @@ export const TimeInput = ({ value, onChange, style }) => (
     style={{border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, ...style}}/>
 );
 
-export const DateInput = ({ value, onChange, min, style }) => (
-  <input type="date" value={value || ""} min={min} onChange={e=>onChange(e.target.value)}
+export const DateInput = ({ value, onChange, min, max, style }) => (
+  <input type="date" value={value || ""} min={min} max={max} onChange={e=>onChange(e.target.value)}
     className="px-2 py-1.5 rounded-lg text-sm outline-none"
     style={{border:`1.5px solid ${T.line}`, background:T.card, color:T.ink, ...style}}/>
 );
+
+/* Status pill. Every expense-claim state is shown the same way everywhere — the
+   coach's list, the admin queue and the report — so "approved" can't mean one
+   colour on one screen and another somewhere else. */
+export const Pill = ({ tone = "muted", children }) => {
+  const c = { muted:T.muted, orange:T.orange, blue:T.blue, accent:T.accent, moss:T.moss }[tone] || T.muted;
+  return (
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+      style={{ ...body, color: c, border: `1.5px solid ${c}`, background: "transparent" }}>{children}</span>);
+};

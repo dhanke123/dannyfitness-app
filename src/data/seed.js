@@ -1,6 +1,7 @@
 /* Demo seed data. Every one of these becomes a Supabase table read in the dev phase. */
 
 import { mulberry, nid } from "../lib/util.js";
+import { toISO } from "../lib/dates.js";
 import { T } from "../theme.js";
 import { Card } from "../ui/kit.jsx";
 
@@ -195,11 +196,63 @@ export const seedOffers = [
   { id:"o3", kind:"8.8 Flash", title:"8.8 Sale", blurb:"$8.80 off any pack this week only. Tap to grab the code, then use it at checkout.", code:"EO88", color:"#FF5A3C" },
 ];
 
+/* Every money row carries a REAL ISO date.
+ *
+ * It used to carry only `d:"Mon 09:12"` — a display label with no year and no
+ * ordering. That is fine until someone asks for "revenue between two dates", at
+ * which point there is nothing to filter on and the honest answer is that the
+ * report can't be built. Anything that moves money must be dated at the point it
+ * happens, not labelled after the fact.
+ *
+ * Spread across the last few months so the range and trend controls have something
+ * to actually show. `d` is kept as the human label. */
+const ago = (n) => toISO(new Date(Date.now() - n * 86400000));
+
 export const seedLedger = [
-  { id:nid(), who:"Priya", what:"10 Class Pack", amt:300, method:"PayNow", status:"paid", d:"Mon 09:12" },
-  { id:nid(), who:"Ben", what:"5 PT Pack", amt:425, method:"Card", status:"paid", d:"Mon 08:47" },
-  { id:nid(), who:"Kumar", what:"Drop-in · Strength", amt:35, method:"Cash", status:"paid", d:"Sun 19:50" },
-  { id:nid(), who:"Elaine", what:"Unlimited Monthly", amt:280, method:"PayNow", status:"paid", d:"Sun 10:02" },
+  { id:nid(), who:"Priya",  what:"10 Class Pack",       amt:300, method:"PayNow", status:"paid", date:ago(0),  d:"Today 09:12" },
+  { id:nid(), who:"Ben",    what:"5 PT Pack",           amt:425, method:"Card",   status:"paid", date:ago(1),  d:"Yesterday 08:47" },
+  { id:nid(), who:"Kumar",  what:"Drop-in · Strength",  amt:35,  method:"Cash",   status:"paid", date:ago(2),  d:"2 days ago" },
+  { id:nid(), who:"Elaine", what:"Unlimited Monthly",   amt:280, method:"PayNow", status:"paid", date:ago(3),  d:"3 days ago" },
+  { id:nid(), who:"Priya",  what:"Drop-in · HIIT",      amt:35,  method:"PayNow", status:"paid", date:ago(9),  d:"Last week" },
+  { id:nid(), who:"Marcus", what:"10 Class Pack",       amt:300, method:"PayNow", status:"paid", date:ago(12), d:"Last week" },
+  { id:nid(), who:"Ben",    what:"Drop-in · Strength",  amt:35,  method:"Card",   status:"paid", date:ago(16), d:"2 weeks ago" },
+  { id:nid(), who:"Elaine", what:"Unlimited Monthly",   amt:280, method:"PayNow", status:"paid", date:ago(33), d:"Last month" },
+  { id:nid(), who:"Priya",  what:"Kids Camp · Aug",     amt:180, method:"PayNow", status:"paid", date:ago(38), d:"Last month" },
+  { id:nid(), who:"Kumar",  what:"5 PT Pack (EO88)",    amt:416, method:"PayNow", status:"paid", date:ago(45), d:"Last month" },
+  { id:nid(), who:"Marcus", what:"Unlimited Monthly",   amt:280, method:"PayNow", status:"paid", date:ago(64), d:"2 months ago" },
+  { id:nid(), who:"Ben",    what:"Adult Camp",          amt:220, method:"Card",   status:"paid", date:ago(71), d:"2 months ago" },
+];
+
+/* ---------- expense claims (coach → admin) ----------
+   One of each status so every branch of the workflow is visible in the demo
+   without having to create it first. */
+export const seedExpenseClaims = [
+  { id:"exp1", ref:"EXP-0001", trainer:"wei", status:"submitted", submittedAt:ago(1),
+    note:"Weekend classes at Costa Del Sol",
+    decidedAt:null, decidedBy:null, reason:null, paidAt:null, paidRef:"", paidMethod:"PayNow",
+    lines:[
+      { id:"exp1-1", date:ago(3), category:"parking", amount:8,  desc:"Parking · Sat NS class",
+        receipt:{name:"parking_cds.jpg", kind:"photo"}, noReceipt:false, noReceiptReason:"", excluded:false, excludeReason:"" },
+      { id:"exp1-2", date:ago(3), category:"petrol",  amount:42, desc:"Petrol top-up, week of coastal sessions",
+        receipt:{name:"shell_receipt.jpg", kind:"photo"}, noReceipt:false, noReceiptReason:"", excluded:false, excludeReason:"" },
+      { id:"exp1-3", date:ago(2), category:"erp",     amount:3.5, desc:"ERP crossing to Meyer Park",
+        receipt:null, noReceipt:true, noReceiptReason:"ERP is auto-deducted from the IU card, no slip issued", excluded:false, excludeReason:"" },
+    ] },
+  { id:"exp2", ref:"EXP-0002", trainer:"dylan", status:"approved", submittedAt:ago(9),
+    note:"", decidedAt:ago(8), decidedBy:"admin", reason:null, paidAt:null, paidRef:"", paidMethod:"PayNow",
+    lines:[
+      { id:"exp2-1", date:ago(11), category:"equipment", amount:64, desc:"2 × resistance band sets (replacements)",
+        receipt:{name:"decathlon.pdf", kind:"file"}, noReceipt:false, noReceiptReason:"", excluded:false, excludeReason:"" },
+    ] },
+  { id:"exp3", ref:"EXP-0003", trainer:"danny", status:"paid", submittedAt:ago(20),
+    note:"Kids camp week", decidedAt:ago(19), decidedBy:"admin", reason:null,
+    paidAt:ago(17), paidRef:"PN-88213", paidMethod:"PayNow",
+    lines:[
+      { id:"exp3-1", date:ago(22), category:"refresh", amount:36, desc:"Water and ice for kids camp",
+        receipt:{name:"fairprice.jpg", kind:"photo"}, noReceipt:false, noReceiptReason:"", excluded:false, excludeReason:"" },
+      { id:"exp3-2", date:ago(21), category:"venue",   amount:80, desc:"Shelter booking · Gardens by the Bay",
+        receipt:{name:"nparks_booking.pdf", kind:"file"}, noReceipt:false, noReceiptReason:"", excluded:false, excludeReason:"" },
+    ] },
 ];
 
 // New per-set log model: entries have `exercises:[{ex,muscle,sets:[{w,reps,type,rpe}]}]`.

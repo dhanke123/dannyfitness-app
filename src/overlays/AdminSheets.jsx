@@ -9,7 +9,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Select } from "../ui/kit.jsx";
 
 export default function AdminSheets() {
-  const { sessions, ptBookings, timeOff, camps, travel, locName, productForm, setProductForm, addProduct, addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, receiptSheet, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setIncidentals, setMeasForm, setMeasurements, setPerm, setRates, setReceiptSheet, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
+  const { sessions, ptBookings, timeOff, camps, travel, locName, productForm, setProductForm, addProduct, addTrainer, campBuilder, coupon, couponForm, day, locations, measForm, measurements, ping, setAddTrainer, setCampBuilder, setCamps, setClassTemplates, setCouponForm, setCoupons, setMeasForm, setMeasurements, setPerm, setRates, setShiftEditor, setShifts, setTemplateBuilder, setTrainers, sheet, shiftEditor, shifts, tName, tab, templateBuilder, trainers, user } = useApp();
   return (<>
         <ClassBuilderForm/>
         {/* Adding a pack used to be a toast that created nothing. */}
@@ -75,74 +75,10 @@ export default function AdminSheets() {
             </div>
           </div>)}
 
-        {/* receipt upload — deliberate reliability test: progress, explicit saved/failed, retry */}
-        {receiptSheet && (() => {
-          const rs = receiptSheet;
-          const startUpload = (force) => {
-            setReceiptSheet(s=>({...s, step:"uploading", pct:0, _fail:!!force}));
-            let p=0;
-            const iv=setInterval(()=>{
-              p+=Math.round(12+Math.random()*16);
-              if (p>=100){ clearInterval(iv);
-                setReceiptSheet(s=>{ if(!s) return s;
-                  if (s._fail){ return {...s, step:"failed", pct:100}; }
-                  setIncidentals(inc=>[...inc,{id:nid(), trainer:user.id, label:s.note||"Receipt", amt:+s.amt||0, note:"Receipt uploaded", status:"pending", receipt:true}]);
-                  return {...s, step:"saved", pct:100};
-                });
-              } else setReceiptSheet(s=> s?{...s,pct:Math.min(p,99)}:s);
-            }, 260);
-          };
-          return (
-          <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}}
-            onClick={()=>{ if(rs.step!=="uploading") setReceiptSheet(null); }}>
-            <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-1">
-                <div style={{...disp,fontWeight:700,fontSize:22}}>Upload receipt</div>
-                {rs.step!=="uploading" && <button onClick={()=>setReceiptSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>}
-              </div>
-
-              {rs.step==="form" && (<>
-                <div className="text-xs mb-3" style={{color:T.muted}}>Attach a photo of the receipt with the amount and a note. Goes to Danny for approval.</div>
-                <button onClick={()=>setReceiptSheet(s=>({...s, file:s.file?null:"receipt_"+Date.now()+".jpg"}))}
-                  className="w-full rounded-xl px-3 py-6 mb-3 text-sm font-semibold" style={{border:`1.5px dashed ${rs.file?T.moss:T.line}`, background:rs.file?"#EFF3EE":T.card, color:rs.file?T.moss:T.muted}}>
-                  {rs.file ? `✓ ${rs.file} — tap to replace` : "📷 Tap to choose photo / file"}
-                </button>
-                <div className="flex gap-2 mb-3">
-                  <input value={rs.amt} onChange={e=>setReceiptSheet(s=>({...s,amt:e.target.value}))} placeholder="Amount $" type="number"
-                    className="w-28 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
-                  <input value={rs.note} onChange={e=>setReceiptSheet(s=>({...s,note:e.target.value}))} placeholder="What for? e.g. Parking at CDS"
-                    className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
-                </div>
-                <Btn full onClick={()=>{ if(!rs.file){ping("Choose a photo first");return;} if(!(+rs.amt>0)){ping("Enter an amount");return;} startUpload(false); }}>Upload receipt</Btn>
-                <button onClick={()=>{ if(!rs.file){ping("Choose a photo first");return;} if(!(+rs.amt>0)){ping("Enter an amount");return;} startUpload(true); }}
-                  className="w-full text-center text-xs mt-2 font-semibold" style={{color:T.muted}}>Simulate a dropped connection (demo)</button>
-              </>)}
-
-              {rs.step==="uploading" && (<div className="py-4">
-                <div className="text-sm font-semibold mb-2">Uploading… {rs.pct}%</div>
-                <div className="h-2.5 rounded-full overflow-hidden" style={{background:T.line}}>
-                  <div style={{width:`${rs.pct}%`, height:"100%", background:T.accent, transition:"width .2s"}}/>
-                </div>
-                <div className="text-xs mt-2" style={{color:T.muted}}>Keep this open until it confirms saved. We never assume success silently.</div>
-              </div>)}
-
-              {rs.step==="saved" && (<div className="py-4 text-center">
-                <div style={{...disp,fontWeight:700,fontSize:34,color:T.moss}}>✓</div>
-                <div className="font-semibold mb-1">Saved &amp; synced</div>
-                <div className="text-xs mb-4" style={{color:T.muted}}>${(+rs.amt).toFixed(2)} · {rs.note||"Receipt"} — sent to Danny for approval.</div>
-                <Btn full onClick={()=>setReceiptSheet(null)}>Done</Btn>
-              </div>)}
-
-              {rs.step==="failed" && (<div className="py-4 text-center">
-                <div style={{...disp,fontWeight:700,fontSize:34,color:T.accent}}>!</div>
-                <div className="font-semibold mb-1">Upload didn't complete</div>
-                <div className="text-xs mb-4" style={{color:T.muted}}>Nothing was saved. Your photo and details are still here — retry when you have signal.</div>
-                <Btn full onClick={()=>startUpload(false)}>Retry upload</Btn>
-                <button onClick={()=>setReceiptSheet(s=>({...s,step:"form"}))} className="w-full text-center text-xs mt-2 font-semibold" style={{color:T.muted}}>Edit details</button>
-              </div>)}
-            </div>
-          </div>);})()}
-
+        {/* The old receipt-upload sheet lived here. It has been replaced by the
+           expense-claim workflow (components/ExpenseClaimForm.jsx): a claim can hold
+           several items, each with its own date, category and receipt, and it tracks
+           through approval to actually being paid. */}
         {/* shift-hours editor — per-weekday, weekly recurring */}
         {shiftEditor && (() => {
           const tid = shiftEditor.trainer; const sh = shifts[tid] || {};

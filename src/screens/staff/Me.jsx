@@ -1,12 +1,16 @@
+import { useState } from "react";
 import { useApp } from "../../state/AppState.jsx";
+import MyExpenses from "../../components/MyExpenses.jsx";
+import { approvedTotal } from "../../lib/expenses.js";
 import { trainerScorecards } from "../../lib/analytics.js";
 import { DAYS } from "../../lib/dates.js";
 import { T, disp } from "../../theme.js";
-import { Card, H } from "../../ui/kit.jsx";
+import { Card, Chip, H } from "../../ui/kit.jsx";
 
 export default function StaffMe() {
   const app = useApp();
-  const { isAdmin, isClient, perm, ptBookings, rates, sessions, shifts, staffSessions, tab, trainers, user } = app;
+  const { isAdmin, isClient, perm, ptBookings, rates, sessions, shifts, staffSessions, tab, trainers, user, myClaims } = app;
+  const [meView, setMeView] = useState("me");
   return (<>
         {!isClient && !isAdmin && tab==="me" && (() => {
           const me = trainers.find(t=>t.id===user.id) || {name:user.name, bio:""};
@@ -17,9 +21,22 @@ export default function StaffMe() {
              the admin console — a coach seeing how their margin compares to a
              colleague's is a management conversation, not a dashboard. */
           const me_ = trainerScorecards(app).find(c => c.id === user.id) || {};
+          const owed = myClaims.filter(c => c.status === "approved").reduce((t, c) => t + approvedTotal(c), 0);
+          const drafts = myClaims.filter(c => c.status === "draft").length;
           return (
           <main className="flex-1 pb-24 px-5 space-y-3">
             <H>Me</H>
+            {/* Expenses are a real part of a coach's account, not a button hidden on
+                another screen. The badge is what makes an unfinished draft or unpaid
+                claim visible instead of forgotten. */}
+            <div className="flex gap-2">
+              {[["me","My week"],["expenses","Expenses"]].map(([k,l])=>(
+                <Chip key={k} active={meView===k} onClick={()=>setMeView(k)}>
+                  {l}{k==="expenses" && (owed>0||drafts>0) ? ` · ${owed>0?`$${owed.toFixed(0)}`:`${drafts} draft`}` : ""}
+                </Chip>))}
+            </div>
+            {meView==="expenses" && <MyExpenses/>}
+            {meView==="me" && (<>
             <Card><div className="font-bold">{me.name}</div><div className="text-xs" style={{color:T.muted}}>{me.tag||"Coach"}</div>
               {me.bio && <div className="text-xs mt-2" style={{color:T.muted}}>{me.bio}</div>}</Card>
             <Card><div className="text-xs font-bold mb-1" style={{color:T.muted}}>THIS WEEK</div>
@@ -54,7 +71,8 @@ export default function StaffMe() {
               <div className="text-sm" style={{color:T.muted}}>{myPerm.earnings
                 ? (myRate?.type==="salary" ? `Salary $${myRate.monthly}/mo` : `${staffSessions(user.id).length} classes + ${ptBookings.filter(b=>b.trainer===user.id).length} PT this week`)
                 : "Hidden — enabled by admin per trainer"}</div></Card>
-            <div className="text-xs text-center" style={{color:T.muted}}>Permissions set by Danny (admin). Currently: attendance ✓, availability ✓, edit descriptions {myPerm.editDesc?"✓":"✗"}.</div>
+            <div className="text-xs text-center" style={{color:T.muted}}>Permissions set by the admin. Currently: attendance ✓, availability ✓, edit descriptions {myPerm.editDesc?"✓":"✗"}.</div>
+            </>)}
           </main>);})()}
 
   </>);

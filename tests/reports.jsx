@@ -19,8 +19,22 @@ const state={
           {id:2,who:"Sam",what:"10-class pack (WELCOME10)",amt:300,method:"PayNow",status:"paid"},
           {id:3,who:"Ben",what:"PT · Danny",amt:120,method:"Card",status:"paid"},
           {id:4,who:"Ben",what:"Refund · x",amt:-35,method:"PayNow",status:"refunded"}],
-  incidentals:[{id:"i1",trainer:"wei",label:"Parking",amt:8,status:"approved"},
-               {id:"i2",trainer:"wei",label:"Cones",amt:20,status:"pending"}],
+  /* Expense claims replace the old flat "incidentals". Statuses chosen so each
+     branch of the cost rule is exercised: approved and paid both cost money,
+     submitted and rejected cost nothing, and an EXCLUDED line is removed from an
+     otherwise approved claim. */
+  expenseClaims:[
+    {id:"c1", ref:"EXP-0001", trainer:"wei", status:"approved", lines:[
+      {id:"c1-1", date:"2026-07-02", category:"parking", amount:8, desc:"Parking", receipt:{name:"a.jpg",kind:"photo"}, noReceipt:false, excluded:false}]},
+    {id:"c2", ref:"EXP-0002", trainer:"wei", status:"submitted", lines:[
+      {id:"c2-1", date:"2026-07-03", category:"equipment", amount:20, desc:"Cones", receipt:{name:"b.jpg",kind:"photo"}, noReceipt:false, excluded:false}]},
+    {id:"c3", ref:"EXP-0003", trainer:"wei", status:"paid", paidAt:"2026-07-10", paidRef:"PN-1", lines:[
+      {id:"c3-1", date:"2026-07-05", category:"petrol", amount:30, desc:"Petrol", receipt:null, noReceipt:true, noReceiptReason:"pump printer broken", excluded:false},
+      {id:"c3-2", date:"2026-07-05", category:"other", amount:99, desc:"Queried item", receipt:null, noReceipt:true, noReceiptReason:"none", excluded:true, excludeReason:"personal"}]},
+    {id:"c4", ref:"EXP-0004", trainer:"wei", status:"rejected", reason:"duplicate", lines:[
+      {id:"c4-1", date:"2026-07-06", category:"other", amount:500, desc:"Duplicate", receipt:null, noReceipt:true, noReceiptReason:"x", excluded:false}]},
+  ],
+  tName:(id)=>id,
   trainers:[{id:"dylan",name:"Dylan"}],
   rates:{dylan:{type:"per_class",perClass:40,perPt:45}},
   sessions:[{id:"s1",type:"STR",day:0,time:"07:00",cap:10,loc:"GBB",trainer:"dylan",done:true,
@@ -35,7 +49,12 @@ ok("revenue only counts PAID rows", pnl.totalRevenue===455);
 ok("refunds excluded from revenue", !String(pnl.totalRevenue).includes("420"));
 ok("pack revenue separated from drop-in", pnl.revenue.packs===300 && pnl.revenue.dropIn===35);
 ok("PT revenue separated", pnl.revenue.pt===120);
-ok("only APPROVED incidentals cost money", pnl.incidentalCost===8);
+/* 8 (approved) + 30 (paid, excluded line dropped) = 38.
+   NOT 20 (submitted), NOT 500 (rejected), NOT 99 (excluded line). */
+ok("expense cost = approved + paid, excluded lines removed", pnl.expenseCost===38);
+ok("  ...a submitted claim costs nothing until it's approved", pnl.expenseCost!==58);
+ok("  ...a rejected claim never costs anything", pnl.expenseCost<500);
+ok("  ...approved-but-unpaid is reported separately", pnl.expenseOutstanding===8);
 ok("processing fees charged", pnl.processingFees>0);
 ok("margin = revenue - all costs", pnl.grossMargin===A.toCsv?Math.round((pnl.totalRevenue-pnl.cost)*100)/100===pnl.grossMargin:true);
 ok("payout counts DELIVERED work only", pnl.payouts[0].amt===40+45);
@@ -59,9 +78,11 @@ ok("client insight ranks no-show first", cl.rows[0].name==="Ben");
 ok("watch-list flags repeat risk", cl.atRisk.length===1);
 
 const au=A.integrityAudit(state);
-ok("audit flags pending receipts", au.findings.some(f=>f.code==="PENDING_RECEIPTS"));
+ok("audit flags claims waiting for approval", au.findings.some(f=>f.code==="PENDING_EXPENSE_CLAIMS"));
+ok("audit flags APPROVED but not reimbursed", au.findings.some(f=>f.code==="APPROVED_NOT_REIMBURSED"));
+ok("audit flags approved spend with no receipt", au.findings.some(f=>f.code==="EXPENSES_WITHOUT_RECEIPT"));
 ok("audit clean flag correct", au.clean===false);
-const au2=A.integrityAudit({...state, credits:{classes:-1,ptHead:0,ptCoach:0}, incidentals:[]});
+const au2=A.integrityAudit({...state, credits:{classes:-1,ptHead:0,ptCoach:0}, expenseClaims:[]});
 ok("audit catches NEGATIVE credits (double-deduction bug)", au2.findings.some(f=>f.code==="NEGATIVE_CREDITS"));
 
 // CSV correctness — the thing that silently corrupts a spreadsheet

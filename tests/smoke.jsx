@@ -115,7 +115,7 @@ ok("noshow queue cleared", !txt().includes("NO-SHOW DECISIONS"));
 await click("Manage");
 const money=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Money") && b.closest("main"));
 await act(async()=>{ money.dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true})); });
-ok("receipts queue", txt().includes("RECEIPTS · trainer-submitted"));
+ok("expense claim queue", txt().includes("EXPENSE CLAIMS"));
 const gear=[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Settings") && b.closest("main"));
 await act(async()=>{ gear.dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true})); });
 ok("editable windows in settings", txt().includes("CANCELLATION & CHANGE WINDOWS"));

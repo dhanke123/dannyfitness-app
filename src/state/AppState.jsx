@@ -2,16 +2,19 @@
    Supabase queries and realtime subscriptions replace the useState calls — the screens
    consuming useApp() should not need to change. */
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
-import { COUPONS, CT, PT_PRICE, TRAINERS, isHead, mkSet, seedAbout, seedCamps, seedClassTemplates, seedLeads, seedLedger, seedLocations, seedOffers, seedProducts, seedPtBookings, seedRoutines, seedSessions, seedShifts, seedTimeOff, seedTravel, seedWorkoutSessions } from "../data/seed.js";
-import { DAYS, TODAY, dateFor, fmtFull, fromISO, isoFor, toMin } from "../lib/dates.js";
+import { COUPONS, CT, PT_PRICE, TRAINERS, isHead, mkSet, seedAbout, seedCamps, seedClassTemplates, seedLeads, seedLedger, seedLocations, seedOffers, seedExpenseClaims, seedProducts, seedPtBookings, seedRoutines, seedSessions, seedShifts, seedTimeOff, seedTravel, seedWorkoutSessions } from "../data/seed.js";
+import { DAYS, TODAY, dateFor, fmtFull, fromISO, isoFor, toISO, toMin } from "../lib/dates.js";
 import { EXLIB, best1RM, bestWeight, est1RM, estKcal, exMeta, isWorking, muscleOf } from "../lib/metrics.js";
 import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../lib/scheduling.js";
 import { nid } from "../lib/util.js";
 import { fetchProfile, isConfigured, looksLikeSgMobile, supabase, toAppUser, toE164 } from "../lib/supabase.js";
 import { buildNotifications } from "../lib/notifications.js";
 import { allConflicts, hasBlocking } from "../lib/conflicts.js";
+import { approvedTotal, claimErrors, claimTotal, emptyClaim, emptyLine, excludedTotal, nextRef } from "../lib/expenses.js";
 import { EVENTS, startUsageSession, track } from "../lib/usage.js";
 import { Card } from "../ui/kit.jsx";
+
+const round2 = (n) => Math.round(n * 100) / 100;
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -381,7 +384,6 @@ export function AppProvider({ children }) {
   const [calSpan, setCalSpan] = useState("week");    // week is the default view for every role
   const [calTrainer, setCalTrainer] = useState("all"); // admin calendar filter: 'all' | trainerId
   const [bookFor, setBookFor] = useState(null);      // book sheet {trainer,day,time,weekOff,self,who,nonClient}
-  const [receiptSheet, setReceiptSheet] = useState(null); // reliable receipt-upload flow {step,file,amt,note,pct}
   const [walkSheet, setWalkSheet] = useState(null);  // class walk-in (attendance only, no payment) {sid,name}
   const [addLead, setAddLead] = useState(null);     // manual lead capture (walk-in / IG DM)
   // Public enquiry form — usable before login, lands in the admin's leads queue.
@@ -407,9 +409,11 @@ export function AppProvider({ children }) {
     track(EVENTS.ENQUIRY_SUBMIT, { source:"login_screen" });
     setEnquiry(e2 => ({ ...e2, sent: true }));
   };
-  const [incidentals, setIncidentals] = useState([  // trainer-logged extras awaiting Danny's approval
-    { id:nid(), trainer:"wei", label:"Parking at Costa Del Sol", amt:8, note:"Sat NS class", status:"pending" },
-  ]);
+  /* Expense claims replace the old single-receipt "incidentals". See lib/expenses.js
+     for why the old shape couldn't be reported on. */
+  const [expenseClaims, setExpenseClaims] = useState(seedExpenseClaims);
+  const [claimEditor, setClaimEditor] = useState(null);   // claim id being edited by its owner
+  const [claimReview, setClaimReview] = useState(null);   // claim id open in the admin review sheet
 
   const [seg, setSeg] = useState("classes");
   const [day, setDay] = useState(TODAY);
@@ -468,12 +472,12 @@ export function AppProvider({ children }) {
   const closeOverlays = () => { setSheet(null); setShopSheet(null); setCampSheet(null); setChatOpen(false);
     setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
-    setDoneSheet(null); setNoteSheet(null); setAddLead(null); setReceiptSheet(null); setWalkSheet(null); setBookFor(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null);
+    setDoneSheet(null); setNoteSheet(null); setAddLead(null); setWalkSheet(null); setBookFor(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null); setClaimEditor(null); setClaimReview(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||receiptSheet||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||claimEditor||claimReview||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -795,25 +799,120 @@ export function AppProvider({ children }) {
     logAudit(`No-show ${apply?"applied":"waived"} · ${it?.who} · ${it?.session}${reason?` · "${reason}"`:""}`);
     ping(apply? "No-show applied — credit forfeited (audited)" : "Waived — no deduction (audited)");
   };
-  const resolveIncidental = (id, approved, reason) => {
-    const i = incidentals.find(x=>x.id===id);
-    setIncidentals(x=>x.map(y=>y.id!==id?y:{...y, status:approved?"approved":"rejected", reason}));
-    if (approved && i) setLedger(l=>[{id:nid(), who:tName(i.trainer), what:`Incidental · ${i.label}`, amt:-i.amt, method:"Expense", status:"paid", d:"Today"}, ...l]);
-    logAudit(`Receipt ${approved?"approved":"denied"} · ${tName(i?.trainer)} · $${i?.amt} · ${i?.label}${reason?` · "${reason}"`:""}`);
-    ping(approved ? "Approved — recorded as an expense for analysis (audited)" : "Receipt denied — the trainer is notified with your reason");
+  /* ---------------------------------------------------- EXPENSE CLAIMS ----
+     draft → submitted → approved / rejected → paid.
+     Approval and payment are both the ADMIN's, not the head coach's: Danny is a
+     coach here and submits claims like anyone else, so him approving his own would
+     be the one hole an expense process can't have. */
+
+  const claimById = (id) => expenseClaims.find(c => c.id === id);
+
+  const newClaim = () => {
+    const c = emptyClaim(nid(), nextRef(expenseClaims), user?.id);
+    setExpenseClaims(cs => [c, ...cs]);
+    setClaimEditor(c.id);
+    return c;
   };
+
+  const updateClaim = (id, patch) => setExpenseClaims(cs => cs.map(c => {
+    if (c.id !== id) return c;
+    // A submitted claim is out of the coach's hands. Editing it after the admin has
+    // seen it means the thing approved isn't the thing submitted.
+    if (c.status !== "draft") return c;
+    return typeof patch === "function" ? patch(c) : { ...c, ...patch };
+  }));
+
+  const deleteClaim = (id) => {
+    const c = claimById(id);
+    if (!c || c.status !== "draft") { ping("Only a draft can be deleted"); return; }
+    setExpenseClaims(cs => cs.filter(x => x.id !== id));
+    setClaimEditor(null);
+    ping("Draft deleted");
+  };
+
+  const submitClaim = (id) => {
+    const c = claimById(id); if (!c) return false;
+    const errs = claimErrors(c, toISO(new Date()));
+    if (errs.length) { ping(errs[0]); return false; }
+    setExpenseClaims(cs => cs.map(x => x.id !== id ? x : {
+      ...x, status: "submitted", submittedAt: toISO(new Date()) }));
+    setClaimEditor(null);
+    logAudit(`Expense claim submitted · ${c.ref} · ${tName(c.trainer)} · $${claimTotal(c).toFixed(2)} · ${c.lines.length} item${c.lines.length===1?"":"s"}`);
+    ping(`${c.ref} sent to admin — $${claimTotal(c).toFixed(2)}`);
+    return true;
+  };
+
+  /* Withdraw exists because the alternative is the coach messaging the admin to ask
+     them to reject it, which is not a workflow. Only while it's still untouched. */
+  const withdrawClaim = (id) => {
+    const c = claimById(id); if (!c || c.status !== "submitted") return;
+    setExpenseClaims(cs => cs.map(x => x.id !== id ? x : { ...x, status: "draft", submittedAt: null }));
+    logAudit(`Expense claim withdrawn · ${c.ref} · ${tName(c.trainer)}`);
+    ping(`${c.ref} pulled back — it's a draft again`);
+  };
+
+  /* Excluding a single line lets the admin approve four parking slips and query the
+     fifth, instead of rejecting the lot and making the coach re-enter everything
+     that was already fine. The reason is required and travels back to the coach. */
+  const toggleClaimLine = (claimId, lineId, reason) => setExpenseClaims(cs => cs.map(c => {
+    if (c.id !== claimId || (c.status !== "submitted" && c.status !== "approved")) return c;
+    return { ...c, lines: c.lines.map(l => l.id !== lineId ? l
+      : { ...l, excluded: !l.excluded, excludeReason: !l.excluded ? (reason || "") : "" }) };
+  }));
+
+  const decideClaim = (id, approved, reason) => {
+    const c = claimById(id); if (!c) return;
+    if (!approved && !String(reason || "").trim()) { ping("Give a reason so the coach knows what to fix"); return; }
+    const amt = approvedTotal(c);
+    if (approved && !(amt > 0)) { ping("Every line is excluded — reject the claim instead"); return; }
+    setExpenseClaims(cs => cs.map(x => x.id !== id ? x : {
+      ...x, status: approved ? "approved" : "rejected",
+      decidedAt: toISO(new Date()), decidedBy: user?.id, reason: reason || null }));
+    const cut = excludedTotal(c);
+    logAudit(`Expense claim ${approved ? "approved" : "rejected"} · ${c.ref} · ${tName(c.trainer)} · $${amt.toFixed(2)}${cut > 0 ? ` (excluded $${cut.toFixed(2)})` : ""}${reason ? ` · "${reason}"` : ""}`);
+    ping(approved
+      ? `${c.ref} approved — $${amt.toFixed(2)} now owed to ${tName(c.trainer)}${cut > 0 ? `, $${cut.toFixed(2)} excluded` : ""}`
+      : `${c.ref} rejected — ${tName(c.trainer)} is notified with your reason`);
+  };
+
+  /* Marking paid is a separate act from approving, deliberately. Approved means
+     "yes, that's a real cost"; paid means "the money has left the account". Merging
+     them makes it impossible to answer the only question a coach ever asks: am I
+     still out of pocket? */
+  const markClaimPaid = (id, { ref, method, date } = {}) => {
+    const c = claimById(id); if (!c) return;
+    if (c.status !== "approved") { ping("Approve it first"); return; }
+    setExpenseClaims(cs => cs.map(x => x.id !== id ? x : {
+      ...x, status: "paid", paidAt: date || toISO(new Date()),
+      paidRef: ref || "", paidMethod: method || "PayNow" }));
+    const amt = approvedTotal(c);
+    setLedger(l => [{ id: nid(), who: tName(c.trainer), what: `Expense reimbursement · ${c.ref}`,
+      amt: -amt, method: method || "PayNow", status: "paid",
+      date: date || toISO(new Date()), d: "Today" }, ...l]);
+    logAudit(`Expense claim paid · ${c.ref} · ${tName(c.trainer)} · $${amt.toFixed(2)} · ${method || "PayNow"}${ref ? ` · ref ${ref}` : ""}`);
+    ping(`${c.ref} marked paid — $${amt.toFixed(2)} to ${tName(c.trainer)}`);
+  };
+
+  const myClaims = expenseClaims.filter(c => c.trainer === user?.id);
+  const pendingClaims = expenseClaims.filter(c => c.status === "submitted");
+  const approvedUnpaid = expenseClaims.filter(c => c.status === "approved");
+  const owedTo = (tid) => round2(approvedUnpaid.filter(c => c.trainer === tid).reduce((t, c) => t + approvedTotal(c), 0));
+
   // pending counts drive the admin nav badges (Decision 6 — queues must not pile up silently)
   const pendingCounts = {
     exceptions: exceptionQueue.length,
     refunds: refundQueue.length,
     noshows: noShowQueue.length,
-    receipts: incidentals.filter(i=>i.status==="pending").length,
+    // Both need the admin. An approved-but-unpaid claim is a coach out of pocket,
+    // which is exactly the kind of thing that goes quiet and then becomes a grievance.
+    expenses: pendingClaims.length + approvedUnpaid.length,
     deletions: deletionRequests.filter(d=>d.status==="pending").length,
   };
+  pendingCounts.receipts = pendingCounts.expenses;   // legacy alias
   pendingCounts.schedule = pendingCounts.exceptions;
   pendingCounts.clients  = pendingCounts.noshows;
-  pendingCounts.manage   = pendingCounts.refunds + pendingCounts.receipts + pendingCounts.deletions;
-  pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows + pendingCounts.receipts + pendingCounts.deletions;
+  pendingCounts.manage   = pendingCounts.refunds + pendingCounts.expenses + pendingCounts.deletions;
+  pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows + pendingCounts.expenses + pendingCounts.deletions;
 
   const addLocation = () => {
     if (!newLocName.trim()) return;
@@ -948,12 +1047,12 @@ export function AppProvider({ children }) {
     if (!user) return [];
     return buildNotifications({
       role: user.role, user, myPT, myClassBookings, sessions, bookWeeks, routines,
-      credits, refundables, exceptionQueue, refundQueue, noShowQueue, incidentals,
+      credits, refundables, exceptionQueue, refundQueue, noShowQueue, expenseClaims,
       leads, camps, myCamps, ptBookings, referralReward,
       tName, locName, dateFor, sessTrainers,
     });
   }, [user, myPT, myClassBookings, sessions, bookWeeks, routines, credits, refundables,
-      exceptionQueue, refundQueue, noShowQueue, incidentals, leads, camps, myCamps,
+      exceptionQueue, refundQueue, noShowQueue, expenseClaims, leads, camps, myCamps,
       ptBookings, referralReward, trainers, locations]);
   const unreadNotifs = notifications.filter(n => !readNotifs.includes(n.id)).length;
   const markAllNotifsRead = () => setReadNotifs(notifications.map(n => n.id));
@@ -981,11 +1080,15 @@ export function AppProvider({ children }) {
     ? [["today","Today"],["schedule","Schedule"],["clients","Clients"],["reports","Reports"],["manage","Manage"]]
     : [["today","Today"],["schedule","Schedule"],["clients","Clients"],["me","Me"]];
 
-  const store = { eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
+  const store = {
+    expenseClaims, setExpenseClaims, claimEditor, setClaimEditor, claimReview, setClaimReview,
+    newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
+    decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
+    eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
     bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
-    addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveIncidental, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
-    ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, incidentals, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, receiptSheet, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIncidentals, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReceiptSheet, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
+    addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
+    ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, setChatInput, setChatMsgs, setChatOpen, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
 

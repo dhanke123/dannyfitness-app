@@ -8,7 +8,7 @@ import { T, disp } from "../theme.js";
 import { Btn, Card, Select } from "../ui/kit.jsx";
 
 export default function ScheduleSheets() {
-  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, resolveIncidental, commitClientMove, day, doneSheet, hoursUntil, incidentals, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setIncidentals, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
+  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, commitClientMove, day, doneSheet, hoursUntil, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet } = useApp();
   return (<>
         {/* time off sheet */}
         {timeOffSheet && (
@@ -202,7 +202,12 @@ export default function ScheduleSheets() {
             </div>
           </div>);})()}
 
-        {/* complete-session sheet — mark done + log incidentals for Danny's approval */}
+        {/* Complete-session sheet — attendance only.
+             The optional "incidental" that used to live here has gone. Attaching a
+             cost to whichever session happened to be in front of the coach made the
+             expense data meaningless: a week's petrol got booked against one Tuesday
+             class. Expenses are now their own claim under Me → Expenses, with their
+             own dates. */}
         {doneSheet && (
           <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setDoneSheet(null)}>
             <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
@@ -210,25 +215,23 @@ export default function ScheduleSheets() {
                 <div style={{...disp,fontWeight:700,fontSize:22}}>Complete session</div>
                 <button onClick={()=>setDoneSheet(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
               </div>
-              <div className="text-sm mb-3" style={{color:T.muted}}>{doneSheet.label}</div>
-              <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>ADD AN INCIDENTAL (optional) — goes to Danny for approval</div>
-              <div className="flex gap-2 mb-2">
-                <input value={doneSheet.incLabel} onChange={e=>setDoneSheet(d=>({...d,incLabel:e.target.value}))} placeholder="e.g. Parking, equipment, extra 30 min"
-                  className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
-                <input value={doneSheet.incAmt} onChange={e=>setDoneSheet(d=>({...d,incAmt:e.target.value}))} placeholder="$" type="number"
-                  className="w-20 px-2 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`}}/>
+              <div className="text-sm mb-1" style={{color:T.muted}}>{doneSheet.label}</div>
+              <div className="text-xs mb-4" style={{color:T.muted}}>
+                Marking this complete is what makes it payable — a session isn't in your
+                payout until it's marked.
               </div>
-              <div className="text-xs mb-3" style={{color:T.muted}}>Recorded against this session for money & revenue analysis once Danny approves.</div>
               <Btn full onClick={()=>{
                 if (doneSheet.kind==="pt") setPtBookings(bs=>bs.map(b=>b.id!==doneSheet.id?b:{...b,status:"done"}));
                 else setSessions(ss=>ss.map(s=>s.id!==doneSheet.id?s:{...s,done:true}));
-                if (doneSheet.incLabel && +doneSheet.incAmt>0) {
-                  setIncidentals(inc=>[...inc,{id:nid(), trainer:doneSheet.trainer, label:doneSheet.incLabel, amt:+doneSheet.incAmt, note:doneSheet.label, status:"pending"}]);
-                  ping("Session completed · incidental sent to Danny for approval");
-                } else ping("Session marked complete");
-                setDoneSheet(null);}}>Mark complete{doneSheet.incLabel&&+doneSheet.incAmt>0?" & submit incidental":""}</Btn>
+                ping("Session marked complete");
+                setDoneSheet(null);}}>Mark complete</Btn>
+              <div className="text-[11px] text-center mt-3" style={{color:T.muted}}>
+                Spent money on this? Claim it under <b>Me → Expenses</b>, where it gets its
+                own date and receipt.
+              </div>
             </div>
           </div>)}
+
 
         {/* class walk-in — attendance only, no payment (cash handled outside the app) */}
         {walkSheet && (

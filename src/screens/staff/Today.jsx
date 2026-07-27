@@ -6,14 +6,13 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, H } from "../../ui/kit.jsx";
 
 export default function StaffToday() {
-  const { booked, day, isAdmin, isClient, loc, locName, mark, markAll, myClassBookings, ptBookings, rosterOpen, sessions, setDoneSheet, setReceiptSheet, setRosterOpen, setWalkSheet, tName, tab, user } = useApp();
+  const { booked, day, isAdmin, isClient, loc, locName, mark, markAll, myClassBookings, ptBookings, rosterOpen, sessions, setDoneSheet, setRosterOpen, setWalkSheet, tName, tab, user } = useApp();
   return (<>
         {/* ==================== TRAINER / ADMIN: TODAY ==================== */}
         {!isClient && tab==="today" && (
           <main className="flex-1 pb-24 px-5">
             <div className="flex items-center justify-between">
               <H>{isAdmin?"Today — all coaches":"Today — my sessions"}</H>
-              <Btn small kind="ghost" onClick={()=>setReceiptSheet({step:"form", file:null, amt:"", note:"", pct:0})}>+ Receipt</Btn>
             </div>
             <div className="space-y-3">
               {sessions.filter(s=>s.day===TODAY && (isAdmin || sessTrainers(s).includes(user.id))).sort((a,b)=>a.time.localeCompare(b.time)).map(s=>{
