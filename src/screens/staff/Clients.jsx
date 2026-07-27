@@ -9,10 +9,15 @@ import { Btn, Card, H } from "../../ui/kit.jsx";
 export default function StaffClients() {
   const { credits, intakeRecords, isAdmin, isClient, measurements, noShowQueue, ping,
           resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tName, tab, user,
-          sessionLog, addSessionLog, groupPacks, trainers } = useApp();
+          sessionLog, addSessionLog, groupPacks, trainers,
+          clients, clientGroups, clientById, addClient, createGroup, importClientsCsv } = useApp();
   const [openIntake, setOpenIntake] = useState(null);
   const [openSessions, setOpenSessions] = useState(null);   // client name whose session history is expanded
   const [backfill, setBackfill] = useState(null);           // {who, date, time, tookBy, remark}
+  const [groupBuilder, setGroupBuilder] = useState(null);   // {memberIds:[], primaryId:null}
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [newClient, setNewClient] = useState(null);         // {name, phone, email}
   return (<>
         {/* ==================== TRAINER / ADMIN: CLIENTS ==================== */}
         {!isClient && tab==="clients" && (
@@ -44,23 +49,36 @@ export default function StaffClients() {
             {/* ---- Shared combo packs (2-3 pax train together, one pack) ---- */}
             <Card className="mb-3" style={{background:"#EFF3EE"}}>
               <div className="text-xs font-bold mb-1.5" style={{color:T.moss}}>PT COMBO PACKS · shared credits</div>
-              {groupPacks.map(g=>(
+              {groupPacks.map(g=>{
+                const grp = clientGroups.find(x=>x.id===g.groupId || x.name===g.name);
+                const primary = grp ? (clientById(grp.primaryId)?.name) : null;
+                return (
                 <div key={g.id} className="flex items-center justify-between py-1" style={{borderBottom:`1px solid ${T.line}`}}>
                   <div>
                     <div className="text-sm font-semibold">{g.name}</div>
-                    <div className="text-[11px]" style={{color:T.muted}}>{g.members.length} pax · Coach {tName(g.trainer)}</div>
+                    <div className="text-[11px]" style={{color:T.muted}}>{g.members.length} pax{primary?` · ★ ${primary} pays`:""} · Coach {tName(g.trainer)}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-bold" style={{color: g.size-g.used<=2 ? T.accent : T.ink}}>{g.size-g.used} left</div>
                     <div className="text-[10px]" style={{color:T.muted}}>{g.used}/{g.size} used</div>
                   </div>
-                </div>))}
+                </div>);})}
               <div className="text-[11px] mt-1.5" style={{color:T.muted}}>
                 Each joint session deducts 1 from the shared pack. Session logs below auto-deduct.
               </div>
             </Card>
 
-            {["Sam Lee","Ben","Cheryl","Priya","Kumar","Elaine","Swati & Supriya","Shreyans & Pooja","Mable & Wendy & Helen"].map(n=>(
+            {/* header actions: the registry is the source of truth now */}
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-bold" style={{color:T.muted}}>CLIENTS · {clients.length} people · {clientGroups.length} groups</div>
+              <div className="flex gap-1.5">
+                <Btn small kind="ghost" onClick={()=>setNewClient({name:"", phone:"", email:""})}>+ Client</Btn>
+                <Btn small kind="ghost" onClick={()=>setGroupBuilder({memberIds:[], primaryId:null})}>+ Group</Btn>
+                {isAdmin && <Btn small kind="ghost" onClick={()=>setImportOpen(true)}>Import ⇪</Btn>}
+              </div>
+            </div>
+
+            {clients.map(c=>c.name).map(n=>(
               <Card key={n} className="mb-2">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{background:T.line}}>{n[0]}</div>
@@ -213,6 +231,90 @@ export default function StaffClients() {
                     addSessionLog({ who:backfill.who, date:backfill.date.trim(), time:backfill.time.trim()||"—",
                       kind:"PT", tookBy:backfill.tookBy, remark:backfill.remark.trim() });
                     ping(`Session logged for ${backfill.who}`); setBackfill(null);}}>Save session</Btn>
+                </div>
+              </div>)}
+
+            {/* ---- new client ---- */}
+            {newClient && (
+              <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setNewClient(null)}>
+                <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div style={{...disp,fontWeight:700,fontSize:20}}>New client</div>
+                    <button onClick={()=>setNewClient(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+                  </div>
+                  <div className="text-xs mb-3" style={{color:T.muted}}>One record per person. Their mobile becomes their login.</div>
+                  <div className="space-y-2 mb-3">
+                    <input value={newClient.name} onChange={e=>setNewClient(x=>({...x,name:e.target.value}))} placeholder="Full name"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    <input value={newClient.phone} onChange={e=>setNewClient(x=>({...x,phone:e.target.value}))} placeholder="Mobile (their login)" inputMode="tel"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    <input value={newClient.email} onChange={e=>setNewClient(x=>({...x,email:e.target.value}))} placeholder="Email (optional)"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                  </div>
+                  <Btn full disabled={!newClient.name.trim()} onClick={()=>{
+                    addClient({ name:newClient.name.trim(), phone:newClient.phone.replace(/\D/g,""), email:newClient.email.trim() });
+                    ping(`${newClient.name.trim()} added`); setNewClient(null);}}>Add client</Btn>
+                </div>
+              </div>)}
+
+            {/* ---- group builder: pick 2-3 people, star the primary ---- */}
+            {groupBuilder && (
+              <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setGroupBuilder(null)}>
+                <div className="w-full max-w-md rounded-t-3xl p-5 pb-8 max-h-[85dvh] overflow-y-auto" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div style={{...disp,fontWeight:700,fontSize:20}}>New group</div>
+                    <button onClick={()=>setGroupBuilder(null)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+                  </div>
+                  <div className="text-xs mb-3" style={{color:T.muted}}>
+                    Pick 2–3 clients who train together. Tap ★ to set the primary — they pay,
+                    own the shared pack and get the billing messages.
+                  </div>
+                  <div className="space-y-1 mb-3">
+                    {clients.filter(c=>!clientGroups.some(g=>g.memberIds.includes(c.id))).map(c=>{
+                      const on = groupBuilder.memberIds.includes(c.id);
+                      const isPrimary = groupBuilder.primaryId === c.id;
+                      return (
+                      <div key={c.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5"
+                        style={{background:on?"#EFF3EE":"transparent", border:`1.5px solid ${on?T.moss:T.line}`}}>
+                        <button onClick={()=>setGroupBuilder(b=>({...b,
+                          memberIds: on ? b.memberIds.filter(x=>x!==c.id) : b.memberIds.length<3 ? [...b.memberIds,c.id] : b.memberIds,
+                          primaryId: on && b.primaryId===c.id ? null : b.primaryId}))}
+                          className="flex-1 text-left text-sm font-semibold">{on?"✓ ":""}{c.name}</button>
+                        {on && <button onClick={()=>setGroupBuilder(b=>({...b, primaryId:c.id}))}
+                          className="text-lg leading-none" style={{opacity:isPrimary?1:.25}}>★</button>}
+                      </div>);})}
+                  </div>
+                  <Btn full disabled={groupBuilder.memberIds.length<2} onClick={()=>{
+                    const g = createGroup({ memberIds:groupBuilder.memberIds, primaryId:groupBuilder.primaryId });
+                    ping(`Group "${g.name}" created — sell them a combo pack from Shop`);
+                    setGroupBuilder(null);}}>
+                    {groupBuilder.memberIds.length<2 ? "Pick at least 2 clients" : "Create group"}</Btn>
+                </div>
+              </div>)}
+
+            {/* ---- CSV import: clients + groups + pack balances in one paste ---- */}
+            {importOpen && (
+              <div className="fixed inset-0 z-30 flex items-end justify-center" style={{background:"rgba(23,21,15,.55)"}} onClick={()=>setImportOpen(false)}>
+                <div className="w-full max-w-md rounded-t-3xl p-5 pb-8" style={{background:T.paper}} onClick={e=>e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <div style={{...disp,fontWeight:700,fontSize:20}}>Import clients</div>
+                    <button onClick={()=>setImportOpen(false)} className="text-sm font-bold px-2 py-1 rounded-lg" style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
+                  </div>
+                  <div className="text-xs mb-2" style={{color:T.muted}}>
+                    Export your Google Sheet as CSV — one row per person — and paste it here.
+                    Groups form automatically from matching group_name; the shared pack opens
+                    with sessions_remaining.
+                  </div>
+                  <div className="text-[10px] rounded-lg p-2 mb-2 font-mono" style={{background:"#F4F1EA", color:T.muted}}>
+                    name,phone,email,group_name,is_primary,sessions_remaining<br/>
+                    Swati,9123...,s@x.com,Swati &amp; Supriya,1,4<br/>
+                    Supriya,9124...,,Swati &amp; Supriya,,4
+                  </div>
+                  <textarea value={importText} onChange={e=>setImportText(e.target.value)} rows={6}
+                    placeholder="Paste CSV here…" className="w-full px-3 py-2.5 rounded-lg text-xs outline-none font-mono mb-3"
+                    style={{border:`1.5px solid ${T.line}`,background:T.card,resize:"none"}}/>
+                  <Btn full disabled={!importText.trim()} onClick={()=>{
+                    importClientsCsv(importText); setImportText(""); setImportOpen(false);}}>Import</Btn>
                 </div>
               </div>)}
             <div className="text-xs mt-2" style={{color:T.muted}}>

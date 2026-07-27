@@ -306,6 +306,107 @@ export function AppProvider({ children }) {
     setIntakeForm(null);
     ping(`Intake saved for ${rec.who} — visible to any coach who takes them on`);
   };
+  /* ---- CLIENT REGISTRY ----
+     A PERSON is the atomic unit: one record per human, phone = their login.
+     A GROUP links 2-3 existing clients; exactly one member is PRIMARY — the
+     primary pays, owns the shared pack and receives billing comms. Groups are
+     links, never merged identities: login is always one person. */
+  const [clients, setClients] = useState([
+    { id:"c1",  name:"Sam Lee",  phone:"91230001", email:"sam@example.sg",  status:"active", source:"member" },
+    { id:"c2",  name:"Ben",      phone:"91230002", email:"",                status:"active", source:"member" },
+    { id:"c3",  name:"Cheryl",   phone:"91230003", email:"",                status:"active", source:"member" },
+    { id:"c4",  name:"Priya",    phone:"91230004", email:"",                status:"active", source:"member" },
+    { id:"c5",  name:"Kumar",    phone:"91230005", email:"",                status:"active", source:"member" },
+    { id:"c6",  name:"Elaine",   phone:"91230006", email:"",                status:"active", source:"member" },
+    { id:"c7",  name:"Ivan",     phone:"91230007", email:"",                status:"active", source:"member" },
+    { id:"c8",  name:"Nadia",    phone:"91230008", email:"",                status:"active", source:"member" },
+    { id:"c9",  name:"Sarah T",  phone:"91230009", email:"",                status:"active", source:"member" },
+    { id:"c10", name:"Gireesh",  phone:"91230010", email:"",                status:"active", source:"member" },
+    { id:"c11", name:"Wen Jie",  phone:"91230011", email:"",                status:"active", source:"member" },
+    { id:"c12", name:"Dominic",  phone:"91230012", email:"",                status:"active", source:"member" },
+    { id:"c13", name:"Jaiveer",  phone:"91230013", email:"",                status:"active", source:"member" },
+    { id:"c14", name:"Swati",    phone:"91230014", email:"",                status:"active", source:"import" },
+    { id:"c15", name:"Supriya",  phone:"91230015", email:"",                status:"active", source:"import" },
+    { id:"c16", name:"Shreyans", phone:"91230016", email:"",                status:"active", source:"import" },
+    { id:"c17", name:"Pooja",    phone:"91230017", email:"",                status:"active", source:"import" },
+    { id:"c18", name:"Mable",    phone:"91230018", email:"",                status:"active", source:"import" },
+    { id:"c19", name:"Wendy",    phone:"91230019", email:"",                status:"active", source:"import" },
+    { id:"c20", name:"Helen",    phone:"91230020", email:"",                status:"active", source:"import" },
+  ]);
+  const [clientGroups, setClientGroups] = useState([
+    { id:"g1", name:"Swati & Supriya",       memberIds:["c14","c15"],       primaryId:"c14", trainer:"danny" },
+    { id:"g2", name:"Shreyans & Pooja",      memberIds:["c16","c17"],       primaryId:"c16", trainer:"danny" },
+    { id:"g3", name:"Mable & Wendy & Helen", memberIds:["c18","c19","c20"], primaryId:"c18", trainer:"danny" },
+  ]);
+  const clientById = (id) => clients.find(c => c.id === id);
+  const groupByName = (name) => clientGroups.find(g => g.name === name);
+  const addClient = (c) => { const id = nid();
+    setClients(cs => [...cs, { id, status:"active", source:"manual", email:"", phone:"", ...c }]); return id; };
+  const createGroup = ({ name, memberIds, primaryId, trainer }) => {
+    const members = memberIds.map(id => clientById(id)?.name).filter(Boolean);
+    const gname = name || members.join(" & ");
+    const id = nid();
+    setClientGroups(gs => [...gs, { id, name:gname, memberIds, primaryId: primaryId || memberIds[0], trainer: trainer || "danny" }]);
+    return { id, name: gname };
+  };
+  /* CSV import — one row per PERSON:
+       name,phone,email,group_name,is_primary,sessions_remaining
+     Clients are created first, groups assembled from matching group_name, and a
+     shared pack per group opens with the remaining balance from the sheet. */
+  const importClientsCsv = (text) => {
+    const lines = String(text).trim().split(/\r?\n/).filter(Boolean);
+    if (!lines.length) return { clients:0, groups:0 };
+    const header = lines[0].toLowerCase().split(",").map(s=>s.trim());
+    const col = (row, key) => { const i = header.indexOf(key); return i >= 0 ? (row[i]||"").trim() : ""; };
+    const rows = lines.slice(1).map(l => l.split(","));
+    const created = { clients:0, groups:0 };
+    const groupBuckets = {};   // group_name -> {memberIds, primaryId, sessions}
+    const newClients = [];
+    rows.forEach(r => {
+      const name = col(r,"name"); if (!name) return;
+      let existing = clients.find(c => c.name.toLowerCase() === name.toLowerCase())
+        || newClients.find(c => c.name.toLowerCase() === name.toLowerCase());
+      let cid = existing?.id;
+      if (!existing) { cid = nid();
+        newClients.push({ id:cid, name, phone:col(r,"phone"), email:col(r,"email"), status:"active", source:"import" });
+        created.clients++; }
+      const gname = col(r,"group_name");
+      if (gname) {
+        groupBuckets[gname] = groupBuckets[gname] || { memberIds:[], primaryId:null, sessions:0 };
+        groupBuckets[gname].memberIds.push(cid);
+        if (/^(1|y|yes|true)$/i.test(col(r,"is_primary"))) groupBuckets[gname].primaryId = cid;
+        const rem = parseInt(col(r,"sessions_remaining"), 10);
+        if (rem > 0) groupBuckets[gname].sessions = Math.max(groupBuckets[gname].sessions, rem);
+      }
+    });
+    if (newClients.length) setClients(cs => [...cs, ...newClients]);
+    Object.entries(groupBuckets).forEach(([gname, b]) => {
+      if (clientGroups.some(g => g.name === gname)) return;   // already exists — skip
+      const gid = nid();
+      setClientGroups(gs => [...gs, { id:gid, name:gname, memberIds:b.memberIds,
+        primaryId: b.primaryId || b.memberIds[0], trainer:"danny" }]);
+      if (b.sessions > 0) setGroupPacks(ps => [...ps, { id:nid(), name:gname, groupId:gid,
+        members: b.memberIds.map(id => (newClients.find(c=>c.id===id) || clients.find(c=>c.id===id))?.name).filter(Boolean),
+        size:b.sessions, used:0, trainer:"danny" }]);
+      created.groups++;
+    });
+    ping(`Imported ${created.clients} client${created.clients===1?"":"s"}, ${created.groups} group${created.groups===1?"":"s"}`);
+    return created;
+  };
+  /* Group attendance: rows per attended PERSON (reports count individuals), but
+     the shared pack burns exactly ONE credit — the session happened and the
+     coach's time was spent, whoever turned up (decision: deduct regardless). */
+  const logGroupSession = ({ group, attended, date, time, tookBy, remark }) => {
+    const absent = group.memberIds.filter(id => !attended.includes(id)).map(id => clientById(id)?.name).filter(Boolean);
+    attended.forEach(id => {
+      const nm = clientById(id)?.name; if (!nm) return;
+      setSessionLog(ls => [{ id:nid(), who:nm, date, time, kind:"PT (group)", tookBy,
+        remark: [remark, absent.length ? `absent: ${absent.join(", ")}` : ""].filter(Boolean).join(" · ") }, ...ls]);
+    });
+    setGroupPacks(gs => gs.map(g => (g.groupId === group.id || g.name === group.name)
+      ? { ...g, used: Math.min(g.size, g.used + 1) } : g));
+  };
+
   /* Per-client session history — replaces the per-client Google Sheet tabs.
      Auto-appended when attendance is marked; staff can backfill past sessions.
      `tookBy` records who ACTUALLY trained them (e.g. "Ansab trained" when the
@@ -321,9 +422,9 @@ export function AppProvider({ children }) {
   /* Shared combo packs — one pack per PAIR/TRIO, one payment, each joint session
      deducts one from the shared pool (decision: shared pack per group). */
   const [groupPacks, setGroupPacks] = useState([
-    { id:"gp1", name:"Swati & Supriya",       members:["Swati","Supriya"],        size:10, used:6, trainer:"danny" },
-    { id:"gp2", name:"Shreyans & Pooja",      members:["Shreyans","Pooja"],       size:10, used:2, trainer:"danny" },
-    { id:"gp3", name:"Mable & Wendy & Helen", members:["Mable","Wendy","Helen"],  size:10, used:2, trainer:"danny" },
+    { id:"gp1", groupId:"g1", name:"Swati & Supriya",       members:["Swati","Supriya"],        size:10, used:6, trainer:"danny" },
+    { id:"gp2", groupId:"g2", name:"Shreyans & Pooja",      members:["Shreyans","Pooja"],       size:10, used:2, trainer:"danny" },
+    { id:"gp3", groupId:"g3", name:"Mable & Wendy & Helen", members:["Mable","Wendy","Helen"],  size:10, used:2, trainer:"danny" },
   ]);
   const addSessionLog = (entry) => {
     setSessionLog(ls => [{ id: nid(), kind:"PT", remark:"", ...entry }, ...ls]);
@@ -352,9 +453,13 @@ export function AppProvider({ children }) {
       when: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }, ...ns]);
   };
   const notifyClient = (who, text) => {
-    setClientNotices(ns => [{ id: nid(), who, text,
-      when: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }, ...ns]);
-    // TODO(twilio): POST { to: phoneOf(who), body: text } to the WhatsApp sender
+    /* If "who" is a GROUP, fan out to every member — each person hears about
+       changes to their group's sessions on their own login. */
+    const grp = clientGroups.find(g => g.name === who);
+    const targets = grp ? grp.memberIds.map(id => clientById(id)?.name).filter(Boolean) : [who];
+    const when = new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    setClientNotices(ns => [...targets.map(t => ({ id: nid(), who: t, text, when })), ...ns]);
+    // TODO(twilio): POST { to: phoneOf(each target), body: text } to the WhatsApp sender
   };
   const logAudit = (what)=> setAudit(a=>[{id:nid(), what, when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}, ...a]);
   const [leads, setLeads] = useState(seedLeads);
@@ -1187,7 +1292,7 @@ export function AppProvider({ children }) {
     newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
     decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
-    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, importClientsCsv, logGroupSession, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
