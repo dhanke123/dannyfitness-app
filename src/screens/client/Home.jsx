@@ -23,7 +23,7 @@ export default function ClientHome() {
           const kR = Math.min(1, weekKcal/(goal.kcal||1));
           const ringPct = Math.round((wR+kR)/2*100);
           return (
-          <main className="flex-1 pb-24 px-5">
+          <main className="flex-1 overflow-y-auto pb-24 px-5">
             {/* greeting + activity ring */}
             <div className="flex items-start justify-between mb-3 mt-1">
               <div>

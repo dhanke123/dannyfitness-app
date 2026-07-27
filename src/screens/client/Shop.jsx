@@ -7,7 +7,7 @@ export default function ClientShop() {
   return (<>
         {/* ==================== CLIENT: SHOP (Buy · About · Offers) ==================== */}
         {isClient && tab==="shop" && (
-          <main className="flex-1 pb-24 px-5">
+          <main className="flex-1 overflow-y-auto pb-24 px-5">
             <H>Shop</H>
             <div className="flex gap-2 mb-3 overflow-x-auto">
               {[["buy","Packages"],["about","About"],["offers","Offers"]].map(([k,l])=>(

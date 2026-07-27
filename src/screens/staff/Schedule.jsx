@@ -13,7 +13,7 @@ export default function StaffSchedule() {
   return (<>
         {/* ==================== TRAINER / ADMIN: SCHEDULE ==================== */}
         {!isClient && tab==="schedule" && (
-          <main className="flex-1 pb-24 px-5">
+          <main className="flex-1 overflow-y-auto pb-24 px-5">
             <H>{isAdmin?"Master schedule":"My week & availability"}</H>
 
             {/* ---- Queue 1 of 4: EXCEPTIONS (Decisions 1a, 6, 7) ----

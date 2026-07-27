@@ -8,14 +8,15 @@ import { nid } from "../../lib/util.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Pill } from "../../ui/kit.jsx";
 import { STATUS, approvedTotal } from "../../lib/expenses.js";
+import MenuManagement, { buildDefault } from "./MenuManagement.jsx";
 import { fmtISO } from "../../lib/period.js";
 
 export default function AdminManage() {
-  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel } = useApp();
+  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
-          <main className="flex-1 pb-24 px-5">
+          <main className="flex-1 overflow-y-auto pb-24 px-5">
             {/* Six sections in a single no-wrap flex row overflowed the 448px shell, so
                 Settings sat off-screen and needed a horizontal scroll nobody could see.
                 A 3×2 grid fits, gives every section equal weight, and keeps the count
@@ -23,7 +24,7 @@ export default function AdminManage() {
                 text label too; a lone gear icon in a full-width cell read as a mistake. */}
             <div className="grid grid-cols-4 gap-1.5 pb-3">
               {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],
-                ["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
+                ["access","🔐 Access"],["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
                 // surface where the work is waiting, on the tab itself
@@ -114,6 +115,28 @@ export default function AdminManage() {
             </div>); })()}
 
             {adminSec==="people" && <div className="space-y-3">
+
+              {/* ---- Member Messages ---- */}
+              <div className="rounded-xl p-3" style={{background:T.card, border:`1.5px solid ${T.line}`}}>
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <div className="text-xs font-bold" style={{color:T.muted}}>MEMBER MESSAGES</div>
+                    <div className="text-sm font-semibold mt-0.5">
+                      {chatThreads.length} conversation{chatThreads.length!==1?"s":""}{" "}
+                      {chatThreads.reduce((n,t)=>n+t.unread,0)>0 && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full font-bold"
+                          style={{background:T.accent,color:"#fff"}}>
+                          {chatThreads.reduce((n,t)=>n+t.unread,0)} unread
+                        </span>)}
+                    </div>
+                  </div>
+                  <Btn small onClick={()=>setAdminInboxOpen(true)}>Open inbox</Btn>
+                </div>
+                <div className="text-[11px]" style={{color:T.muted}}>
+                  Members message you from Account → Chat. Replies appear in their chat instantly.
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold" style={{color:T.muted}}>
                   LEADS · {openLeads.length} open{closedLeads.length>0 && <span style={{fontWeight:400}}> · {closedLeads.length} closed</span>}
@@ -487,6 +510,19 @@ export default function AdminManage() {
               <Card className="!p-3"><div className="text-sm">Card payments: <b>off</b> — PayNow only at launch. Review when the studio passes <b>100 active members</b>.</div></Card>
               <Card className="!p-3"><div className="text-sm">Same-location changeover buffer: <b>0 min</b> (no gap required back-to-back at one venue)</div></Card>
             </div>}
+
+            {adminSec==="access" && <div className="space-y-3">
+              <div className="text-xs font-bold pb-1" style={{color:T.muted}}>MENU &amp; ACCESS CONTROL</div>
+              <div className="text-[11px] mb-2" style={{color:T.muted}}>
+                Control which tabs and sections are visible to Members and Coaches, and whether they
+                can write (create/edit) or only read. Changes take effect immediately in the demo.
+              </div>
+              <MenuManagement
+                menuConfig={menuConfig || buildDefault()}
+                setMenuConfig={(v) => setMenuConfig(typeof v === "function" ? v(menuConfig || buildDefault()) : v)}
+              />
+            </div>}
+
           </main>)}
 
   </>);

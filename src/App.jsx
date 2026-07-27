@@ -32,9 +32,9 @@ function Shell() {
   const { user, logout, tab, setTab, isClient, isAdmin, navItems, pendingCounts, toast } = useApp();
   if (!user) return <Login/>;
   return (
-    <div className="min-h-screen flex justify-center" style={{background:"#E6DFD3", ...body, color:T.ink}}>
+    <div className="h-[100dvh] flex justify-center overflow-hidden" style={{background:"#E6DFD3", ...body, color:T.ink}}>
       <style>{FONTS}</style>
-      <div className="w-full max-w-md min-h-screen flex flex-col relative" style={{background:T.paper}}>
+      <div className="w-full max-w-md h-[100dvh] flex flex-col relative overflow-hidden" style={{background:T.paper}}>
         <header className="px-5 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <LogoMark size={28}/>

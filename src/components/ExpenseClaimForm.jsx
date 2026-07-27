@@ -152,12 +152,12 @@ export default function ExpenseClaimForm() {
                 </div>
                 <label className="flex items-start gap-2 mt-2 cursor-pointer">
                   <input type="checkbox" checked={l.noReceipt} className="mt-0.5"
-                    onChange={e => setLine(l.id, { noReceipt: e.target.checked, noReceiptReason: "" })}/>
+                    onChange={e => setLine(l.id, e.target.checked ? { noReceipt: true } : { noReceipt: false, noReceiptReason: "" })}/>
                   <span className="text-xs">No receipt for this one</span>
                 </label>
                 {l.noReceipt && (<>
                   <input value={l.noReceiptReason} onChange={e => setLine(l.id, { noReceiptReason: e.target.value })}
-                    placeholder="Why not? e.g. ERP deducts automatically, no slip"
+                    placeholder="Why not? e.g. ERP deducts automatically, no slip (optional)"
                     style={{ ...field, marginTop: 6 }}/>
                   <div className="text-[10px] mt-1" style={{ color: T.muted }}>
                     This is kept with the claim and shows on the expense report.

@@ -3,7 +3,6 @@
 import { mulberry, nid } from "../lib/util.js";
 import { toISO } from "../lib/dates.js";
 import { T } from "../theme.js";
-import { Card } from "../ui/kit.jsx";
 
 /* ---------- locations (dynamic — this is the whole point of req.1) ---------- */
 // ExerciseOnly's real training locations (Gardens by the Bay = Danny's base at 11 Rhu Cross).

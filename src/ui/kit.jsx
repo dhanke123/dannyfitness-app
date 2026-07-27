@@ -26,11 +26,15 @@ export const H = ({children}) => <h2 style={{...disp,fontWeight:700,fontSize:22}
 
 export const Sub = ({children}) => <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>{children}</div>;
 
+/* PROD CHECKLIST: set VITE_PAYNOW_UEN=<your UEN> in Vercel env vars before go-live.
+   The QR pattern itself is a static placeholder — in production, render a real QR
+   from the HitPay payment link returned by the hitpay-create-payment edge function. */
+const _UEN = import.meta.env.VITE_PAYNOW_UEN || "⚠ SET VITE_PAYNOW_UEN";
 export const QR = () => (
   <div className="mx-auto my-2 p-3 rounded-xl" style={{background:"#fff",border:`1.5px solid ${T.line}`,width:150}}>
     <div className="grid grid-cols-10 gap-px" style={{width:120,height:120}}>
       {Array.from({length:100}).map((_,i)=>(<div key={i} style={{background:((i*7+Math.floor(i/10)*3)%5)<2?T.ink:"#fff"}}/>))}</div>
-    <div className="text-center text-[10px] mt-1.5 font-bold" style={{...body,color:"#7B1FA2"}}>PAYNOW · UEN 2024XXXXX</div>
+    <div className="text-center text-[10px] mt-1.5 font-bold" style={{...body,color:"#7B1FA2"}}>PAYNOW · UEN {_UEN}</div>
   </div>);
 
 export const Stars = ({value,onRate}) => (

@@ -76,12 +76,10 @@ export function lineErrors(l, today) {
   if (!(amt > 0)) e.push("Enter an amount above $0");
   if (amt > 0 && amt > 5000) e.push("Over $5,000 — check the amount");
   if (!String(l.desc || "").trim()) e.push("Say what it was for");
-  /* The no-receipt path is deliberately not free. Ticking the box costs you a
-     sentence, because "no receipt, no explanation" is exactly the claim that can't
-     be defended to an auditor a year later. */
+
+
+
   if (!l.receipt && !l.noReceipt) e.push("Attach a receipt, or tick 'no receipt'");
-  if (!l.receipt && l.noReceipt && String(l.noReceiptReason || "").trim().length < 5)
-    e.push("Explain why there's no receipt");
   return e;
 }
 

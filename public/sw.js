@@ -13,10 +13,12 @@
      · Supabase / any API    → NEVER cached. Network only, no fallback.
      · Everything else       → network, falling back to cache when offline.
 
-   CACHE_VERSION must change on every deploy. Wire it to the build hash or the
-   package version in CI so it can't be forgotten. */
+   CACHE_VERSION must change on every deploy. Bump the number below whenever
+   you push to Vercel. In CI you can automate this:
+     sed -i "s/CACHE_VERSION = .*/CACHE_VERSION = \"v$(date +%Y%m%d%H%M)\";/" public/sw.js
+   Failing to bump means existing users keep the old cache and never get the update. */
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";  // bumped 27 Jul 2026 — bump again on next deploy
 const SHELL_CACHE = `eo-shell-${CACHE_VERSION}`;
 const ASSET_CACHE = `eo-assets-${CACHE_VERSION}`;
 

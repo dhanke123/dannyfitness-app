@@ -21,7 +21,7 @@ export default function ClientLog() {
           const monthLogs = logs.filter(l=>(l.daysAgo??0)<=31); // history: last month only
           const weekKcal = logs.filter(l=>(l.daysAgo??0)<=7).reduce((a,l)=>a+(estKcal(l,bodyKg)||0),0);
           return (
-          <main className="flex-1 pb-24 px-5">
+          <main className="flex-1 overflow-y-auto pb-24 px-5">
             <H>Training log</H>
             <div className="flex gap-2 mb-3">
               <Chip active={logView==="train"} onClick={()=>setLogView("train")}>Train</Chip>

@@ -343,7 +343,7 @@ export default function WeekGrid({
             Show full week</button>
         </div>)}
 
-      <div ref={scrollRef} style={{ maxHeight, overflowY: "auto", overscrollBehavior: "contain",
+      <div ref={scrollRef} style={{ height: maxHeight, overflowY: "auto", overscrollBehavior: "none", WebkitOverflowScrolling: "touch",
         border: `1.5px solid ${T.line}`, borderRadius: 14, background: T.card, paddingBottom: 8,
         touchAction: drag ? "none" : "auto" }}>
         <div className="wg-grid">

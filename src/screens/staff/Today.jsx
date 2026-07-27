@@ -10,7 +10,7 @@ export default function StaffToday() {
   return (<>
         {/* ==================== TRAINER / ADMIN: TODAY ==================== */}
         {!isClient && tab==="today" && (
-          <main className="flex-1 pb-24 px-5">
+          <main className="flex-1 overflow-y-auto pb-24 px-5">
             <div className="flex items-center justify-between">
               <H>{isAdmin?"Today — all coaches":"Today — my sessions"}</H>
             </div>

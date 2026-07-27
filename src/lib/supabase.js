@@ -38,10 +38,13 @@ export const supabase = isConfigured
     })
   : null;
 
-if (!isConfigured && import.meta.env.DEV) {
-  console.info(
-    "[ExerciseOnly] No VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY — running on demo seed data."
-  );
+/* Warn on partial config — one var set without the other is a silent failure
+   (app falls back to demo instead of erroring, which looks fine in a browser
+   tab but means a production deploy just quietly runs on fake data). */
+if (import.meta.env.DEV) {
+  if (url && !anonKey) console.warn("[ExerciseOnly] VITE_SUPABASE_URL is set but VITE_SUPABASE_ANON_KEY is missing — app will run on demo data.");
+  if (!url && anonKey) console.warn("[ExerciseOnly] VITE_SUPABASE_ANON_KEY is set but VITE_SUPABASE_URL is missing — app will run on demo data.");
+  if (!isConfigured && !url && !anonKey) console.info("[ExerciseOnly] No VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY — running on demo seed data.");
 }
 
 /* ---------- phone helpers ----------
