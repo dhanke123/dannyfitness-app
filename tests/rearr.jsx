@@ -37,11 +37,14 @@ ok("Payouts renders under Reports", txt().includes("PAYOUT TOTAL"));
 
 // --- 3. MANAGE TAB ORDER + CAMPS ---
 await navClick("Manage");
-const grid=[...document.querySelectorAll("div")].find(d=>typeof d.className==="string"&&d.className.includes("grid-cols-4")&&d.className.includes("pb-3"));
+const grid=[...document.querySelectorAll("div")].find(d=>typeof d.className==="string"&&d.className.includes("grid-cols-3")&&d.className.includes("pb-3"));
 const order=[...grid.querySelectorAll("button")].map(b=>b.textContent.replace(/\d+|9\+/g,"").trim());
 // 🔐 Access was added as its own section after this was written.
-ok("Manage order is Dash·People·Products·Money·Access·Settings",
-   JSON.stringify(order)===JSON.stringify(["Dash","People","Products","Money","🔐 Access","Settings"]));
+/* Money became Approvals and moved between Access and Settings (28 Jul). Six items
+   in a 3-column grid = two full rows; the old 4-column grid left a ragged second row
+   of two with two empty cells, which reads as "something is missing". */
+ok("Manage order is Dash·People·Products·Access·Approvals·Settings",
+   JSON.stringify(order)===JSON.stringify(["Dash","People","Products","🔐 Access","Approvals","Settings"]));
 ok("Payouts removed from Manage", !order.includes("Payouts"));
 ok("Reports removed from Manage", !order.includes("Reports"));
 await exact("Settings");

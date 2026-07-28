@@ -54,10 +54,10 @@ ok("tapping a no-show goes to Clients", txt().includes("NO-SHOW DECISIONS")||txt
 
 // ---------- ADMIN MANAGE TAB LAYOUT ----------
 await click("Manage");
-const grid=[...document.querySelectorAll("div")].find(d=>typeof d.className==="string"&&d.className.includes("grid-cols-4")&&d.className.includes("pb-3"));
+const grid=[...document.querySelectorAll("div")].find(d=>typeof d.className==="string"&&d.className.includes("grid-cols-3")&&d.className.includes("pb-3"));
 ok("manage tabs use a wrapping grid (no horizontal overflow)", !!grid);
 // Reports and Payouts moved out to their own screen; Camps moved in
-ok("  ...all five sections present", ["Dash","People","Products","Money","Settings"].every(t=>grid.textContent.includes(t)));
+ok("  ...all six sections present", ["Dash","People","Products","Access","Approvals","Settings"].every(t=>grid.textContent.includes(t)));
 ok("  ...Settings has a text label, not a bare gear", grid.textContent.includes("Settings"));
 
 console.error=oe;

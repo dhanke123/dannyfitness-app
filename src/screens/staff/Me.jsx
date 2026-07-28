@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../../state/AppState.jsx";
 import MyExpenses from "../../components/MyExpenses.jsx";
+import MyReports from "../../components/MyReports.jsx";
 import { approvedTotal } from "../../lib/expenses.js";
 import { trainerScorecards } from "../../lib/analytics.js";
 import { DAYS } from "../../lib/dates.js";
@@ -30,12 +31,16 @@ export default function StaffMe() {
                 another screen. The badge is what makes an unfinished draft or unpaid
                 claim visible instead of forgotten. */}
             <div className="flex gap-2">
-              {[["me","My week"],["expenses","Expenses"]].map(([k,l])=>(
+              {/* A coach had no way to see their own week back — the day log and the
+                  payout report both live in the admin console. "Where does my time go?"
+                  is the coach's question and it had no answer anywhere. */}
+              {[["me","My week"],["reports","My reports"],["expenses","Expenses"]].map(([k,l])=>(
                 <Chip key={k} active={meView===k} onClick={()=>setMeView(k)}>
                   {l}{k==="expenses" && (owed>0||drafts>0) ? ` · ${owed>0?`$${owed.toFixed(0)}`:`${drafts} draft`}` : ""}
                 </Chip>))}
             </div>
             {meView==="expenses" && <MyExpenses/>}
+            {meView==="reports" && <MyReports/>}
             {meView==="me" && (<>
             <Card><div className="font-bold">{me.name}</div><div className="text-xs" style={{color:T.muted}}>{me.tag||"Coach"}</div>
               {me.bio && <div className="text-xs mt-2" style={{color:T.muted}}>{me.bio}</div>}</Card>

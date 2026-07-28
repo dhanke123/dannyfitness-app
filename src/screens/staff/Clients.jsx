@@ -73,18 +73,10 @@ export default function StaffClients() {
                 {shownClients.length} client{shownClients.length===1?"":"s"} · {shownGroups.length} group{shownGroups.length===1?"":"s"} matching "{q.trim()}"
               </div>)}
 
-            {/* ---- Queue 2 of 4: NO-SHOWS (Decisions 5, 6, 7) ----
-                 Class no-shows get the same treatment as PT: the coach marks absent, nothing
-                 auto-deducts, the admin decides. "Apply" is the approval (forfeit the credit),
-                 "Waive" is the denial — both capture a reason and are audit-logged. */}
-            {isAdmin && noShowQueue.length>0 && (
-              <div className="mb-4">
-                <ApprovalQueue
-                  label="NO-SHOW DECISIONS · nothing is deducted until you decide"
-                  items={noShowQueue.map(nq=>({ id:nq.id, title:nq.who, sub:`${nq.session} · Policy: ${nq.policy}` }))}
-                  onResolve={(id, approved, reason)=>resolveNoShow(id, approved, reason)}
-                  approveLabel="Apply forfeit" denyLabel="Waive" />
-              </div>)}
+            {/* No-show decisions moved to Manage → Approvals → Client ops (28 Jul).
+                They were here because that is where the client is, but the admin's job
+                is "what needs my decision today" and that answer was spread over four
+                screens. Coaches never saw this queue anyway — it was admin-only. */}
 
             {/* PR feed — a low-effort reason to congratulate clients (retention driver) */}
             <Card className="mb-3" style={{background:"#FBF3EC"}}>

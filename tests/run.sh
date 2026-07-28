@@ -19,6 +19,14 @@ set -u
 cd "$(dirname "$0")/.."
 
 ALL="smoke refund payout clash cal tiles enquiry notif reports rearr deadends classes builders weekgrid calmove expenses intake coachlog manualpay"
+
+# WORKFLOW suite — nine end-to-end journeys across role switches. Deliberately NOT in
+# ALL: it is slow, it crosses every surface, and it answers a different question. The
+# others ask "is this screen right?"; this asks "can a person finish the job?"
+#
+#   bash tests/run.sh workflows      just the journeys
+#   bash tests/run.sh everything     ALL plus the journeys
+[ "${1:-}" = "everything" ] && set -- $ALL workflows
 SUITES="${*:-$ALL}"
 mkdir -p .test-build
 fails=0

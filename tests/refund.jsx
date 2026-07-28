@@ -65,8 +65,15 @@ ok("member sees the purchase held", txt().includes("AWAITING PAYMENT APPROVAL"))
 await click("Log out");
 await click("Owner console · not a trainer");
 await click("Manage");
-const money=()=>[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Money") && b.closest("main"));
-await clickEl(money());
+/* Manage → Money became Manage → Approvals → Payments (28 Jul): everything that
+   needs a decision now lives under one tab, grouped by the KIND of decision. */
+const money=async()=>{
+  const a=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Approvals") && b.closest("main"));
+  if(a) await clickEl(a);
+  const t=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Payments"));
+  if(t) await clickEl(t);
+};
+await money();
 ok("payment approvals queue exists", /PAYMENT APPROVALS/i.test(txt()));
 ok("  ...and shows the proof filename to check against the bank app", txt().includes("transfer.png"));
 ok("  ...deny is offered alongside approve (Decision 7)", !!findBtn("Not found"));
@@ -92,7 +99,7 @@ await click("Owner console · not a trainer");
 await click("Manage");
 await clickEl([...document.querySelectorAll("button")].find(b=>b.textContent.trim()==="Dash" && b.closest("main")));
 ok("refund shows in waiting-on-you", txt().includes("Refund requests"));
-await clickEl(money());
+await money();
 ok("refund queue on Money", txt().includes("REFUND REQUESTS"));
 ok("deny keeps the credit", !!findBtn("Deny (keep credit)"));
 await click("Approve refund");

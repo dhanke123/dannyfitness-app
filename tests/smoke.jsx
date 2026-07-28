@@ -125,16 +125,24 @@ await click("Deny");
 ok("deny asks for a reason", txt().includes("reason (shown to the member"));
 await click("Confirm deny");
 ok("exception queue cleared", !txt().includes("EXCEPTION REQUESTS"));
-await click("Clients");
-ok("noshow queue on clients", txt().includes("NO-SHOW DECISIONS"));
+/* No-shows moved from Clients to Manage → Approvals → Client ops (28 Jul): the
+   admin's job is "what needs my decision today", and that answer used to be spread
+   over four screens. */
+await click("Manage");
+await click("Approvals");
+await click("Client ops");
+ok("noshow queue under Approvals → Client ops", txt().includes("NO-SHOW DECISIONS"));
 ok("waive + apply both present", !!findBtn("Waive") && !!findBtn("Apply forfeit"));
 await click("Waive");
 ok("reason box appears", txt().includes("reason (shown to the member"));
 await click("Confirm waive");
 ok("noshow queue cleared", !txt().includes("NO-SHOW DECISIONS"));
-await click("Manage");
-const money=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Money") && b.closest("main"));
-await act(async()=>{ money.dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true})); });
+// Manage → Money became Manage → Approvals (28 Jul); expenses is its own sub-tab.
+const appr=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Approvals") && b.closest("main"));
+await act(async()=>{ appr.dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true})); });
+ok("approvals gathers every decision in one place", /DECISION.? WAITING|NOTHING WAITING/.test(txt()));
+const expTab=[...document.querySelectorAll("button")].find(b=>b.textContent.trim().startsWith("Expenses"));
+await act(async()=>{ expTab.dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true})); });
 ok("expense claim queue", txt().includes("EXPENSE CLAIMS"));
 const gear=[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Settings") && b.closest("main"));
 await act(async()=>{ gear.dispatchEvent(new dom.window.MouseEvent("click",{bubbles:true})); });

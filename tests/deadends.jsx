@@ -46,12 +46,21 @@ else ok("check-in persists as state", true);
 await click("Log out");
 await click("Owner console · not a trainer");
 await navClick("Manage");
-const money=btns().find(b=>b.textContent.trim().startsWith("Money")&&b.closest("main"));
-await clickEl(money);
+/* Manage → Money became Manage → Approvals (28 Jul). Deletion requests are a decision
+   about a PERSON rather than an amount, so they sit under Client ops. */
+const openApprovals=async(sub)=>{
+  const a=btns().find(b=>b.textContent.trim().startsWith("Approvals")&&b.closest("main"));
+  if(a) await clickEl(a);
+  const t=btns().find(b=>b.textContent.trim().startsWith(sub));
+  if(t) await clickEl(t);
+};
+await openApprovals("Client ops");
 ok("deletion request is in an admin queue", txt().includes("ACCOUNT DELETION REQUESTS"));
 ok("  ...with approve AND decline", !!btns().find(b=>b.textContent.includes("Anonymise")) && !!btns().find(b=>b.textContent.includes("Decline")));
 
 // ---------- ADMIN: ledger refund now creates a real request ----------
+// the ledger (and its Refund action) lives under Approvals → Payments
+await openApprovals("Payments");
 const refundBtn=btns().find(b=>b.textContent.trim()==="Refund");
 if(refundBtn){ await clickEl(refundBtn);
   ok("ledger Refund creates a real refund request", txt().includes("REFUND REQUESTS")); }

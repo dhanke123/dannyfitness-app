@@ -174,9 +174,13 @@ const type=async(el,v)=>{ if(!el) throw new Error("no input");
 const byLabel=l=>[...document.querySelectorAll("input,select")].find(i=>i.getAttribute("aria-label")===l);
 
 await click("Owner console · not a trainer");
-await click("Reports");
-ok("Money owed is its own report", !!btns().find(b=>b.textContent.trim()==="Money owed"));
-await exact("Money owed");
+/* Money owed moved from Reports to Manage → Approvals (28 Jul): arrears is something
+   you ACT on, not something you read, so it belongs beside the other decisions. */
+await click("Manage");
+await click("Approvals");
+ok("Approvals gathers every decision in one place", /DECISION.? WAITING|NOTHING WAITING/.test(txt()));
+ok("  ...with Money owed as one of its queues", !!btns().find(b=>b.textContent.trim().startsWith("Money owed")));
+await click("Money owed");
 ok("it opens with nothing outstanding", /OUTSTANDING/.test(txt()));
 ok("  ...and offers to record a payment taken outside", !!btns().find(b=>/Record a payment taken outside/.test(b.textContent)));
 ok("Settled is explained as a decision, not a sum", /Settled<\/b> is a decision|is a decision, not a sum/.test(document.body.innerHTML));

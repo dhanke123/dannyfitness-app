@@ -9,29 +9,41 @@ import { T, disp } from "../../theme.js";
 import { Btn, Card, Chip, Pill } from "../../ui/kit.jsx";
 import { STATUS, approvedTotal } from "../../lib/expenses.js";
 import MenuManagement, { buildDefault } from "./MenuManagement.jsx";
+import PaymentsReport from "../../components/PaymentsReport.jsx";
 import { fmtISO } from "../../lib/period.js";
 
 export default function AdminManage() {
-  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, paymentQueue, resolvePayment, paynowConfig, setPaynowConfig } = useApp();
+  const { openClassBuilder, restoreSession, applyTemplate, copyText, deactivateTrainer, reactivateTrainer, deletionRequests, resolveDeletion, setProductForm, setRefundQueue, aboutCopy, active, addLocation, adminSec, booked, classTemplates, coupon, coupons, closedLeads, exceptionQueue, expenseClaims, pendingClaims, approvedUnpaid, setClaimReview, isAdmin, leads, ledger, openLeads, setLeadStatus, locName, locations, login, newLocName, noShowQueue, offers, pendingCounts, perm, permOpen, ping, policy, products, promoteSuggested, ptBookings, rates, refundQueue, resolveNoShow, resolveRefund, revenue, sessions, setAboutEdit, setAddLead, setAddTrainer, setAdminSec, setClassTemplates, setCouponForm, setCoupons, setLeads, setLedger, setNewLocName, setOfferSheet, setOffers, setPerm, setPermOpen, setPolicy, setProducts, setTemplateBuilder, setTravel, staffSessions, suggestedLocs, tName, tab, trainers, travel, adminInboxOpen, setAdminInboxOpen, chatThreads, menuConfig, setMenuConfig, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, paymentQueue, resolvePayment, paynowConfig, setPaynowConfig,
+          pendingClients, confirmPendingClient, undeliveredInvites, retryInvite, invites, createCoach,
+          approvalsView, setApprovalsView, setTab } = useApp();
   return (<>
         {/* ==================== ADMIN: MANAGE ==================== */}
         {isAdmin && tab==="manage" && (
           <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5">
-            {/* Six sections in a single no-wrap flex row overflowed the 448px shell, so
-                Settings sat off-screen and needed a horizontal scroll nobody could see.
-                A 3×2 grid fits, gives every section equal weight, and keeps the count
-                visible — a hidden tab is a tab that never gets used. Settings gains a
-                text label too; a lone gear icon in a full-width cell read as a mistake. */}
-            <div className="grid grid-cols-4 gap-1.5 pb-3">
-              {[["dash","Dash"],["people","People"],["products","Products"],["money","Money"],
-                ["access","🔐 Access"],["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
+            {/* Six sections. Previously a 4-column grid holding six items, which left a
+                ragged second row of two and two empty cells — the eye reads that as
+                "something is missing". Three columns gives two full rows, every cell
+                the same weight, and a wider target on a phone.
+
+                ORDER FOLLOWS FREQUENCY, not tidiness: Dash and Approvals are daily,
+                People and Products are weekly, Access and Settings are rare. Approvals
+                sits directly before Settings so the two things an admin opens most are
+                at the start of each row. */}
+            <div className="grid grid-cols-3 gap-1.5 pb-3">
+              {[["dash","Dash"],["people","People"],["products","Products"],
+                ["access","🔐 Access"],["approvals","Approvals"],["settings",<span key="g" className="inline-flex items-center gap-1 justify-center">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                   Settings</span>]].map(([k,l])=>{
-                // surface where the work is waiting, on the tab itself
-                const n = k==="money" ? pendingCounts.refunds + pendingCounts.expenses + pendingCounts.payments : 0;
+                /* One badge, on the one tab that holds decisions. Spreading counts over
+                   several tabs made the admin check each in turn; a single number is
+                   the question they actually have. */
+                const n = k==="approvals"
+                  ? pendingCounts.payments + pendingCounts.refunds + pendingCounts.expenses
+                    + pendingCounts.noshows + pendingCounts.deletions + pendingCounts.manualmoney
+                  : 0;
                 return (
                 <button key={k} onClick={()=>setAdminSec(k)}
-                  className="px-1.5 py-1.5 rounded-full text-xs font-semibold relative"
+                  className="px-2 py-2 rounded-full text-xs font-semibold relative"
                   style={{background:adminSec===k?T.ink:"transparent", color:adminSec===k?T.paper:T.ink,
                           border:`1.5px solid ${adminSec===k?T.ink:T.line}`, minWidth:0}}>
                   {l}
@@ -95,19 +107,24 @@ export default function AdminManage() {
                 <Card style={{background:"#F7EEE9"}}>
                   <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>WAITING ON YOU ({pendingCounts.total})</div>
                   <div className="space-y-1">
-                    {[/* Payments first: the money is already in the bank and the member is
-                          waiting on credits they've paid for. It was missing from this list
-                          entirely (see pendingCounts). */
-                      ["PayNow proofs to verify", pendingCounts.payments, "money", "Manage → Money"],
-                      ["Exception requests", pendingCounts.exceptions, "schedule", "Schedule"],
-                      ["No-show decisions", pendingCounts.noshows, "clients", "Clients"],
-                      ["Refund requests", pendingCounts.refunds, "money", "Manage → Money"],
-                      ["Expense claims", pendingCounts.expenses, "money", "Manage → Money"]]
-                      .filter(([,n])=>n>0).map(([label,n,,where])=>(
-                      <div key={label} className="flex items-center justify-between text-sm">
+                    {/* Each row now JUMPS to the queue it names. A summary that tells you
+                        where to go and then makes you navigate there yourself is a
+                        signpost, not a control. */}
+                    {[["PayNow proofs to verify", pendingCounts.payments, "approvals", "payments"],
+                      ["Refund requests",         pendingCounts.refunds,  "approvals", "payments"],
+                      ["Money owed",              pendingCounts.manualmoney, "approvals", "owed"],
+                      ["Expense claims",          pendingCounts.expenses, "approvals", "expenses"],
+                      ["No-show decisions",       pendingCounts.noshows,  "approvals", "clientops"],
+                      ["Deletion requests",       pendingCounts.deletions,"approvals", "clientops"],
+                      ["Exception requests",      pendingCounts.exceptions, "schedule", null]]
+                      .filter(([,n])=>n>0).map(([label,n,sec,sub])=>(
+                      <button key={label} className="w-full flex items-center justify-between text-sm py-0.5 text-left"
+                        onClick={()=>{ if(sec==="schedule"){ setTab("schedule"); return; }
+                          setAdminSec(sec); if(sub) setApprovalsView(sub); }}>
                         <span>{label} <span className="font-bold">({n})</span></span>
-                        <span className="text-xs" style={{color:T.muted}}>{where}</span>
-                      </div>))}
+                        <span className="text-xs font-bold" style={{color:T.blue}}>
+                          {sec==="schedule" ? "Schedule ›" : "Approvals ›"}</span>
+                      </button>))}
                   </div>
                   <div className="text-xs mt-2" style={{color:T.muted}}>Nothing auto-approves or auto-declines — these wait until you action them.</div>
                 </Card>)}
@@ -119,6 +136,57 @@ export default function AdminManage() {
             </div>); })()}
 
             {adminSec==="people" && <div className="space-y-3">
+
+              {/* ---- ACCOUNTS WAITING ON YOU ----
+                   Two states that look identical from the outside and need different
+                   actions: a record nobody has confirmed, and a confirmed record whose
+                   login invite never arrived. Both look like "they haven't signed up
+                   yet" until someone checks, which is exactly why they badge. */}
+              {(pendingClients.length > 0 || undeliveredInvites.length > 0) && (
+                <div className="rounded-xl p-3" style={{background:"#F7EEE9", border:`1.5px solid ${T.line}`}}>
+                  <div className="text-xs font-bold mb-1.5" style={{color:T.accent}}>ACCOUNTS WAITING ON YOU</div>
+
+                  {pendingClients.map(c=>(
+                    <div key={c.id} className="flex items-center gap-2 py-1.5" style={{borderTop:`1px solid ${T.line}`}}>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate">{c.name}</div>
+                        <div className="text-[11px] truncate" style={{color:T.muted}}>
+                          {[c.phone, c.email].filter(Boolean).join(" · ") || "no contact details"}
+                          {" · "}{c.source==="self_signup" ? "registered themselves" : `added by ${tName(c.addedBy)}`}
+                        </div>
+                      </div>
+                      <Btn small onClick={()=>confirmPendingClient(c.id)}>Approve &amp; invite</Btn>
+                    </div>))}
+
+                  {undeliveredInvites.map(inv=>(
+                    <div key={inv.id} className="py-1.5" style={{borderTop:`1px solid ${T.line}`}}>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate">{inv.name}
+                            <span className="text-[11px] font-normal" style={{color:T.muted}}> · {inv.kind}</span></div>
+                          <div className="text-[11px]" style={{color:T.accent}}>
+                            Approved, but they can't log in — the invite didn't reach them.
+                          </div>
+                        </div>
+                      </div>
+                      {Object.entries(inv.channels||{}).map(([ch,r])=>(
+                        <div key={ch} className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] flex-1" style={{color: r.status==="sent"?T.moss:T.muted}}>
+                            {ch==="email"?"Email":"WhatsApp"}: {r.status==="sent" ? `sent to ${r.to}` : r.error}
+                          </span>
+                          {r.status!=="sent" && r.status!=="skipped" && (
+                            <button onClick={()=>retryInvite(inv.id, ch)} className="text-[11px] font-bold px-2 py-1 rounded-lg"
+                              style={{border:`1.5px solid ${T.line}`, color:T.ink}}>Retry</button>)}
+                          {r.status==="skipped" && (
+                            <span className="text-[11px]" style={{color:T.orange}}>add one to send</span>)}
+                        </div>))}
+                    </div>))}
+
+                  <div className="text-[11px] mt-2" style={{color:T.deep}}>
+                    Approving sends the login by WhatsApp <b>and</b> email, and records whether each
+                    one actually got there. Coaches are created here — nobody signs up as staff.
+                  </div>
+                </div>)}
 
               {/* ---- Member Messages ---- */}
               <div className="rounded-xl p-3" style={{background:T.card, border:`1.5px solid ${T.line}`}}>
@@ -322,111 +390,216 @@ export default function AdminManage() {
               <div className="text-xs" style={{color:T.muted}}>Price changes never affect already-purchased packs. Template edits only affect future-generated sessions.</div>
             </div>}
 
-            {adminSec==="money" && <div className="space-y-3">
-              <Card style={{background:T.ink,color:T.paper,border:"none"}}>
-                <div className="text-xs" style={{color:"#B9B5A9"}}>PAYMENT METHODS</div>
-                <div className="text-sm mt-1">Manual PayNow (QR / mobile) ✓ · proof-approval below · HitPay parked to save fees</div>
-              </Card>
+            {/* ==================== APPROVALS ====================
+                 Everything that costs money or changes a balance, in one place.
+                 It was scattered across four screens — payment proofs and refunds
+                 under Money, no-shows under Clients, deletion requests wherever they
+                 landed, arrears under Reports. The admin's actual job is "what needs
+                 my decision today", and that question had no single answer.
 
-              {/* ---- PAYMENT APPROVALS (manual PayNow, Danny's decision 27 Jul) ----
-                   The member paid by bank transfer and uploaded a screenshot. NOTHING is
-                   granted until the transfer is matched in the bank app and approved here.
-                   Approve = credits/booking/camp granted + ledger row + client notified.
-                   Deny = client notified with the reason; nothing was ever granted. */}
-              {paymentQueue.length > 0 && (
-                <ApprovalQueue
-                  label={`PAYMENT APPROVALS · ${paymentQueue.length} PayNow proof${paymentQueue.length===1?"":"s"} to verify`}
-                  items={paymentQueue.map(p=>({
-                    id: p.id,
-                    title: `${p.who} — $${p.amt} · ${p.what}`,
-                    sub: `${p.method} · proof: ${p.proof?.name || "⚠ no screenshot"} · check the bank app before approving`,
-                    meta: p.at,
-                  }))}
-                  onResolve={resolvePayment}
-                  approveLabel="Payment received" denyLabel="Not found" />)}
-              {paymentQueue.length === 0 && (
-                <Card className="!p-3"><div className="text-xs" style={{color:T.muted}}>
-                  No PayNow proofs waiting. Purchases paid by transfer land here for you to
-                  verify against the bank app before anything is granted.</div></Card>)}
-              {/* ---- Queue 3 of 4: REFUNDS (Decisions 2, 6, 7) ----
-                   Credit back is automatic on cancellation. Money back is not: the member asks,
-                   the admin approves, and only then does the credit come off and the HitPay
-                   refund get triggered by hand. Never both a credit and a refund. */}
-              {refundQueue.length>0 && (
-                <ApprovalQueue
-                  label="REFUND REQUESTS · bank refund instead of credit"
-                  items={refundQueue.map(r=>({
-                    id:r.id, title:`${r.who} — $${r.amt} back to bank`,
-                    sub:`${r.what} · originally paid by ${r.method} · cancelled ${r.when}${r.reason?` · "${r.reason}"`:""}`,
-                  }))}
-                  onResolve={resolveRefund}
-                  approveLabel="Approve refund" denyLabel="Deny (keep credit)" />)}
-
-              {/* ---- Queue 4 of 4: EXPENSE CLAIMS ----
-                   Not an ApprovalQueue: a claim isn't a yes/no. It holds several
-                   lines, each of which the admin may want to read, question or
-                   exclude, and after approving there is still a payment to record.
-                   Squeezing that into approve/deny would force the all-or-nothing
-                   rejection this workflow exists to avoid. */}
-              {(pendingClaims.length>0 || approvedUnpaid.length>0) && (
-                <div>
-                  <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>
-                    EXPENSE CLAIMS · {pendingClaims.length} to review
-                    {approvedUnpaid.length>0 && <span style={{color:T.blue}}> · {approvedUnpaid.length} approved, unpaid</span>}
+                 Four sub-tabs because they are four different KINDS of decision, not
+                 four lists: money coming in (verify it), money going out (authorise
+                 it), money owed (chase it), and a client's standing (rule on it).
+                 Grouping by kind is what lets the admin work one queue to the end
+                 rather than context-switching down a single mixed list. */}
+            {adminSec==="approvals" && (() => {
+              const counts = {
+                payments: paymentQueue.length + refundQueue.length,
+                owed:     pendingCounts.manualmoney,
+                expenses: pendingClaims.length + approvedUnpaid.length,
+                clientops:noShowQueue.length + deletionRequests.length,
+              };
+              const SUBS = [
+                ["payments", "Payments",  "Money in: PayNow proofs to verify, and refunds to authorise."],
+                ["owed",     "Money owed","Money out there: what's unpaid, how old it is, and who to chase."],
+                ["expenses", "Expenses",  "Coaches' own money to give back — approve, then record the payment."],
+                ["clientops","Client ops","Decisions about a person rather than an amount: no-shows and deletion requests."],
+              ];
+              const total = Object.values(counts).reduce((a,b)=>a+b,0);
+              return (
+              <div className="space-y-3">
+                {/* One honest answer to "is there anything for me?" before any tab is
+                    chosen. Four zeroes read very differently from four sub-tabs that
+                    each have to be opened to find out. */}
+                <Card style={{background: total>0 ? "#F7EEE9" : T.card}}>
+                  <div className="text-xs font-bold mb-0.5" style={{color: total>0 ? T.accent : T.moss}}>
+                    {total>0 ? `${total} DECISION${total===1?"":"S"} WAITING` : "NOTHING WAITING"}</div>
+                  <div className="text-xs" style={{color:T.deep}}>
+                    {total>0
+                      ? "Everything that costs money or changes a balance. Nothing here resolves itself."
+                      : "Every queue is clear. New proofs, refunds, claims and no-shows all land here."}
                   </div>
-                  <div className="space-y-2">
-                    {[...pendingClaims, ...approvedUnpaid].map(c=>{
-                      const st = STATUS[c.status]; const net = approvedTotal(c);
-                      const noRec = c.lines.filter(l=>!l.excluded && !l.receipt).length;
-                      return (
-                        <Card key={c.id} className="!p-3">
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-bold">{tName(c.trainer)}</span>
-                                <Pill tone={st.tone}>{st.label}</Pill>
+                </Card>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  {SUBS.map(([k,l])=>{
+                    const on = approvalsView===k, n = counts[k];
+                    return (
+                    <button key={k} onClick={()=>setApprovalsView(k)}
+                      className="px-2.5 py-2 rounded-xl text-xs font-bold relative text-left"
+                      style={{background:on?T.ink:T.card, color:on?T.paper:T.ink,
+                              border:`1.5px solid ${on?T.ink:T.line}`}}>
+                      {l}
+                      {/* The count is the whole point of the chip — an admin should
+                          not have to open a queue to discover it is empty. */}
+                      <span style={{opacity:on?.75:1, color:on?T.paper:(n>0?T.accent:T.muted), fontWeight:800}}> {n}</span>
+                    </button>);})}
+                </div>
+                <div className="text-[11px] -mt-1" style={{color:T.muted}}>
+                  {(SUBS.find(x=>x[0]===approvalsView)||[])[2]}
+                </div>
+
+                {/* ---- MONEY OWED ---- moved from Reports: arrears is a thing you act
+                     on, not a thing you read, and it belongs beside the other actions. */}
+                {approvalsView==="owed" && <PaymentsReport/>}
+
+                {/* ---- PAYMENTS IN AND OUT ---- */}
+                {approvalsView==="payments" && (<>
+                  {/* ---- PAYMENT APPROVALS (manual PayNow, Danny's decision 27 Jul) ----
+                       The member paid by bank transfer and uploaded a screenshot. NOTHING is
+                       granted until the transfer is matched in the bank app and approved here.
+                       Approve = credits/booking/camp granted + ledger row + client notified.
+                       Deny = client notified with the reason; nothing was ever granted. */}
+                  {paymentQueue.length > 0 && (
+                    <ApprovalQueue
+                      label={`PAYMENT APPROVALS · ${paymentQueue.length} PayNow proof${paymentQueue.length===1?"":"s"} to verify`}
+                      items={paymentQueue.map(p=>({
+                        id: p.id,
+                        title: `${p.who} — $${p.amt} · ${p.what}`,
+                        sub: `${p.method} · proof: ${p.proof?.name || "⚠ no screenshot"} · check the bank app before approving`,
+                        meta: p.at,
+                      }))}
+                      onResolve={resolvePayment}
+                      approveLabel="Payment received" denyLabel="Not found" />)}
+                  {paymentQueue.length === 0 && (
+                    <Card className="!p-3"><div className="text-xs" style={{color:T.muted}}>
+                      No PayNow proofs waiting. Purchases paid by transfer land here for you to
+                      verify against the bank app before anything is granted.</div></Card>)}
+
+                  {/* ---- REFUNDS (Decisions 2, 6, 7) ----
+                       Credit back is automatic on cancellation. Money back is not: the member asks,
+                       the admin approves, and only then does the credit come off and the refund
+                       get triggered by hand. Never both a credit and a refund. */}
+                  {refundQueue.length>0 && (
+                    <ApprovalQueue
+                      label="REFUND REQUESTS · bank refund instead of credit"
+                      items={refundQueue.map(r=>({
+                        id:r.id, title:`${r.who} — $${r.amt} back to bank`,
+                        sub:`${r.what} · originally paid by ${r.method} · cancelled ${r.when}${r.reason?` · "${r.reason}"`:""}`,
+                      }))}
+                      onResolve={resolveRefund}
+                      approveLabel="Approve refund" denyLabel="Deny (keep credit)" />)}
+                  {refundQueue.length===0 && (
+                    <div className="text-xs" style={{color:T.muted}}>No refund requests.</div>)}
+
+                  {/* The ledger sits UNDER the queues it feeds, not in a tab of its own:
+                      an approval writes a row here, and seeing it land is how the admin
+                      knows the approval took. It is a record, not a decision. */}
+                  <div className="text-xs font-bold pt-2" style={{color:T.muted}}>LEDGER · every payment recorded</div>
+                  {ledger.slice(0,12).map(l=>(
+                    <Card key={l.id} className="flex items-center gap-3 !p-3">
+                      <div className="flex-1 min-w-0"><div className="text-sm font-semibold truncate">{l.who} · {l.what}</div>
+                        <div className="text-xs" style={{color:T.muted}}>{l.method} · {l.d}</div></div>
+                      <div className="font-bold text-sm">${l.amt}</div>
+                      <Btn small kind="ghost" disabled={l.amt<=0} onClick={()=>{
+                        setRefundQueue(q=>[...q, {id:nid(), who:l.who, what:l.what, amt:l.amt,
+                          method:l.method, pool:null, reason:"Raised by admin from the ledger",
+                          when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}]);
+                        ping("Added to the refund queue — approve it above to record the refund");
+                      }}>Refund</Btn>
+                    </Card>))}
+                  {ledger.length>12 && (
+                    <div className="text-[11px]" style={{color:T.muted}}>
+                      Showing the 12 most recent. Full history and CSV export are in Reports → Analytics.</div>)}
+                </>)}
+
+                {/* ---- EXPENSE CLAIMS ----
+                     Not an ApprovalQueue: a claim isn't a yes/no. It holds several
+                     lines, each of which the admin may want to read, question or
+                     exclude, and after approving there is still a payment to record.
+                     Squeezing that into approve/deny would force the all-or-nothing
+                     rejection this workflow exists to avoid. */}
+                {approvalsView==="expenses" && (<>
+                  {(pendingClaims.length>0 || approvedUnpaid.length>0) ? (
+                    <div>
+                      <div className="text-xs font-bold mb-1.5" style={{color:T.muted}}>
+                        EXPENSE CLAIMS · {pendingClaims.length} to review
+                        {approvedUnpaid.length>0 && <span style={{color:T.blue}}> · {approvedUnpaid.length} approved, unpaid</span>}
+                      </div>
+                      <div className="space-y-2">
+                        {[...pendingClaims, ...approvedUnpaid].map(c=>{
+                          const st = STATUS[c.status]; const net = approvedTotal(c);
+                          const noRec = c.lines.filter(l=>!l.excluded && !l.receipt).length;
+                          return (
+                            <Card key={c.id} className="!p-3">
+                              <div className="flex items-start gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-bold">{tName(c.trainer)}</span>
+                                    <Pill tone={st.tone}>{st.label}</Pill>
+                                  </div>
+                                  <div className="text-[11px]" style={{color:T.muted}}>
+                                    {c.ref} · {c.lines.length} item{c.lines.length===1?"":"s"}
+                                    {c.submittedAt ? ` · sent ${fmtISO(c.submittedAt)}` : ""}
+                                    {noRec>0 && <span style={{color:T.orange}}> · {noRec} no receipt</span>}
+                                  </div>
+                                </div>
+                                <div style={{...disp,fontWeight:800,fontSize:17}}>${net.toFixed(2)}</div>
                               </div>
-                              <div className="text-[11px]" style={{color:T.muted}}>
-                                {c.ref} · {c.lines.length} item{c.lines.length===1?"":"s"}
-                                {c.submittedAt ? ` · sent ${fmtISO(c.submittedAt)}` : ""}
-                                {noRec>0 && <span style={{color:T.orange}}> · {noRec} no receipt</span>}
-                              </div>
-                            </div>
-                            <div style={{...disp,fontWeight:800,fontSize:17}}>${net.toFixed(2)}</div>
-                          </div>
-                          <Btn small full kind="ghost" onClick={()=>setClaimReview(c.id)}>
-                            {c.status==="approved" ? "Record payment" : "Review claim"}</Btn>
-                        </Card>);})}
+                              <Btn small full kind="ghost" onClick={()=>setClaimReview(c.id)}>
+                                {c.status==="approved" ? "Record payment" : "Review claim"}</Btn>
+                            </Card>);})}
+                      </div>
+                      <div className="text-[11px] mt-2" style={{color:T.deep}}>
+                        Approved and paid are separate on purpose: approved means "yes, that's a real
+                        cost", paid means the money has left the account. Only the second answers a
+                        coach asking whether they are still out of pocket.
+                      </div>
+                    </div>
+                  ) : (
+                    <Card className="!p-3"><div className="text-xs" style={{color:T.muted}}>
+                      No expense claims waiting. Submitted claims land here to review, and approved
+                      ones stay until you record the payment.</div></Card>)}
+                </>)}
+
+                {/* ---- CLIENT OPS ----
+                     Decisions about a PERSON rather than an amount. They have a money
+                     consequence — a forfeited credit, an anonymised account — but the
+                     judgement is about the client, so they sit apart from the queues
+                     where the question is "did this money arrive?" */}
+                {approvalsView==="clientops" && (<>
+                  {/* No-shows: the coach marks absent, NOTHING auto-deducts, the admin
+                      decides. Same treatment as PT (Decisions 5, 6, 7). */}
+                  {noShowQueue.length>0 ? (
+                    <ApprovalQueue
+                      label="NO-SHOW DECISIONS · nothing is deducted until you decide"
+                      items={noShowQueue.map(nq=>({ id:nq.id, title:nq.who, sub:`${nq.session} · Policy: ${nq.policy}` }))}
+                      onResolve={(id, approved, reason)=>resolveNoShow(id, approved, reason)}
+                      approveLabel="Apply forfeit" denyLabel="Waive" />
+                  ) : (
+                    <Card className="!p-3"><div className="text-xs" style={{color:T.muted}}>
+                      No no-shows waiting. A coach marking someone absent lands here — the credit is
+                      never deducted automatically.</div></Card>)}
+
+                  {/* DECISION 15 — deletion is a PDPA right with a real queue behind it. */}
+                  {deletionRequests.length>0 && (
+                    <ApprovalQueue
+                      label="ACCOUNT DELETION REQUESTS · PDPA"
+                      items={deletionRequests.map(d=>({ id:d.id, title:`${d.who} asked to delete their account`,
+                        sub:d.reason ? `"${d.reason}"` : "No reason given", meta:d.when }))}
+                      onResolve={resolveDeletion}
+                      approveLabel="Anonymise" denyLabel="Decline" />)}
+                  <div className="text-[11px]" style={{color:T.muted}}>
+                    Approving a deletion scrubs the name, phone and email and keeps the bookings and
+                    payments as anonymised rows, so the books still balance (Decision 15).
                   </div>
-                </div>)}
+                </>)}
 
-              {/* DECISION 15 — deletion is a PDPA right with a real queue behind it. */}
-              {deletionRequests.length>0 && (
-                <ApprovalQueue
-                  label="ACCOUNT DELETION REQUESTS"
-                  items={deletionRequests.map(d=>({ id:d.id, title:`${d.who} asked to delete their account`,
-                    sub:d.reason ? `"${d.reason}"` : "No reason given", meta:d.when }))}
-                  onResolve={resolveDeletion}
-                  approveLabel="Anonymise" denyLabel="Decline" />)}
-
-              {refundQueue.length===0 && pendingClaims.length===0 && approvedUnpaid.length===0 && deletionRequests.length===0 && (
-                <div className="text-xs" style={{color:T.muted}}>
-                  No refunds or expense claims waiting. No-shows are under Clients; exception requests are under Schedule.</div>)}
-              <div className="text-xs font-bold pt-1" style={{color:T.muted}}>LEDGER · export CSV for accountant</div>
-              {ledger.map(l=>(
-                <Card key={l.id} className="flex items-center gap-3 !p-3">
-                  <div className="flex-1"><div className="text-sm font-semibold">{l.who} · {l.what}</div>
-                    <div className="text-xs" style={{color:T.muted}}>{l.method} · {l.d}</div></div>
-                  <div className="font-bold text-sm">${l.amt}</div>
-                  <Btn small kind="ghost" disabled={l.amt<=0} onClick={()=>{
-                    setRefundQueue(q=>[...q, {id:nid(), who:l.who, what:l.what, amt:l.amt,
-                      method:l.method, pool:null, reason:"Raised by admin from the ledger",
-                      when:new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}]);
-                    ping("Added to the refund queue — approve it below to record the refund");
-                  }}>Refund</Btn>
-                </Card>))}
-              <div className="text-xs" style={{color:T.muted}}>Trainer payouts: sessions × rate, monthly export. All actions audited.</div>
-            </div>}
+                <div className="text-[11px] text-center pt-1" style={{color:T.muted}}>
+                  Exception requests stay under Schedule — they are about a booking, and the calendar
+                  is the context you need to rule on one.
+                </div>
+              </div>);})()}
 
             {/* Camps moved here from the bottom nav — set up occasionally, so a
                 permanent slot in a five-item nav was expensive. */}

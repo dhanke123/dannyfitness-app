@@ -13,6 +13,7 @@ import { allConflicts, hasBlocking } from "../lib/conflicts.js";
 import { approvedTotal, claimErrors, claimTotal, emptyClaim, emptyLine, excludedTotal, nextRef } from "../lib/expenses.js";
 import { EVENTS, startUsageSession, track } from "../lib/usage.js";
 import { isOpen, methodLabel, owedByClient, owedOn, paidOn } from "../lib/money.js";
+import { deliver, inviteBody, inviteReachable, missingChannels, plannedChannels } from "../lib/invites.js";
 import { Card } from "../ui/kit.jsx";
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -384,14 +385,96 @@ export function AppProvider({ children }) {
     notifyStaff("admin", `${tName(user?.id)} added a new client mid-booking: ${nm}${phone ? ` (${phone})` : ""} — confirm the record`);
     return { id, name: nm };
   };
+  const pendingClients = clients.filter(c => c.status === "pending");
+
+  /* ---------------- ACCOUNT CREATION & THE LOGIN INVITE ----------------
+     Getting someone INTO the app is a workflow, not a flag. Confirming the record is
+     only half of it: until an invite actually reaches them they have a row in the
+     system and no way to sign in, and from the studio's side that is indistinguishable
+     from "hasn't got round to it yet".
+
+     So delivery is tracked PER CHANNEL, with the reason on failure. See lib/invites.js. */
+  const [invites, setInvites] = useState([]);
+
+  const sendInvite = ({ name, phone, email, kind = "client", clientId = null, trainerId = null }) => {
+    const channels = {};
+    plannedChannels({ phone, email }).forEach(ch => {
+      channels[ch] = deliver(ch, ch === "email" ? email : phone);
+    });
+    const missing = missingChannels({ phone, email });
+    missing.forEach(ch => { channels[ch] = deliver(ch, null); });   // 'skipped', with the reason
+
+    const inv = { id: nid(), kind, clientId, trainerId, name, phone, email, channels,
+      body: inviteBody({ name, kind }),
+      createdBy: user?.id || "admin",
+      createdAt: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),
+      acceptedAt: null };
+    setInvites(list => [inv, ...list]);
+
+    const okCh = Object.entries(channels).filter(([, r]) => r.status === "sent").map(([k]) => k);
+    const badCh = Object.entries(channels).filter(([, r]) => r.status === "failed").map(([k, r]) => `${k}: ${r.error}`);
+    logAudit(`Login invite · ${kind} · ${name} · ${okCh.length ? `sent via ${okCh.join(" + ")}` : "NOT DELIVERED"}${badCh.length ? ` · failed ${badCh.join("; ")}` : ""}`);
+    ping(okCh.length
+      ? `${name} invited by ${okCh.map(c => c === "whatsapp" ? "WhatsApp" : "email").join(" and ")}`
+      : `${name} confirmed, but the invite didn't send — retry it in Manage → People`);
+    return inv;
+  };
+
+  const retryInvite = (id, channel) => {
+    const inv = invites.find(i => i.id === id); if (!inv) return false;
+    const to = channel === "email" ? inv.email : inv.phone;
+    const res = deliver(channel, to);
+    setInvites(list => list.map(i => i.id !== id ? i : { ...i, channels: { ...i.channels, [channel]: res } }));
+    logAudit(`Invite retried · ${inv.name} · ${channel} · ${res.status}${res.error ? ` — ${res.error}` : ""}`);
+    ping(res.status === "sent" ? `Resent to ${inv.name} by ${channel === "email" ? "email" : "WhatsApp"}`
+                               : `Still failing — ${res.error}`);
+    return res.status === "sent";
+  };
+
+  /* Confirming a client is what TRIGGERS the invite. Two separate acts would mean an
+     admin who confirms and forgets to send, which is the same as not confirming. */
   const confirmPendingClient = (id) => {
     const c = clients.find(x => x.id === id); if (!c) return false;
     setClients(cs => cs.map(x => x.id === id ? { ...x, status: "active" } : x));
-    logAudit(`Client confirmed · ${c.name} · added by ${tName(c.addedBy)}`);
-    ping(`${c.name} confirmed — a full member record now`);
+    logAudit(`Client confirmed · ${c.name} · added by ${tName(c.addedBy) || "self sign-up"}`);
+    sendInvite({ name: c.name, phone: c.phone, email: c.email, kind: "client", clientId: c.id });
     return true;
   };
-  const pendingClients = clients.filter(c => c.status === "pending");
+
+  /* Coaches are ADMIN-CREATED ONLY (decided 28 Jul). Anyone may register as a client;
+     nobody registers as staff. The role never comes from the device — a tampered
+     signup must not be able to grant itself the trainer nav or the payout report. */
+  const createCoach = ({ name, phone, email, tag = "Coach" }) => {
+    const nm = String(name || "").trim();
+    if (!nm) return { error: "Give them a name" };
+    if (trainers.some(t => t.name.toLowerCase() === nm.toLowerCase())) return { error: `${nm} is already a coach` };
+    const id = nm.toLowerCase().replace(/\W+/g, "") + nid();
+    setTrainers(ts => [...ts, { id, name: nm, tag, bio: "", active: true, phone, email }]);
+    setRates(r => ({ ...r, [id]: { type: "per_class", perClass: 0, perHead: 0, perPt: 0, monthly: 0 } }));
+    setPerm(p => ({ ...p, [id]: { editDesc: false, cancel: false, earnings: false, manageLocations: false } }));
+    logAudit(`Coach created · ${nm} · by ${tName(user?.id)} · rates not yet set`);
+    sendInvite({ name: nm, phone, email, kind: "coach", trainerId: id });
+    return { id, name: nm };
+  };
+
+  /* Somebody registering themselves through the app. Lands as `pending` exactly like
+     a coach-added record, so there is one approval path rather than two. */
+  const registerSelf = ({ name, phone, email }) => {
+    const nm = String(name || "").trim();
+    if (!nm) return { error: "Enter your name" };
+    const dup = findClientByPhone(phone);
+    if (dup) return { duplicate: dup };
+    const id = nid();
+    setClients(cs => [...cs, { id, name: nm, phone: String(phone || "").replace(/\D/g, ""),
+      email: String(email || "").trim(), loc: "", status: "pending", source: "self_signup" }]);
+    notifyStaff("admin", `${nm} registered through the app — approve the account to send their login`);
+    logAudit(`Self sign-up · ${nm}${phone ? ` · ${phone}` : ""} · pending admin approval`);
+    return { id, name: nm };
+  };
+
+  const markInviteAccepted = (id) => setInvites(list =>
+    list.map(i => i.id !== id ? i : { ...i, acceptedAt: new Date().toISOString() }));
+  const undeliveredInvites = invites.filter(i => !inviteReachable(i) && !i.acceptedAt);
   const createGroup = ({ name, memberIds, primaryId, trainer }) => {
     const members = memberIds.map(id => clientById(id)?.name).filter(Boolean);
     const gname = name || members.join(" & ");
@@ -978,6 +1061,10 @@ export function AppProvider({ children }) {
   const [couponForm, setCouponForm] = useState(null); // add-coupon sheet {code,mode,val,label}
   const [rosterOpen, setRosterOpen] = useState(null);
   const [adminSec, setAdminSec] = useState("dash");
+  /* Which queue is open inside Manage → Approvals. Defaults to Payments: money the
+     studio has already received but not yet granted is the most time-critical of the
+     four — a member has paid and is waiting. */
+  const [approvalsView, setApprovalsView] = useState("payments");
   const [permOpen, setPermOpen] = useState(null);
   const [measForm, setMeasForm] = useState(null);
   const [timeOffSheet, setTimeOffSheet] = useState(null); // {trainer}
@@ -1519,6 +1606,9 @@ export function AppProvider({ children }) {
        whole flow exists to prevent, so it badges like every other queue. */
     manualmoney: openObligations.length,
     newclients: pendingClients.length,
+    /* People with a record and no way in. They look exactly like a slow signup
+       until someone checks, which is why it badges rather than sits in a list. */
+    invites: undeliveredInvites.length,
   };
   pendingCounts.receipts = pendingCounts.expenses;   // legacy alias
   pendingCounts.schedule = pendingCounts.exceptions;
@@ -1533,9 +1623,10 @@ export function AppProvider({ children }) {
      badges Clients, because an unconfirmed record can't be billed or logged in as. */
   pendingCounts.reports  = pendingCounts.manualmoney;
   pendingCounts.clients  = pendingCounts.noshows + pendingCounts.newclients;
+  pendingCounts.manage  += pendingCounts.invites;
   pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows
                          + pendingCounts.expenses + pendingCounts.deletions + pendingCounts.payments
-                         + pendingCounts.manualmoney + pendingCounts.newclients;
+                         + pendingCounts.manualmoney + pendingCounts.newclients + pendingCounts.invites;
 
   const addLocation = () => {
     if (!newLocName.trim()) return;
@@ -1722,10 +1813,11 @@ export function AppProvider({ children }) {
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
     bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, updateGroup, deleteGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, intakeView, setIntakeView,
     obligations, setObligations, recordPay, setRecordPay, raiseObligation, recordPayment, markObligationSettled, denyObligation, owedFor, openObligations,
-    addPendingClient, confirmPendingClient, pendingClients, findClientByPhone, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    addPendingClient, confirmPendingClient, pendingClients, findClientByPhone,
+    invites, setInvites, sendInvite, retryInvite, createCoach, registerSelf, markInviteAccepted, undeliveredInvites, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
-    ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
+    ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, approvalsView, setApprovalsView, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;
 }
 
