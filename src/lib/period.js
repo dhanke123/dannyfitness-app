@@ -15,13 +15,19 @@ import { MS_DAY, toISO } from "./dates.js";
 
 /* ------------------------------------------------------------------- ranges */
 
+/* `today` and `wtd` exist because the payout run is read at those two grains more
+   than any other: "what did Ansab do this morning" and "what is this week's coach
+   bill". Both were reachable only by opening Custom and picking the same date twice,
+   which is four taps for the most common question on the screen. */
 export const RANGE_PRESETS = [
-  { key: "7d",   label: "7 days"     },
-  { key: "30d",  label: "30 days"    },
-  { key: "mtd",  label: "This month" },
-  { key: "qtd",  label: "Quarter"    },
-  { key: "ytd",  label: "This year"  },
-  { key: "all",  label: "All time"   },
+  { key: "today", label: "Today"      },
+  { key: "wtd",   label: "This week"  },
+  { key: "7d",    label: "7 days"     },
+  { key: "30d",   label: "30 days"    },
+  { key: "mtd",   label: "This month" },
+  { key: "qtd",   label: "Quarter"    },
+  { key: "ytd",   label: "This year"  },
+  { key: "all",   label: "All time"   },
 ];
 
 const shift = (dt, days) => new Date(dt.getTime() + days * MS_DAY);
@@ -37,6 +43,11 @@ export function resolveRange(key, custom = {}, now = new Date()) {
   const mk = (from, label) => ({ key, from: toISO(from), to: iso, label });
 
   switch (key) {
+    // A single day. `to` is already today, so from === to — one day, end inclusive.
+    case "today": return mk(today, today.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short" }));
+    // Monday to today. Distinct from "7 days": on a Tuesday this is 2 days, not 7,
+    // and a week-to-date payout figure must not quietly include last Wednesday.
+    case "wtd": return mk(shift(today, -((today.getDay() + 6) % 7)), "This week");
     case "7d":  return mk(shift(today, -6), "Last 7 days");
     case "30d": return mk(shift(today, -29), "Last 30 days");
     case "mtd": return mk(new Date(today.getFullYear(), today.getMonth(), 1),

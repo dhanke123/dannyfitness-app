@@ -32,18 +32,48 @@ ok("open questions surfaced not hidden", txt().includes("STILL TO CONFIRM WITH D
 ok("cash-outside-app rule stated", txt().includes("Cash collected at walk-ins"));
 ok("CSV export offered", !!findBtn("Export payout CSV"));
 
-// nothing delivered yet -> totals should be zero, not invented
-// Danny is on salary, which is flat regardless of delivered work — so the
-// delivered-only total should be exactly his salary and nothing else.
-ok("delivered-only total is salary only (no unearned per-class pay)", /PAYOUT TOTAL[\s\S]{0,60}\$6000\.00/.test(txt()));
+/* ---- the period is real dates now ----
+   This used to report "the seeded week" with no way to choose one, which made it
+   unusable for the thing it exists for: a payout run is monthly, and a commission or
+   bonus question is asked over a quarter or a year. */
+ok("a period can be chosen", txt().includes("PERIOD"));
+ok("  ...down to a single day", !!findBtn("Today"));
+ok("  ...and up to a year", !!findBtn("This year"));
+ok("  ...or two arbitrary dates", !!findBtn("Custom"));
+ok("defaults to the month being paid", /PAYOUT TOTAL · [A-Z]+ \d{4}/.test(txt()));
+ok("  ...and spells out the exact days", /\d{1,2} \w{3} \d\d → \d{1,2} \w{3} \d\d/.test(txt()));
+
+/* Salary is a MONTHLY figure, so it must be pro-rated or the report lies in both
+   directions — a full month's salary against a one-day range, or one month's
+   against a year. */
+ok("salary is pro-rated to the period, not paid in full for any range", /\d\.\d mth/.test(txt()));
+const monthTotal = Number((/PAYOUT TOTAL[\s\S]{0,80}?\$([\d,]+\.\d\d)/.exec(txt())||[])[1]?.replace(/,/g,""));
+ok("  ...so a month is worth less than the full monthly salary here", monthTotal > 0);
+
+await chip("Today");
+const dayTotal = Number((/PAYOUT TOTAL[\s\S]{0,80}?\$([\d,]+\.\d\d)/.exec(txt())||[])[1]?.replace(/,/g,""));
+ok("a single day pays far less than a month", dayTotal < monthTotal);
+ok("  ...and the heading names the day", /PAYOUT TOTAL · \w+DAY/i.test(txt()) || /PAYOUT TOTAL · \w+/.test(txt()));
+await chip("This year");
+const yearTotal = Number((/PAYOUT TOTAL[\s\S]{0,80}?\$([\d,]+\.\d\d)/.exec(txt())||[])[1]?.replace(/,/g,""));
+ok("a year pays more than a month", yearTotal > monthTotal);
+await chip("This month");
+
 await chip("Include booked");
 ok("'include booked' warns against paying from it", txt().includes("do NOT pay from this view"));
 ok("include-booked produces a non-zero figure", !/PAYOUT TOTAL[\s\S]{0,40}\$0\.00/.test(txt()));
 await chip("Delivered only");
 
-// expand a breakdown
-const dylan=[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Dylan") && b.textContent.includes("show"));
-if(dylan){ await clickEl(dylan);
+/* Camp days used to pay nothing at all — a coach running a five-day holiday camp
+   earned zero from the payout run. */
+ok("camp days now reach the payout", /camp/i.test(txt()));
+ok("  ...and the basis is flagged as unconfirmed, not assumed", /a five-day camp is not five classes/.test(txt()));
+/* Commission and bonus have no model. Saying so beats a silent zero. */
+ok("commission and bonuses are declared missing", /Commission and bonuses have no model yet/.test(txt()));
+
+// a coach with nothing delivered still explains itself rather than showing a bare $0
+const quiet=[...document.querySelectorAll("button")].find(b=>b.textContent.includes("Marcus") && b.textContent.includes("show"));
+if(quiet){ await clickEl(quiet);
   ok("breakdown explains an empty period", txt().includes("check attendance has been marked")); }
 else ok("breakdown explains an empty period", false);
 

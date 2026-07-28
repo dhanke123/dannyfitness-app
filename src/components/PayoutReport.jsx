@@ -18,58 +18,78 @@
    Pay bases supported: flat per-class, per-head, and monthly salary. Per-head was
    in the sample (Wei) but the rate model only had per-class and salary. */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useApp } from "../state/AppState.jsx";
-import { CT, PT_PRICE, isHead } from "../data/seed.js";
-import { sessTrainers } from "../lib/scheduling.js";
-import { DAYS } from "../lib/dates.js";
+import { PT_PRICE, isHead } from "../data/seed.js";
+import { fmtISO, rangeDays, resolveRange } from "../lib/period.js";
+import { coachWorkRows } from "../lib/worklog.js";
+import RangeBar from "./RangeBar.jsx";
 import { T, disp } from "../theme.js";
 import { Btn, Card, Chip } from "../ui/kit.jsx";
 
 const money = (n) => `$${(Math.round(n * 100) / 100).toFixed(2)}`;
 
 export default function PayoutReport() {
-  const { expenseClaims, owedTo, locName, ping, ptBookings, rates, sessions, tName, trainers } = useApp();
+  const { camps, clientGroups, expenseClaims, groupPacks, owedTo, locName, ping,
+          ptBookings, rates, sessionLog, sessions, tName, trainers } = useApp();
   const [openId, setOpenId] = useState(null);
   const [basis, setBasis] = useState("delivered"); // delivered | booked — see note below
 
-  /* One trainer's lines for the period. In the demo the "period" is the seeded
-     week; in the real build this takes a month range and queries by date. */
+  /* THE PERIOD IS NOW REAL DATES.
+     This used to report "the seeded week" with no way to choose one — which made it
+     unusable for the thing it exists for, since a payout run is monthly and a
+     commission or bonus question is asked over a quarter or a year. Same control and
+     same default as the Coach log, and the lines come from the same
+     `coachWorkRows`, so the diary and the payment describe the same days. */
+  const [rangeSel, setRangeSel] = useState({ key: "mtd", from: "", to: "" });
+  const range = useMemo(() => resolveRange(rangeSel.key, rangeSel), [rangeSel]);
+  const ctx = { sessions, ptBookings, camps, sessionLog, groupPacks, clientGroups, locName, tName };
+
+  /* One trainer's lines for the period. */
   const linesFor = (tid) => {
     const rt = rates[tid] || {};
     const lines = [];
+    const work = coachWorkRows(tid, range, ctx);
 
-    // --- classes: only those actually delivered (attendance marked) ---
-    sessions
-      .filter(s => sessTrainers(s).includes(tid))
-      .filter(s => s.status !== "cancelled")          // a cancelled class isn't delivered work
-      .filter(s => basis === "booked" ? true : s.done === true)
-      .forEach(s => {
-        const attended = (s.attendees || []).filter(a => a.status === "attended").length;
-        const share = sessTrainers(s).length;         // co-coached classes split the fee
-        let pay = 0, rateLabel = "—";
-        if (rt.type === "per_head") { pay = (attended * (rt.perHead || 0)) / share; rateLabel = `${attended} × ${money(rt.perHead || 0)}${share>1?` ÷ ${share}`:""}`; }
-        else if (rt.type === "per_class") { pay = (rt.perClass || 0) / share; rateLabel = `${money(rt.perClass || 0)}${share>1?` ÷ ${share}`:""}`; }
-        else { rateLabel = "salary"; }
-        lines.push({
-          kind: "class", when: DAYS[s.day], item: `${CT[s.type].name} (class)${share>1?` · with ${sessTrainers(s).filter(x=>x!==tid).map(tName).join(", ")}`:""}`,
-          where: locName(s.loc), detail: `${attended} attended`, rateLabel, pay,
-        });
+    /* Cancelled work is never paid on either basis. "Include booked" relaxes
+       *delivered*, not *cancelled* — a class that didn't happen is not work. */
+    const eligible = work.filter(r => r.payable && (basis === "booked" ? true : r.delivered));
+
+    // --- classes ---
+    eligible.filter(r => r.kind === "class").forEach(r => {
+      const share = r.share || 1;                     // co-coached classes split the fee
+      let pay = 0, rateLabel = "—";
+      if (rt.type === "per_head") { pay = ((r.attended || 0) * (rt.perHead || 0)) / share; rateLabel = `${r.attended || 0} × ${money(rt.perHead || 0)}${share>1?` ÷ ${share}`:""}`; }
+      else if (rt.type === "per_class") { pay = (rt.perClass || 0) / share; rateLabel = `${money(rt.perClass || 0)}${share>1?` ÷ ${share}`:""}`; }
+      else { rateLabel = "salary"; }
+      lines.push({
+        kind: "class", when: fmtISO(r.iso), item: `${r.name} (class)${share>1?` · with ${(r.coCoaches||[]).map(tName).join(", ")}`:""}`,
+        where: r.where, detail: `${r.attended || 0} attended`, rateLabel, pay,
       });
+    });
 
     // --- PT: paid on completion, never on booking ---
-    ptBookings
-      .filter(b => b.trainer === tid)
-      .filter(b => basis === "booked" ? b.status !== "cancelled" : b.status === "done")
-      .forEach(b => {
-        const pay = rt.type === "salary" ? 0 : (rt.perPt || 0);
-        lines.push({
-          kind: "pt", when: DAYS[b.day], item: `PT · ${b.who || "client"}`,
-          where: b.otherLabel || locName(b.loc),
-          detail: b.status === "done" ? "completed" : b.status || "booked",
-          rateLabel: rt.type === "salary" ? "salary" : money(rt.perPt || 0), pay,
-        });
+    eligible.filter(r => r.kind === "pt" || r.kind === "grouppt" || r.kind === "logged").forEach(r => {
+      const pay = rt.type === "salary" ? 0 : (rt.perPt || 0);
+      lines.push({
+        kind: "pt", when: r.dateText || fmtISO(r.iso), item: `PT · ${r.name}`,
+        where: r.where, detail: r.remark || "completed",
+        rateLabel: rt.type === "salary" ? "salary" : money(rt.perPt || 0), pay,
       });
+    });
+
+    /* Camp days were never on the payout run at all, so a coach who ran a five-day
+       holiday camp was paid nothing for it. They pay at the class rate per block —
+       flagged below as unconfirmed rather than assumed correct. */
+    eligible.filter(r => r.kind === "camp").forEach(r => {
+      const share = r.share || 1;
+      const pay = rt.type === "salary" ? 0 : (rt.perClass || rt.perPt || 0) / share;
+      lines.push({
+        kind: "camp", when: fmtISO(r.iso), item: `${r.name} (camp)`,
+        where: r.where, detail: r.remark,
+        rateLabel: rt.type === "salary" ? "salary" : `${money(rt.perClass || rt.perPt || 0)}${share>1?` ÷ ${share}`:""}`, pay,
+      });
+    });
 
     /* Expenses are NOT on the payout run.
        A payout is earnings; a reimbursement is the coach's own money coming back.
@@ -77,16 +97,21 @@ export default function PayoutReport() {
        reconcile against a rate card or against a receipt. Approved claims are paid
        separately by the admin and shown below as an outstanding balance. */
 
-    const classPay = lines.filter(l => l.kind === "class").reduce((a, b) => a + b.pay, 0);
+    const classPay = lines.filter(l => l.kind === "class" || l.kind === "camp").reduce((a, b) => a + b.pay, 0);
     const ptPay    = lines.filter(l => l.kind === "pt").reduce((a, b) => a + b.pay, 0);
     const owed     = owedTo(tid);   // approved expenses, reimbursed separately
-    // salary is a flat monthly figure, independent of the lines above
-    const salary   = rt.type === "salary" ? (rt.monthly || 0) : 0;
+    /* Salary is a MONTHLY figure, so it has to be pro-rated to the period or the
+       report lies in both directions: a full month's salary against a one-day range,
+       or one month's against a year. Days in period ÷ 30.44 (the mean month). */
+    const days     = rangeDays(range);
+    const months   = days == null ? 1 : days / 30.44;
+    const salary   = rt.type === "salary" ? (rt.monthly || 0) * months : 0;
 
     return {
-      lines, classPay, ptPay, owed, salary,
+      lines, classPay, ptPay, owed, salary, months,
       total: classPay + ptPay + salary,
       nClasses: lines.filter(l => l.kind === "class").length,
+      nCamps: lines.filter(l => l.kind === "camp").length,
       nPt: lines.filter(l => l.kind === "pt").length,
       basisLabel: rt.type === "salary" ? `${money(rt.monthly || 0)}/month salary`
                 : rt.type === "per_head" ? `per head ${money(rt.perHead || 0)} · PT ${money(rt.perPt || 0)}`
@@ -95,17 +120,21 @@ export default function PayoutReport() {
   };
 
   const coaches = trainers.filter(t => !t.admin);
-  const report = coaches.map(t => ({ t, ...linesFor(t.id) }));
+  const report = useMemo(() => coaches.map(t => ({ t, ...linesFor(t.id) })),
+    [trainers, rates, range, basis, sessions, ptBookings, camps, sessionLog, expenseClaims]);
   const grand = report.reduce((a, r) => a + r.total, 0);
   const grandOwed = report.reduce((a, r) => a + r.owed, 0);
 
   /* CSV is what actually gets handed over — Danny's accountant wants a file, not
      a screen. Kept as one row per line item so anything can be re-derived. */
   const exportCsv = () => {
-    const rows = [["Trainer", "Basis", "When", "Item", "Location", "Detail", "Rate", "Pay"]];
+    const rows = [
+      ["ExerciseOnly — payout run", range.label, `${range.from} to ${range.to}`, `basis: ${basis}`],
+      [],
+      ["Trainer", "Basis", "When", "Item", "Location", "Detail", "Rate", "Pay"]];
     report.forEach(r => {
       r.lines.forEach(l => rows.push([r.t.name, r.basisLabel, l.when, l.item, l.where, l.detail, l.rateLabel, l.pay.toFixed(2)]));
-      if (r.salary) rows.push([r.t.name, r.basisLabel, "—", "Monthly salary", "", "", "", r.salary.toFixed(2)]);
+      if (r.salary) rows.push([r.t.name, r.basisLabel, "—", `Salary · ${r.months.toFixed(2)} month(s) of the period`, "", "", "", r.salary.toFixed(2)]);
       rows.push([r.t.name, "", "", "TOTAL DUE (payout)", "", "", "", r.total.toFixed(2)]);
       if (r.owed) rows.push([r.t.name, "", "", "Approved expenses — reimbursed separately", "", "", "", r.owed.toFixed(2)]);
     });
@@ -114,19 +143,26 @@ export default function PayoutReport() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = "exerciseonly-payout.csv";
+    a.href = url; a.download = `exerciseonly-payout-${range.from}_to_${range.to}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    ping("Payout CSV downloaded — one row per line item, ready for your accountant");
+    ping(`Payout CSV for ${range.label} — one row per line item, ready for your accountant`);
   };
 
   return (
     <div className="space-y-3">
+      {/* Same control, same default, same rows as the Coach log — read one, pay from
+          the other, and they describe the same days. */}
+      <RangeBar value={rangeSel} onChange={setRangeSel} range={range}
+        note="Pick a day, a week, a month, a year — or two dates." />
+
       <Card style={{ background: T.ink, color: T.paper, border: "none" }}>
-        <div className="text-xs font-bold mb-1" style={{ color: "#B9B5A9" }}>PAYOUT TOTAL · this period</div>
+        <div className="text-xs font-bold mb-1" style={{ color: "#B9B5A9" }}>
+          PAYOUT TOTAL · {range.label.toUpperCase()}</div>
         <div style={{ ...disp, fontWeight: 800, fontSize: 34 }}>{money(grand)}</div>
         <div className="text-xs mt-1" style={{ color: "#B9B5A9" }}>
-          {coaches.length} coaches · every line traces to a marked attendance or a completed PT session.
+          {range.key === "all" ? "Everything on record" : `${fmtISO(range.from)} → ${fmtISO(range.to)}`}
+          {" · "}{coaches.length} coaches · every line traces to a marked attendance or a completed PT session.
         </div>
         {/* Shown here, added nowhere. Danny needs to know he also owes this money,
             without it contaminating a figure that has to reconcile to a rate card. */}
@@ -164,8 +200,8 @@ export default function PayoutReport() {
           </button>
 
           <div className="grid grid-cols-4 gap-2 mt-2 text-center">
-            {[["Classes", r.nClasses, r.classPay], ["PT", r.nPt, r.ptPay],
-              ["Salary", r.salary ? "✓" : "—", r.salary],
+            {[["Classes", r.nCamps ? `${r.nClasses}+${r.nCamps} camp` : r.nClasses, r.classPay], ["PT", r.nPt, r.ptPay],
+              ["Salary", r.salary ? `${r.months.toFixed(1)} mth` : "—", r.salary],
               ["Expenses owed", r.owed > 0 ? "separate" : "—", r.owed]]
               .map(([l, n, v]) => (
               <div key={l} className="rounded-lg py-1.5" style={{ background: "#FBF3EC" }}>
@@ -197,14 +233,15 @@ export default function PayoutReport() {
               {r.salary > 0 && (
                 <div className="flex items-center gap-2 py-1 text-xs">
                   <span style={{ width: 30, color: T.muted }}>—</span>
-                  <span className="flex-1">Monthly salary <span style={{ color: T.muted }}>· flat, independent of sessions</span></span>
+                  <span className="flex-1">Salary <span style={{ color: T.muted }}>
+                    · flat, independent of sessions · pro-rated to {r.months.toFixed(2)} month{r.months === 1 ? "" : "s"} of this period</span></span>
                   <span className="font-bold" style={{ width: 54, textAlign: "right" }}>{money(r.salary)}</span>
                 </div>)}
             </div>)}
         </Card>
       ))}
 
-      <Btn full kind="dark" onClick={exportCsv}>Export payout CSV</Btn>
+      <Btn full kind="dark" onClick={exportCsv}>Export payout CSV · {range.label}</Btn>
 
       {/* Sample doc §"Open questions for Danny" — surfaced rather than assumed. */}
       <Card style={{ background: "#F7EEE9" }}>
@@ -215,6 +252,12 @@ export default function PayoutReport() {
           <div>· Reimbursements are <b>paid separately from the payout run</b>, and the admin marks each claim paid. Say if you would rather they were combined into one payment.</div>
           <div>· Do <b>no-shows count</b> toward per-head pay? Currently they don't — only confirmed attendance.</div>
           <div>· <b>Swimming</b> — same basis as other classes, or its own rate?</div>
+          <div>· <b>Camp days</b> pay at the class rate per block, split between co-coaches. They
+            previously paid nothing at all. Confirm the real basis — a five-day camp is not five classes.</div>
+          <div>· <b>Commission and bonuses have no model yet.</b> Rates cover per-class, per-head,
+            per-PT and salary only. If a coach earns a percentage of what their clients spend, or a
+            bonus on renewals or retention, say which and it becomes a rate type rather than a
+            figure someone adds by hand afterwards.</div>
         </div>
         <div className="text-[11px] mt-2" style={{ color: T.muted }}>
           Cash collected at walk-ins stays outside the app and is never added here.

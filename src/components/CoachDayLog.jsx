@@ -1,6 +1,6 @@
-/* CoachDayLog — the coach's diary, and the sheet the admin actually reads before paying.
+/* CoachDayLog — the coach's diary, and the sheet the admin reads before paying.
  *
- * This is the in-app equivalent of the Google Sheet Danny keeps today:
+ * The in-app equivalent of the Google Sheet Danny keeps today:
  *
  *     Date            Time      Name                  Remarks            Number of Sessions
  *     Wed, Jul 1      6:15 AM   Swati & Supriya
@@ -10,165 +10,60 @@
  *                     7:00 PM   Shreyans & Pooja                                 8
  *
  * WHY IT ISN'T THE PAYOUT REPORT. Payouts answers "what do I owe this coach?" — it
- * groups by coach, applies a rate card and produces money. This answers the question
- * that comes *before* it: "what did this coach actually do?" The admin reads the diary
- * to check the work happened, then reads the payout to pay for it. Collapsing the two
- * loses the check: a rate-card total with nothing to verify it against is a number you
+ * applies a rate card and produces money. This answers the question that comes
+ * first: "what did this coach actually do?" The admin reads the diary to check the
+ * work happened, then reads the payout to pay for it. Collapse the two and you lose
+ * the check: a rate-card total with nothing to verify it against is a number you
  * either trust or don't.
  *
- * Everything the coach ran appears, not just the payable work. The paper sheet lists
- * "Bootcamp" and "Holiday camp" beside named clients because it is a record of the
- * day, not an invoice.
+ * Both now read the SAME rows from `lib/worklog.js` over the SAME range, so they
+ * cannot describe different weeks.
  *
- * NUMBER OF SESSIONS = the pack balance left AFTER that session, and it appears only
- * on rows that draw from a pack. That matches the sheet: Shreyans & Pooja and
- * Mable & Wendy & Helen both read 8 against 10-session packs with 2 used. Writing it
- * by hand is how a balance drifts from the truth, so it is computed.
+ * Everything the coach ran appears, not only the payable work — the paper sheet
+ * lists "Bootcamp" and "Holiday camp" beside named clients because it is a record of
+ * the day, not an invoice.
+ *
+ * NUMBER OF SESSIONS = the pack balance left after that session, and only on rows
+ * that draw from a pack. Confirmed against the sheet: Shreyans & Pooja and
+ * Mable & Wendy & Helen both read 8, and both packs are 10 with 2 used. Computed,
+ * never typed — a hand-written balance drifts.
  */
 
 import { useMemo, useState } from "react";
 import { useApp } from "../state/AppState.jsx";
-import { CT } from "../data/seed.js";
-import { DAYS, dateFor, toMin } from "../lib/dates.js";
-import { PT_DUR, sessTrainers } from "../lib/scheduling.js";
+import { resolveRange } from "../lib/period.js";
+import { ampm, coachWorkRows, groupByDay, workCounts } from "../lib/worklog.js";
 import { downloadBlob, slug } from "../lib/intake.js";
+import RangeBar from "./RangeBar.jsx";
 import { T, disp } from "../theme.js";
-import { Btn, Card, Chip, Select } from "../ui/kit.jsx";
-
-/* "6:15 AM" — the sheet's format, not 24h. The admin is reconciling against a paper
-   printout and a WhatsApp message from the coach; matching the format they already
-   read is most of what makes a report checkable. */
-const ampm = (hhmm) => {
-  const m = toMin(hhmm || "00:00");
-  const h24 = Math.floor(m / 60), mi = m % 60;
-  const h = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h}:${String(mi).padStart(2, "0")} ${h24 < 12 ? "AM" : "PM"}`;
-};
-const dayLabel = (weekOff, day) =>
-  dateFor(weekOff, day).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+import { Btn, Card, Select } from "../ui/kit.jsx";
 
 export default function CoachDayLog() {
   const { camps, clientGroups, groupPacks, locName, ping, ptBookings, sessionLog,
           sessions, tName, trainers, user, isAdmin } = useApp();
 
   const coaches = trainers.filter(t => !t.admin);
-  /* A coach opening this sees their own log. An admin picks. */
+  /* A coach opening this sees their own log; an admin picks. */
   const [coach, setCoach] = useState(() =>
     (!isAdmin && coaches.some(c => c.id === user?.id)) ? user.id : (coaches[0]?.id || ""));
-  const [weeks, setWeeks] = useState(1);   // how many weeks of the recurring timetable to lay out
+  /* Defaults to the current month: a payout run is monthly, and landing on the
+     period you are about to pay for beats landing on one you aren't. */
+  const [rangeSel, setRangeSel] = useState({ key: "mtd", from: "", to: "" });
+  const range = useMemo(() => resolveRange(rangeSel.key, rangeSel), [rangeSel]);
 
-  /* Pack balance for a named client or group, as it stands now. The sheet records
-     the balance at the time of the session; the demo has one balance per pack, so
-     this is the current one. Server-side this reads the pack ledger at that date. */
-  const packFor = (name) => groupPacks.find(p => p.name === name)
-    || groupPacks.find(p => clientGroups.find(g => g.id === p.groupId)?.name === name);
-
-  const rows = useMemo(() => {
-    if (!coach) return [];
-    const out = [];
-
-    for (let w = 0; w < weeks; w++) {
-      // ---- classes and bootcamps this coach is on ----
-      sessions.filter(s => sessTrainers(s).includes(coach))
-        .filter(s => (s.weekOff ?? w) === w || s.weekOff == null)   // seed rows recur weekly
-        .forEach(s => {
-          const attended = (s.attendees || []).filter(a => a.status === "attended").length;
-          const booked = (s.attendees || []).length;
-          out.push({
-            key: `s${s.id}w${w}`, w, day: s.day, time: s.time,
-            name: CT[s.type]?.name || "Class",
-            kind: "class",
-            where: locName(s.loc),
-            remark: [
-              s.status === "cancelled" ? `CANCELLED${s.cancelReason ? ` — ${s.cancelReason}` : ""}` : "",
-              sessTrainers(s).length > 1 ? `with ${sessTrainers(s).filter(x => x !== coach).map(tName).join(", ")}` : "",
-              s.done ? `${attended} of ${booked} attended` : booked ? `${booked} booked, attendance not marked` : "",
-            ].filter(Boolean).join(" · "),
-            cancelled: s.status === "cancelled",
-            sessionsLeft: null,
-          });
-        });
-
-      // ---- PT and group PT ----
-      ptBookings.filter(b => b.trainer === coach && (b.weekOff ?? 0) === w)
-        .forEach(b => {
-          const who = b.forGroup || b.who || "Client";
-          const pack = packFor(who);
-          out.push({
-            key: `p${b.id}w${w}`, w, day: b.day, time: b.time,
-            name: who,
-            kind: b.forGroup ? "grouppt" : "pt",
-            where: b.otherLabel || locName(b.loc),
-            remark: [
-              b.status === "cancelled" ? "CANCELLED" : "",
-              b.status === "done" ? "completed" : b.status === "cancelled" ? "" : "not marked complete",
-            ].filter(Boolean).join(" · "),
-            cancelled: b.status === "cancelled",
-            // only pack-backed sessions carry a balance — same as the paper sheet
-            sessionsLeft: pack ? pack.size - pack.used : null,
-          });
-        });
-
-      // ---- camps: "Holiday camp" on the sheet ----
-      camps.forEach(c => (c.days || []).forEach((cd, i) => {
-        const abs = (c.startInDays ?? 0) + i;
-        const day = ((abs % 7) + 7) % 7;
-        if (Math.floor(abs / 7) !== w) return;
-        (cd.sessions || []).forEach(cs => {
-          const coaches2 = cs.trainers || (cs.trainer ? [cs.trainer] : []);
-          if (!coaches2.includes(coach)) return;
-          out.push({
-            key: `c${c.id}${i}${cs.start}w${w}`, w, day, time: cs.start,
-            name: c.name, kind: "camp", where: locName(c.loc),
-            remark: [cd.label, cs.activity, `${cs.hours}h`].filter(Boolean).join(" · "),
-            cancelled: false, sessionsLeft: null,
-          });
-        });
-      }));
-    }
-
-    /* Backfilled history (the per-client sheet tabs) belongs here too — a session
-       the coach ran but that was entered by hand is still work done, and leaving it
-       out is how the diary and the client's own history disagree. */
-    sessionLog.filter(l => l.tookBy === coach).forEach(l => {
-      const pack = packFor(l.who);
-      out.push({
-        key: `l${l.id}`, w: null, day: null, time: l.time, dateText: l.date,
-        name: l.who, kind: "logged", where: "", remark: l.remark || "recorded from history",
-        cancelled: false, sessionsLeft: pack ? pack.size - pack.used : null,
-      });
-    });
-
-    return out.sort((a, b) => {
-      if (a.w === null) return 1;            // hand-entered history sits after the timetable
-      if (b.w === null) return -1;
-      return (a.w - b.w) || (a.day - b.day) || (toMin(a.time) - toMin(b.time));
-    });
-  }, [coach, weeks, sessions, ptBookings, camps, sessionLog, groupPacks, clientGroups]);
-
-  /* Grouped by date, so the date prints once — exactly how the sheet reads. */
-  const days = useMemo(() => {
-    const m = [];
-    rows.forEach(r => {
-      const label = r.dateText || dayLabel(r.w, r.day);
-      const last = m[m.length - 1];
-      if (last && last.label === label) last.rows.push(r);
-      else m.push({ label, rows: [r] });
-    });
-    return m;
-  }, [rows]);
-
-  const live = rows.filter(r => !r.cancelled);
-  const counts = {
-    total: live.length,
-    pt: live.filter(r => r.kind === "pt" || r.kind === "grouppt" || r.kind === "logged").length,
-    classes: live.filter(r => r.kind === "class").length,
-    camps: live.filter(r => r.kind === "camp").length,
-  };
+  const ctx = { sessions, ptBookings, camps, sessionLog, groupPacks, clientGroups, locName, tName };
+  const rows = useMemo(() => coachWorkRows(coach, range, ctx),
+    [coach, range, sessions, ptBookings, camps, sessionLog, groupPacks, clientGroups]);
+  const days = useMemo(() => groupByDay(rows), [rows]);
+  const counts = workCounts(rows);
 
   const exportCsv = () => {
     const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const lines = [["Date", "Time", "Name", "Remarks", "Number of Sessions"].map(q).join(",")];
+    const lines = [
+      [`ExerciseOnly — coach log`, tName(coach), range.label, `${range.from} to ${range.to}`].map(q).join(","),
+      "",
+      ["Date", "Time", "Name", "Remarks", "Number of Sessions"].map(q).join(","),
+    ];
     days.forEach(d => {
       d.rows.forEach((r, i) => lines.push([
         q(i === 0 ? d.label : ""),          // date printed once per day, like the sheet
@@ -177,18 +72,22 @@ export default function CoachDayLog() {
       ].join(",")));
       lines.push("");                        // the blank row between days
     });
-    downloadBlob(`coach-log-${slug(tName(coach))}.csv`, lines.join("\n"), "text/csv;charset=utf-8");
-    ping(`${tName(coach)}'s log exported — same columns as the sheet`);
+    lines.push(["TOTAL", "", `${counts.total} sessions`, `${counts.pt} PT · ${counts.classes} classes · ${counts.camps} camp days`, ""].map(q).join(","));
+    downloadBlob(`coach-log-${slug(tName(coach))}-${range.from}_to_${range.to}.csv`,
+      lines.join("\n"), "text/csv;charset=utf-8");
+    ping(`${tName(coach)} · ${range.label} exported — same columns as the sheet`);
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 items-center">
-        <Select value={coach} onChange={setCoach}
-          options={coaches.map(t => [t.id, t.name])} style={{ flex: 1 }} />
-        {[[1, "1 week"], [2, "2 weeks"], [4, "4 weeks"]].map(([n, l]) => (
-          <Chip key={n} active={weeks === n} onClick={() => setWeeks(n)}>{l}</Chip>))}
-      </div>
+      <Select value={coach} onChange={setCoach}
+        options={coaches.map(t => [t.id, t.name])} style={{ width: "100%" }} />
+
+      {/* The same control every other report uses. A payout period picked one way on
+          one screen and another way on the next is how two reports disagree about
+          the same month. */}
+      <RangeBar value={rangeSel} onChange={setRangeSel} range={range}
+        note="Pick a day, a week, a month, a year — or two dates." />
 
       <div className="grid grid-cols-4 gap-2 text-center">
         {[["Sessions", counts.total], ["PT", counts.pt], ["Classes", counts.classes], ["Camp days", counts.camps]]
@@ -198,6 +97,11 @@ export default function CoachDayLog() {
             <div style={{ ...disp, fontWeight: 700, fontSize: 18 }}>{n}</div>
           </div>))}
       </div>
+      {counts.cancelled > 0 && (
+        <div className="text-[11px]" style={{ color: T.muted }}>
+          {counts.cancelled} cancelled session{counts.cancelled === 1 ? "" : "s"} shown struck through and
+          excluded from the counts — kept because a light week needs its reason on the same page.
+        </div>)}
 
       <Card className="!p-0 overflow-hidden">
         <div className="flex text-[10px] font-bold px-3 py-2"
@@ -209,7 +113,7 @@ export default function CoachDayLog() {
 
         {days.length === 0 && (
           <div className="px-3 py-4 text-xs" style={{ color: T.muted }}>
-            Nothing scheduled for {tName(coach)} in this period.
+            Nothing for {tName(coach)} in {range.label.toLowerCase()}. Try a wider period.
           </div>)}
 
         {days.map(d => (
@@ -234,7 +138,7 @@ export default function CoachDayLog() {
           </div>))}
       </Card>
 
-      <Btn full kind="dark" onClick={exportCsv}>Export {tName(coach)}'s log</Btn>
+      <Btn full kind="dark" onClick={exportCsv}>Export {tName(coach)} · {range.label}</Btn>
 
       <Card style={{ background: "#F4F7F3" }}>
         <div className="text-[11px]" style={{ color: T.deep }}>
@@ -243,7 +147,8 @@ export default function CoachDayLog() {
           not typed, so it can't drift.
           <div className="mt-1.5">
             This is the diary, not the invoice. Read it to check the work happened, then use
-            <b> Payouts</b> to pay for it.
+            <b> Payouts</b> for the same period to pay for it — both read the same rows, so they
+            can't disagree.
           </div>
         </div>
       </Card>

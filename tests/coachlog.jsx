@@ -38,6 +38,54 @@ const setVal=async(el,v)=>{await act(async()=>{
   el.dispatchEvent(new dom.window.Event(el.tagName==="SELECT"?"change":"input",{bubbles:true}));});};
 const ck=[]; const ok=(n,c)=>ck.push([n,!!c]);
 
+/* ============ 0 · THE SHARED MATERIALISER ============
+   Coach log and Payouts read the SAME rows over the SAME range. If each expanded the
+   recurring timetable its own way they would drift — one counting a cancelled class,
+   the other not — and the admin would reconcile a payment against a diary that
+   disagrees with it. Unit-tested here because it is the piece that stops that. */
+const W=await import("../src/lib/worklog.js");
+const P=await import("../src/lib/period.js");
+const NOW=new Date(2026,6,28);
+
+ok("a single-day range is one day, end inclusive", W.daysInRange(P.resolveRange("today",{},NOW)).length===1);
+ok("a custom fortnight is 14 days", W.daysInRange(P.resolveRange("custom",{from:"2026-07-01",to:"2026-07-14"},NOW)).length===14);
+ok("'this week' is Monday to today, not the last 7 days",
+   P.rangeDays(P.resolveRange("wtd",{},NOW))===2);   // 28 Jul 2026 is a Tuesday
+ok("  ...whereas 7 days really is 7", P.rangeDays(P.resolveRange("7d",{},NOW))===7);
+/* "All time" resolves to year 0 → year 9999. Expanding a recurring timetable across
+   four million days would lock the phone. */
+ok("expansion is capped so 'all time' can't hang the app", W.daysInRange({key:"all"}).length<=W.MAX_DAYS+1);
+ok("  ...and any range is capped too", W.daysInRange(P.resolveRange("custom",{from:"2020-01-01",to:"2030-01-01"},NOW)).length<=W.MAX_DAYS+1);
+
+ok("12-hour times, as the paper sheet reads", W.ampm("06:15")==="6:15 AM" && W.ampm("19:00")==="7:00 PM");
+ok("  ...midnight and noon don't come out as 0:00", W.ampm("00:30")==="12:30 AM" && W.ampm("12:05")==="12:05 PM");
+/* The session log stores a human label because that is what the Google Sheet held. */
+ok("a sheet-style date label parses to ISO", W.isoFromLabel("Wed, Jul 1, 2026")==="2026-07-01");
+ok("  ...even without the year", /^\d{4}-07-03$/.test(W.isoFromLabel("Fri, Jul 3")||""));
+ok("  ...and an unreadable one returns null rather than a wrong date", W.isoFromLabel("sometime")===null);
+
+const july=P.resolveRange("custom",{from:"2026-07-01",to:"2026-07-31"},NOW);
+const ctx={ sessions:[
+    {id:"s1",day:1,time:"07:00",type:"BC",loc:"MP",trainer:"x",trainers:["x"],status:"scheduled",
+     attendees:[{name:"a",status:"attended"},{name:"b",status:"confirmed"}],done:true},
+    {id:"s2",day:1,time:"09:00",type:"STR",loc:"MP",trainer:"x",trainers:["x"],status:"cancelled",attendees:[]},
+  ], ptBookings:[], camps:[], sessionLog:[], groupPacks:[], clientGroups:[] };
+const rows=W.coachWorkRows("x", july, ctx);
+const bootcamps=rows.filter(r=>r.name==="Boot Camp");
+ok("a recurring weekly class expands across the month", bootcamps.length>=4);
+ok("  ...on real dates, oldest first", rows[0].iso < rows[rows.length-1].iso);
+ok("  ...all landing on the same weekday", new Set(bootcamps.map(r=>r.day)).size===1);
+/* Cancelled work stays VISIBLE but is never payable — a light week needs its reason
+   on the same page, and the payout must not pay for it. */
+ok("cancelled sessions are kept in the diary", rows.some(r=>r.cancelled));
+ok("  ...and are never payable", rows.filter(r=>r.cancelled).every(r=>!r.payable));
+ok("delivered is recorded separately from payable", rows.some(r=>r.delivered && r.payable));
+/* Per-head pay multiplies by heads that actually turned up, not heads booked. */
+ok("attendance is carried for per-head pay", bootcamps[0].attended===1);
+ok("  ...counting attended, not booked", bootcamps[0].booked===2);
+ok("a coach with no work gets no rows", W.coachWorkRows("nobody", july, ctx).length===0);
+ok("counts exclude cancelled work", W.workCounts(rows).cancelled>0 && W.workCounts(rows).total<rows.length);
+
 await click("Owner console · not a trainer");
 
 /* ==================== 1 · SHEET 1 — COACH DAY LOG ==================== */
@@ -52,6 +100,29 @@ await exact("Coach log");
 ok("groups by date, printed once per day", /\w{3}, \d{1,2} \w{3} \d{4}/.test(txt()));
 ok("times read as the sheet does, not 24h", /\d{1,2}:\d\d (AM|PM)/.test(txt()));
 ok("the sheet's own columns are the headings", /TIME/.test(txt()) && /NAME/.test(txt()) && /LEFT/.test(txt()));
+
+/* ---- the report is taken out for a period ----
+   A 1/2/4-week toggle can't answer "what did Ansab do on the 3rd" or "what is this
+   quarter's coach bill", and both are asked. Same shared control as every other
+   report, so two screens can't disagree about the same month. */
+ok("a period can be chosen", /PERIOD/.test(txt()));
+ok("  ...a single day", !!btns().find(b=>b.textContent.trim()==="Today"));
+ok("  ...a week", !!btns().find(b=>b.textContent.trim()==="This week"));
+ok("  ...a month", !!btns().find(b=>b.textContent.trim()==="This month"));
+ok("  ...a quarter and a year", !!btns().find(b=>b.textContent.trim()==="Quarter") && !!btns().find(b=>b.textContent.trim()==="This year"));
+ok("  ...or two arbitrary dates", !!btns().find(b=>b.textContent.includes("Custom")));
+ok("  ...and the exact days are spelled out, not just a preset name", /end date included/.test(txt()));
+
+const sessionCount=()=>Number((/Sessions(\d+)/.exec(txt().replace(/\s/g,""))||[])[1] ?? -1);
+const monthN=sessionCount();
+ok("defaults to the month being paid", monthN>0);
+await exact("Today");
+const dayN=sessionCount();
+ok("a single day shows fewer sessions than a month", dayN < monthN);
+await exact("This year");
+ok("a year shows at least as many as a month", sessionCount() >= monthN);
+await exact("This month");
+ok("returning to the month restores the same figure", sessionCount()===monthN);
 
 /* The paper sheet lists Bootcamp and Holiday camp beside named clients — it is a
    record of the day, not an invoice, so unpayable rows belong in it. */
@@ -74,7 +145,12 @@ ok("  ...and switching coach changes the log", txt().length!==before || /Nothing
 await setVal(sel, "danny");
 ok("a coach with nothing on says so rather than showing an empty box",
    /Nothing scheduled|TIME/.test(txt()));
-ok("the log exports", !!btns().find(b=>b.textContent.includes("Export") && b.textContent.includes("log")));
+/* The export button names the coach AND the period, so you can't hand over the wrong
+   month without reading it on the button first. */
+const exportBtn=btns().find(b=>/^Export /.test(b.textContent.trim()));
+ok("the log exports", !!exportBtn);
+ok("  ...naming the coach and the period on the button", /Export .+ · .+/.test(exportBtn?.textContent||""));
+ok("  ...and the period matches the one selected", (exportBtn?.textContent||"").includes("July"));
 
 /* Payouts must stay a SEPARATE report — merging them loses the check. */
 await exact("Payouts");
