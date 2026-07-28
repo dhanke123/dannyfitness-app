@@ -33,6 +33,12 @@ export const TRAINERS = [
     bio:"Dylan has been with ExerciseOnly for years — passionate about helping clients improve their fitness and hit their goals." },
   { id:"marcus", name:"Marcus", tag:"Coach", demo:true, bio:"Demo coach — replace with a real trainer." },
   { id:"wei", name:"Wei", tag:"Coach", demo:true, bio:"Demo coach — replace with a real trainer." },
+  /* Ansab covers sessions — the session log and the paper sheet both record him
+     ("Ansab trained"), and Decision 24 is explicit that attendance names who ACTUALLY
+     trained the client, substitutes included. He was missing from the roster, so every
+     one of those rows rendered the raw id `ansab` and he could not be selected in the
+     coach day log or paid from the payout run. */
+  { id:"ansab", name:"Ansab", tag:"Coach", bio:"Ansab covers early-morning PT and group sessions across the east-coast venues." },
 ];
 
 // ExerciseOnly's actual group offerings (bootcamp, HIIT, NS/IPPT prep, strength, cardio).
@@ -96,10 +102,11 @@ export const seedShifts = {
   dylan:  {0:["08:00","13:00"],1:["08:00","13:00"],2:["08:00","13:00"],3:["08:00","13:00"],4:["08:00","13:00"]},
   marcus: {0:["10:00","15:00"],1:["10:00","15:00"],3:["10:00","15:00"],4:["10:00","15:00"],5:["10:00","14:00"]},
   wei:    {0:["14:00","19:00"],1:["14:00","19:00"],2:["14:00","19:00"],5:["09:00","13:00"],6:["09:00","13:00"]},
+  ansab:  {0:["06:00","11:00"],2:["06:00","11:00"],4:["06:00","11:00"],5:["07:00","11:00"]},
 };
 
 // Head coach (Danny) is priced separately from the other coaches — see PT packs too.
-export const PT_PRICE = { danny:120, dylan:90, marcus:85, wei:85 };
+export const PT_PRICE = { danny:120, dylan:90, marcus:85, wei:85, ansab:85 };
 
 export const isHead = (trainerId) => !!TRAINERS.find(t=>t.id===trainerId)?.head;
 

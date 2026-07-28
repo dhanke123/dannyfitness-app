@@ -12,7 +12,7 @@ export default function StaffClients() {
           resolveNoShow, setActive, setIntakeForm, setMeasForm, setRoutineSheet, tName, tab, user,
           sessionLog, addSessionLog, groupPacks, trainers,
           clients, clientGroups, clientById, addClient, createGroup, updateGroup, deleteGroup,
-          importClientsCsv, editClient, setIntakeView, locName } = useApp();
+          importClientsCsv, editClient, setIntakeView, locName, locations } = useApp();
   /* Records store ids for coach and venue; "danny" / "CDS" are database values.
      Every surface that shows a record resolves them to names. */
   const resolve = (kind, v) => kind === "trainer" ? tName(v) : kind === "location" ? locName(v) : v;
@@ -24,13 +24,54 @@ export default function StaffClients() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
-  const [newClient, setNewClient] = useState(null);         // {name, phone, email}
-  const [editSheet, setEditSheet] = useState(null);         // {id, name, phone, email} — admin edits any client
+  const [newClient, setNewClient] = useState(null);         // {name, phone, email, loc}
+  const [editSheet, setEditSheet] = useState(null);         // {id, name, phone, email, loc} — admin edits any client
+  /* Search. Twenty seeded clients already scroll past a phone screen and the real
+     roster is bigger; by a hundred, finding someone means thumbing through the lot.
+     Matches name, mobile, email AND location, because "who trains at Bayshore?" is a
+     question the admin asks as often as "what's Priya's number?". Digits-only on the
+     phone so "9123 0001" finds a record stored as "91230001". */
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const digits = needle.replace(/\D/g, "");
+  const matchesClient = (c) => {
+    if (!needle) return true;
+    return (c.name || "").toLowerCase().includes(needle)
+      || (c.email || "").toLowerCase().includes(needle)
+      || locName(c.loc || "").toLowerCase().includes(needle)
+      || (!!digits && (c.phone || "").replace(/\D/g, "").includes(digits));
+  };
+  const shownClients = clients.filter(matchesClient);
+  /* A group matches on its own name or on ANY member — searching "Wendy" should
+     surface the trio she trains in, not just her personal record. */
+  const shownGroups = clientGroups.filter(g => !needle
+    || g.name.toLowerCase().includes(needle)
+    || g.memberIds.some(id => { const c = clientById(id); return c && matchesClient(c); }));
   return (<>
         {/* ==================== TRAINER / ADMIN: CLIENTS ==================== */}
         {!isClient && tab==="clients" && (
           <main className="flex-1 overflow-y-auto overflow-x-hidden pb-24 px-5">
             <H>Clients</H>
+
+            {/* One search box for both lists below — a person and the group they train
+                in are the same lookup, and splitting it into two boxes means guessing
+                which one holds the name you half-remember. */}
+            <div className="relative mb-3">
+              <input value={q} onChange={e=>setQ(e.target.value)}
+                placeholder="Search name, mobile, email or location"
+                aria-label="Search clients and groups"
+                className="w-full pl-9 pr-9 py-2.5 rounded-xl text-sm outline-none"
+                style={{border:`1.5px solid ${T.line}`, background:T.card}}/>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{color:T.muted}} aria-hidden="true">🔍</span>
+              {q && (
+                <button onClick={()=>setQ("")} aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-sm font-bold px-1.5"
+                  style={{color:T.muted}}>✕</button>)}
+            </div>
+            {needle && (
+              <div className="text-xs mb-2" style={{color:T.muted}}>
+                {shownClients.length} client{shownClients.length===1?"":"s"} · {shownGroups.length} group{shownGroups.length===1?"":"s"} matching "{q.trim()}"
+              </div>)}
 
             {/* ---- Queue 2 of 4: NO-SHOWS (Decisions 5, 6, 7) ----
                  Class no-shows get the same treatment as PT: the coach marks absent, nothing
@@ -91,7 +132,9 @@ export default function StaffClients() {
                   No groups yet. A group links 2 or more clients so they share one pack and one payment —
                   each of them still logs in as themselves.
                 </div>)}
-              {clientGroups.map(g=>{
+              {clientGroups.length > 0 && shownGroups.length === 0 && (
+                <div className="text-xs" style={{color:T.muted}}>No group matches "{q.trim()}".</div>)}
+              {shownGroups.map(g=>{
                 const pack = groupPacks.find(p=>p.groupId===g.id || p.name===g.name);
                 const left = pack ? pack.size - pack.used : null;
                 return (
@@ -115,26 +158,40 @@ export default function StaffClients() {
 
             {/* header actions: the registry is the source of truth now */}
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-bold" style={{color:T.muted}}>CLIENTS · {clients.length} people · {clientGroups.length} groups</div>
+              <div className="text-xs font-bold" style={{color:T.muted}}>
+                CLIENTS · {needle ? `${shownClients.length} of ${clients.length}` : `${clients.length} people`} · {clientGroups.length} groups</div>
               <div className="flex gap-1.5">
-                <Btn small kind="ghost" onClick={()=>setNewClient({name:"", phone:"", email:""})}>+ Client</Btn>
+                <Btn small kind="ghost" onClick={()=>setNewClient({name:"", phone:"", email:"", loc:""})}>+ Client</Btn>
                 <Btn small kind="ghost" onClick={()=>setGroupBuilder({memberIds:[], primaryId:null})}>+ Group</Btn>
                 {isAdmin && <Btn small kind="ghost" onClick={()=>setImportOpen(true)}>Import ⇪</Btn>}
               </div>
             </div>
 
-            {clients.map(c=>c.name).map(n=>(
+            {needle && shownClients.length === 0 && (
+              <Card className="mb-2"><div className="text-sm" style={{color:T.muted}}>
+                No client matches "{q.trim()}". Search covers name, mobile, email and location.
+              </div></Card>)}
+
+            {shownClients.map(c=>c.name).map(n=>(
               <Card key={n} className="mb-2">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{background:T.line}}>{n[0]}</div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm">{n}</div>
-                    <div className="text-xs" style={{color:T.muted}}>{n==="Sam Lee"?`${credits.classes} class + ${credits.ptHead+credits.ptCoach} PT credits`:"Active member"}</div></div>
+                    <div className="text-xs" style={{color:T.muted}}>{n==="Sam Lee"?`${credits.classes} class + ${credits.ptHead+credits.ptCoach} PT credits`:"Active member"}</div>
+                    {/* Mobile, email and location together — the three things anyone needs
+                        to place a person and get hold of them. Location was missing, and it
+                        is what tells a coach which of eight venues to expect them at. */}
+                    {(()=>{ const c = clients.find(x=>x.name===n); if (!c) return null;
+                      const bits = [c.phone, c.email, c.loc && `📍 ${locName(c.loc)}`].filter(Boolean);
+                      return bits.length ? (
+                        <div className="text-[11px] truncate" style={{color:T.deep}}>{bits.join(" · ")}</div>) : null; })()}
+                  </div>
                   <div className="flex gap-1.5">
                     <Btn small kind="ghost" onClick={()=>setMeasForm({who:n, weight:"", fat:""})}>+ Stats</Btn>
                     <Btn small kind="ghost" onClick={()=>setIntakeForm({who:n})}>+ Intake</Btn>
                     {isAdmin && (()=>{ const c = clients.find(x=>x.name===n);
-                      return c ? <Btn small kind="ghost" onClick={()=>setEditSheet({id:c.id, name:c.name, phone:c.phone||"", email:c.email||""})}>Edit</Btn> : null; })()}
+                      return c ? <Btn small kind="ghost" onClick={()=>setEditSheet({id:c.id, name:c.name, phone:c.phone||"", email:c.email||"", loc:c.loc||""})}>Edit</Btn> : null; })()}
                   </div>
                 </div>
                 <div className="flex gap-1.5 mt-2">
@@ -245,9 +302,17 @@ export default function StaffClients() {
                      Auto-fills when attendance is marked; staff can backfill past
                      sessions (client-side past booking stays blocked). ---- */}
                 {(() => {
-                  const logs = sessionLog.filter(l => l.who === n);
+                  /* A group member's joint sessions are logged against the GROUP name
+                     ("Swati & Supriya"), which is how the paper sheet keeps them — one tab
+                     per pair. Filtering on the person's own name alone left Swati's card
+                     empty while six of her sessions sat one row away. Her history is her own
+                     sessions plus the ones her group ran. */
+                  const myGroups = clientGroups.filter(g =>
+                    g.memberIds.some(id => clientById(id)?.name === n)).map(g => g.name);
+                  const logs = sessionLog.filter(l => l.who === n || myGroups.includes(l.who));
                   const open = openSessions === n;
-                  const pack = groupPacks.find(g => g.name === n);
+                  const pack = groupPacks.find(g => g.name === n)
+                    || groupPacks.find(g => myGroups.includes(g.name));
                   return (
                     <div className="mt-2 pt-2" style={{borderTop:`1px solid ${T.line}`}}>
                       <div className="flex items-center justify-between">
@@ -339,9 +404,13 @@ export default function StaffClients() {
                       className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
                     <input value={newClient.email} onChange={e=>setNewClient(x=>({...x,email:e.target.value}))} placeholder="Email (optional)"
                       className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                    {/* Which venue they train at — asked as often as the phone number,
+                        because Danny runs out of eight outdoor locations. */}
+                    <Select value={newClient.loc||""} onChange={v=>setNewClient(x=>({...x,loc:v}))}
+                      options={[["","Usual location (optional)"],...locations.map(l=>[l.id,l.name])]} style={{width:"100%"}}/>
                   </div>
                   <Btn full disabled={!newClient.name.trim()} onClick={()=>{
-                    addClient({ name:newClient.name.trim(), phone:newClient.phone.replace(/\D/g,""), email:newClient.email.trim() });
+                    addClient({ name:newClient.name.trim(), phone:newClient.phone.replace(/\D/g,""), email:newClient.email.trim(), loc:newClient.loc||"" });
                     ping(`${newClient.name.trim()} added`); setNewClient(null);}}>Add client</Btn>
                 </div>
               </div>)}
@@ -368,9 +437,12 @@ export default function StaffClients() {
                     <div><div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>EMAIL</div>
                       <input value={editSheet.email} onChange={e=>setEditSheet(x=>({...x,email:e.target.value}))}
                         className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                    <div><div className="text-[10px] font-bold mb-1" style={{color:T.muted}}>USUAL LOCATION</div>
+                      <Select value={editSheet.loc||""} onChange={v=>setEditSheet(x=>({...x,loc:v}))}
+                        options={[["","Not set"],...locations.map(l=>[l.id,l.name])]} style={{width:"100%"}}/></div>
                   </div>
                   <Btn full disabled={!editSheet.name.trim()} onClick={()=>{
-                    editClient(editSheet.id, { name:editSheet.name.trim(), phone:editSheet.phone.replace(/\D/g,""), email:editSheet.email.trim() });
+                    editClient(editSheet.id, { name:editSheet.name.trim(), phone:editSheet.phone.replace(/\D/g,""), email:editSheet.email.trim(), loc:editSheet.loc||"" });
                     setEditSheet(null);}}>Save changes</Btn>
                 </div>
               </div>)}
@@ -528,7 +600,7 @@ export default function StaffClients() {
                     with sessions_remaining.
                   </div>
                   <div className="text-[10px] rounded-lg p-2 mb-2 font-mono" style={{background:"#F4F1EA", color:T.muted}}>
-                    name,phone,email,group_name,is_primary,sessions_remaining<br/>
+                    name,phone,email,location,group_name,is_primary,sessions_remaining<br/>
                     Swati,9123...,s@x.com,Swati &amp; Supriya,1,4<br/>
                     Supriya,9124...,,Swati &amp; Supriya,,4
                   </div>

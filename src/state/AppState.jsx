@@ -320,26 +320,26 @@ export function AppProvider({ children }) {
      primary pays, owns the shared pack and receives billing comms. Groups are
      links, never merged identities: login is always one person. */
   const [clients, setClients] = useState([
-    { id:"c1",  name:"Sam Lee",  phone:"91230001", email:"sam@example.sg",  status:"active", source:"member" },
-    { id:"c2",  name:"Ben",      phone:"91230002", email:"",                status:"active", source:"member" },
-    { id:"c3",  name:"Cheryl",   phone:"91230003", email:"",                status:"active", source:"member" },
-    { id:"c4",  name:"Priya",    phone:"91230004", email:"",                status:"active", source:"member" },
-    { id:"c5",  name:"Kumar",    phone:"91230005", email:"",                status:"active", source:"member" },
-    { id:"c6",  name:"Elaine",   phone:"91230006", email:"",                status:"active", source:"member" },
-    { id:"c7",  name:"Ivan",     phone:"91230007", email:"",                status:"active", source:"member" },
-    { id:"c8",  name:"Nadia",    phone:"91230008", email:"",                status:"active", source:"member" },
-    { id:"c9",  name:"Sarah T",  phone:"91230009", email:"",                status:"active", source:"member" },
-    { id:"c10", name:"Gireesh",  phone:"91230010", email:"",                status:"active", source:"member" },
-    { id:"c11", name:"Wen Jie",  phone:"91230011", email:"",                status:"active", source:"member" },
-    { id:"c12", name:"Dominic",  phone:"91230012", email:"",                status:"active", source:"member" },
-    { id:"c13", name:"Jaiveer",  phone:"91230013", email:"",                status:"active", source:"member" },
-    { id:"c14", name:"Swati",    phone:"91230014", email:"",                status:"active", source:"import" },
-    { id:"c15", name:"Supriya",  phone:"91230015", email:"",                status:"active", source:"import" },
-    { id:"c16", name:"Shreyans", phone:"91230016", email:"",                status:"active", source:"import" },
-    { id:"c17", name:"Pooja",    phone:"91230017", email:"",                status:"active", source:"import" },
-    { id:"c18", name:"Mable",    phone:"91230018", email:"",                status:"active", source:"import" },
-    { id:"c19", name:"Wendy",    phone:"91230019", email:"",                status:"active", source:"import" },
-    { id:"c20", name:"Helen",    phone:"91230020", email:"",                status:"active", source:"import" },
+    { id:"c1",  name:"Sam Lee",  phone:"91230001", email:"sam@example.sg",  status:"active", source:"member" , loc:"CDS" },
+    { id:"c2",  name:"Ben",      phone:"91230002", email:"",                status:"active", source:"member" , loc:"GBB" },
+    { id:"c3",  name:"Cheryl",   phone:"91230003", email:"",                status:"active", source:"member" , loc:"MP" },
+    { id:"c4",  name:"Priya",    phone:"91230004", email:"",                status:"active", source:"member" , loc:"CDS" },
+    { id:"c5",  name:"Kumar",    phone:"91230005", email:"",                status:"active", source:"member" , loc:"BP" },
+    { id:"c6",  name:"Elaine",   phone:"91230006", email:"",                status:"active", source:"member" , loc:"WS" },
+    { id:"c7",  name:"Ivan",     phone:"91230007", email:"",                status:"active", source:"member" , loc:"GBB" },
+    { id:"c8",  name:"Nadia",    phone:"91230008", email:"",                status:"active", source:"member" , loc:"MP" },
+    { id:"c9",  name:"Sarah T",  phone:"91230009", email:"",                status:"active", source:"member" , loc:"CDS" },
+    { id:"c10", name:"Gireesh",  phone:"91230010", email:"",                status:"active", source:"member" , loc:"BP" },
+    { id:"c11", name:"Wen Jie",  phone:"91230011", email:"",                status:"active", source:"member" , loc:"GBB" },
+    { id:"c12", name:"Dominic",  phone:"91230012", email:"",                status:"active", source:"member" , loc:"WS" },
+    { id:"c13", name:"Jaiveer",  phone:"91230013", email:"",                status:"active", source:"member" , loc:"MP" },
+    { id:"c14", name:"Swati",    phone:"91230014", email:"",                status:"active", source:"import" , loc:"CDS" },
+    { id:"c15", name:"Supriya",  phone:"91230015", email:"",                status:"active", source:"import" , loc:"CDS" },
+    { id:"c16", name:"Shreyans", phone:"91230016", email:"",                status:"active", source:"import" , loc:"GBB" },
+    { id:"c17", name:"Pooja",    phone:"91230017", email:"",                status:"active", source:"import" , loc:"GBB" },
+    { id:"c18", name:"Mable",    phone:"91230018", email:"",                status:"active", source:"import" , loc:"BP" },
+    { id:"c19", name:"Wendy",    phone:"91230019", email:"",                status:"active", source:"import" , loc:"BP" },
+    { id:"c20", name:"Helen",    phone:"91230020", email:"",                status:"active", source:"import" , loc:"BP" },
   ]);
   const [clientGroups, setClientGroups] = useState([
     { id:"g1", name:"Swati & Supriya",       memberIds:["c14","c15"],       primaryId:"c14", trainer:"danny" },
@@ -349,8 +349,12 @@ export function AppProvider({ children }) {
   ]);
   const clientById = (id) => clients.find(c => c.id === id);
   const groupByName = (name) => clientGroups.find(g => g.name === name);
+  /* `loc` is the venue this client normally trains at. It sits beside phone and email
+     because it is the third thing anyone needs when placing a person: Danny runs out of
+     eight outdoor locations, and "which one is she at?" is asked as often as "what's her
+     number?". It also lets the client list be filtered by venue when the roster grows. */
   const addClient = (c) => { const id = nid();
-    setClients(cs => [...cs, { id, status:"active", source:"manual", email:"", phone:"", ...c }]); return id; };
+    setClients(cs => [...cs, { id, status:"active", source:"manual", email:"", phone:"", loc:"", ...c }]); return id; };
   const createGroup = ({ name, memberIds, primaryId, trainer }) => {
     const members = memberIds.map(id => clientById(id)?.name).filter(Boolean);
     const gname = name || members.join(" & ");
@@ -450,7 +454,9 @@ export function AppProvider({ children }) {
         || newClients.find(c => c.name.toLowerCase() === name.toLowerCase());
       let cid = existing?.id;
       if (!existing) { cid = nid();
-        newClients.push({ id:cid, name, phone:col(r,"phone"), email:col(r,"email"), status:"active", source:"import" });
+        // `location` is optional in the CSV — accept both header spellings
+        newClients.push({ id:cid, name, phone:col(r,"phone"), email:col(r,"email"),
+          loc: col(r,"location") || col(r,"loc"), status:"active", source:"import" });
         created.clients++; }
       const gname = col(r,"group_name");
       if (gname) {
@@ -644,7 +650,7 @@ export function AppProvider({ children }) {
   const openLeads   = leads.filter(l => LEAD_OPEN.includes(l.status));
   const closedLeads = leads.filter(l => !LEAD_OPEN.includes(l.status));
   const [perm, setPerm] = useState({ dylan:{editDesc:false, cancel:false, earnings:false, manageLocations:false},
-    marcus:{editDesc:true, cancel:false, earnings:false, manageLocations:false}, wei:{editDesc:false, cancel:false, earnings:true, manageLocations:false} });
+    marcus:{editDesc:true, cancel:false, earnings:false, manageLocations:false}, wei:{editDesc:false, cancel:false, earnings:true, manageLocations:false}, ansab:{editDesc:false, cancel:false, earnings:false, manageLocations:false} });
   const [measurements, setMeasurements] = useState([{who:"Sam Lee", weight:74.5, fat:19.2, d:"1 Jul"},{who:"Sam Lee", weight:73.8, fat:18.4, d:"15 Jul"}]);
   const [ratings, setRatings] = useState({});
   const [noShowQueue, setNoShowQueue] = useState([
@@ -673,6 +679,7 @@ export function AppProvider({ children }) {
     dylan:{type:"per_class", perClass:40, perHead:0,  perPt:45, monthly:0},
     marcus:{type:"per_class", perClass:35, perHead:0, perPt:40, monthly:0},
     wei:{type:"per_head",    perClass:0,  perHead:12, perPt:40, monthly:0},
+    ansab:{type:"per_class", perClass:35, perHead:0, perPt:40, monthly:0},
   });
   const [campSheet, setCampSheet] = useState(null);   // camp checkout {camp, waiver?}
   const [chatOpen, setChatOpen] = useState(false);    // in-app coach chat
