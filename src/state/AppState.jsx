@@ -12,6 +12,7 @@ import { buildNotifications } from "../lib/notifications.js";
 import { allConflicts, hasBlocking } from "../lib/conflicts.js";
 import { approvedTotal, claimErrors, claimTotal, emptyClaim, emptyLine, excludedTotal, nextRef } from "../lib/expenses.js";
 import { EVENTS, startUsageSession, track } from "../lib/usage.js";
+import { isOpen, methodLabel, owedByClient, owedOn, paidOn } from "../lib/money.js";
 import { Card } from "../ui/kit.jsx";
 
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -355,6 +356,42 @@ export function AppProvider({ children }) {
      number?". It also lets the client list be filtered by venue when the roster grows. */
   const addClient = (c) => { const id = nid();
     setClients(cs => [...cs, { id, status:"active", source:"manual", email:"", phone:"", loc:"", ...c }]); return id; };
+
+  /* A coach standing in front of someone who isn't a member yet needs the booking to
+     work NOW. So the record is created immediately as `pending` — real enough for a
+     booking, a credit and a payment to attach to — and the admin confirms it later.
+     The alternative (block until approved) means the coach can't finish the job.
+
+     Phone is checked first because it is the LOGIN IDENTITY and unique: two coaches
+     each adding "Priya" produces a collision the day she tries to sign up, and by
+     then there are two histories to merge. Returns {duplicate} instead of creating,
+     so the caller can offer her existing record. */
+  const findClientByPhone = (phone) => {
+    const d = String(phone || "").replace(/\D/g, "");
+    if (d.length < 8) return null;
+    return clients.find(c => String(c.phone || "").replace(/\D/g, "").endsWith(d.slice(-8))) || null;
+  };
+  const addPendingClient = ({ name, phone, email, loc }) => {
+    const nm = String(name || "").trim();
+    if (!nm) return { error: "Give them a name" };
+    const dup = findClientByPhone(phone);
+    if (dup) return { duplicate: dup };
+    const id = nid();
+    setClients(cs => [...cs, { id, name: nm, phone: String(phone || "").replace(/\D/g, ""),
+      email: String(email || "").trim(), loc: loc || "",
+      status: "pending", source: "coach_added", addedBy: user?.id || "staff" }]);
+    logAudit(`Client added from a booking · ${nm}${phone ? ` · ${phone}` : ""} · by ${tName(user?.id)} · pending admin confirmation`);
+    notifyStaff("admin", `${tName(user?.id)} added a new client mid-booking: ${nm}${phone ? ` (${phone})` : ""} — confirm the record`);
+    return { id, name: nm };
+  };
+  const confirmPendingClient = (id) => {
+    const c = clients.find(x => x.id === id); if (!c) return false;
+    setClients(cs => cs.map(x => x.id === id ? { ...x, status: "active" } : x));
+    logAudit(`Client confirmed · ${c.name} · added by ${tName(c.addedBy)}`);
+    ping(`${c.name} confirmed — a full member record now`);
+    return true;
+  };
+  const pendingClients = clients.filter(c => c.status === "pending");
   const createGroup = ({ name, memberIds, primaryId, trainer }) => {
     const members = memberIds.map(id => clientById(id)?.name).filter(Boolean);
     const gname = name || members.join(" & ");
@@ -362,9 +399,26 @@ export function AppProvider({ children }) {
     setClientGroups(gs => [...gs, { id, name:gname, memberIds, primaryId: primaryId || memberIds[0], trainer: trainer || "danny" }]);
     return { id, name: gname };
   };
+  /* Admin edits a client record. Every change is named, audited and TOLD TO THE
+     CLIENT — a mobile number is their login and their WhatsApp, and someone changing
+     it without them knowing is how a member is locked out of their own account with
+     no idea why. Silent admin edits are also the hardest thing to audit after the
+     fact, because there is nothing to notice. */
   const editClient = (id, patch) => {
+    const before = clients.find(c => c.id === id);
+    if (!before) { ping("That client no longer exists"); return false; }
+    const label = { name:"name", phone:"mobile", email:"email", loc:"usual location", status:"status" };
+    const changes = Object.entries(patch)
+      .filter(([k, v]) => String(before[k] ?? "") !== String(v ?? ""))
+      .map(([k, v]) => `${label[k] || k}: ${before[k] || "—"} → ${v || "—"}`);
+    if (!changes.length) { ping("No changes"); return false; }
+
     setClients(cs => cs.map(c => c.id === id ? { ...c, ...patch } : c));
-    ping("Client updated");
+    logAudit(`Client updated · ${before.name} · ${changes.join(" · ")} · by ${tName(user?.id)}`);
+    notifyClient(patch.name || before.name,
+      `Your details were updated by ExerciseOnly — ${changes.join(", ")}. If that wasn't expected, message us.`);
+    ping(`${patch.name || before.name} updated — client notified`);
+    return true;
   };
   /* ---- editing an existing group ----
      Groups could be created and never touched again: no rename, no way to add the
@@ -605,6 +659,127 @@ export function AppProvider({ children }) {
     ping(`Approved — $${it.amt} recorded, ${it.what} granted to ${it.who}`);
     logAudit(`Approved PayNow proof · ${it.who} · ${it.what} · $${it.amt} · ${it.proof?.name||"no file"}`);
   };
+  /* ---------------- MANUAL MONEY (post-pay, part-pay, paid-outside) ----------------
+     Small studios do not get to insist on payment before service. Danny takes cash at
+     the park, agrees a price over WhatsApp, and lets a regular settle next week.
+     Refusing to model that doesn't stop it — it moves it into a notebook the app
+     can't see, which is the state this project is replacing.
+
+     ONE record shape for every route in, because they all end in the same place: a
+     balance that has to reach zero. A coach flagging "she'll pay Friday" and the
+     admin recording "bought a 10-pack, paid cash" differ only in `source`.
+
+     Outstanding is ALWAYS derived (`amount - sum(payments)`), never stored — a
+     stored balance beside a payment list is two sources of truth for one number, and
+     they drift the first time a payment is voided. See lib/money.js. */
+  const [obligations, setObligations] = useState([]);
+  const [recordPay, setRecordPay] = useState(null);  // admin: record money taken outside the app
+  const nextObRef = () => `MP-${String(obligations.length + 1).padStart(4, "0")}`;
+
+  /* Raise an amount owed. Returns the record so the caller can attach a booking. */
+  const raiseObligation = (o) => {
+    const rec = {
+      id: nid(), ref: nextObRef(),
+      clientId: o.clientId || null,
+      who: o.who || clientById(o.clientId)?.name || "Client",
+      kind: o.kind || "adhoc",
+      what: o.what || "",
+      amount: Math.round((Number(o.amount) || 0) * 100) / 100,
+      listPrice: o.listPrice ?? null,
+      couponCode: o.couponCode || null,
+      productId: o.productId || null,
+      bookingId: o.bookingId || null,
+      trainer: o.trainer || null, date: o.date || null, time: o.time || null,
+      note: o.note || "",
+      payments: [],
+      status: "pending",
+      source: o.source || "admin_record",
+      raisedBy: user?.id || "staff",
+      raisedOn: o.raisedOn || toISO(new Date()),
+      raisedAt: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}),
+    };
+    setObligations(list => [rec, ...list]);
+    logAudit(`Manual charge raised · ${rec.ref} · ${rec.who} · $${rec.amount} · ${rec.what}${rec.couponCode?` · coupon ${rec.couponCode}`:""}`);
+    notifyStaff("admin", `${tName(rec.raisedBy)} raised ${rec.ref}: ${rec.who} owes $${rec.amount} for ${rec.what}`);
+    // The member is told the moment money is put against their name. A charge they
+    // only discover weeks later is the one that gets disputed.
+    if (rec.clientId || rec.who) notifyClient(rec.who,
+      `${rec.what} — $${rec.amount} recorded against your account. ExerciseOnly will confirm once payment is received.`);
+    return rec;
+  };
+
+  /* Record money received against an obligation. Part payments are the point:
+     $200 now on a $600 package leaves $400 owed and the package is still granted. */
+  /* `target` is an obligation id OR the record itself.
+     Accepting the record matters: "record a purchase and the money in one go" calls
+     raiseObligation and then this, in the same handler — and `obligations` in that
+     closure is still the array from BEFORE the raise, so a lookup by id finds
+     nothing and the payment is silently dropped. The charge appeared and the money
+     vanished. The state update below is functional, so it applies to whichever
+     version React has. */
+  const recordPayment = (target, p) => {
+    const ob = typeof target === "object" && target ? target : obligations.find(x => x.id === target);
+    if (!ob) { ping("That charge no longer exists"); return false; }
+    const obId = ob.id;
+    const amt = Math.round((Number(p.amt) || 0) * 100) / 100;
+    const entry = { id: nid(), amt, method: p.method || "cash",
+      date: p.date || toISO(new Date()), ref: p.ref || "",
+      note: p.note || "", proof: p.proof || null, noProofReason: p.noProofReason || "",
+      by: user?.id || "staff",
+      at: new Date().toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) };
+    setObligations(list => list.map(x => x.id !== obId ? x : { ...x, payments: [...x.payments, entry] }));
+    // Revenue is dated when the money MOVED, not when it was typed — otherwise a
+    // payment taken on the 29th and entered on the 2nd lands in the wrong month.
+    setLedger(l => [{ id: nid(), who: ob.who, what: `${ob.what} (${ob.ref})`,
+      amt, method: methodLabel(entry.method), status: "paid",
+      d: entry.date === toISO(new Date()) ? "Today" : entry.date, iso: entry.date, date: entry.date }, ...l]);
+    const left = Math.max(0, ob.amount - (paidOn(ob) + amt));
+    logAudit(`Payment recorded · ${ob.ref} · ${ob.who} · $${amt} ${methodLabel(entry.method)} · ${entry.date}${entry.proof?` · proof ${entry.proof.name}`:` · NO PROOF: ${entry.noProofReason}`}${left>0?` · $${left.toFixed(2)} still owed`:" · settled"}`);
+    notifyClient(ob.who, left > 0
+      ? `$${amt} received for ${ob.what}. $${left.toFixed(2)} still outstanding.`
+      : `$${amt} received — ${ob.what} is now paid in full. Thank you!`);
+    ping(left > 0 ? `$${amt} recorded — $${left.toFixed(2)} still owed` : `$${amt} recorded — ${ob.ref} settled`);
+    return true;
+  };
+
+  /* Explicit Settled. Distinct from "the arithmetic says paid": a $2 rounding
+     difference the admin decides to let go is settled, and saying so beats leaving
+     a $2 row on the owed list forever. */
+  const markObligationSettled = (obId, reason) => {
+    const ob = obligations.find(x => x.id === obId); if (!ob) return false;
+    const left = owedOn(ob);
+    setObligations(list => list.map(x => x.id !== obId ? x : { ...x, status: "settled",
+      settledAt: toISO(new Date()), settledBy: user?.id || "staff", settleReason: reason || "" }));
+    logAudit(`Marked settled · ${ob.ref} · ${ob.who}${left > 0 ? ` · $${left.toFixed(2)} written off${reason?` — "${reason}"`:""}` : ""}`);
+    notifyClient(ob.who, `${ob.what} is settled — nothing further owed. Thank you!`);
+    ping(left > 0 ? `${ob.ref} settled — $${left.toFixed(2)} written off` : `${ob.ref} settled`);
+    return true;
+  };
+
+  /* Deny. Unlike the client-submitted PayNow queue, a coach-flagged booking ALREADY
+     EXISTS by the time this runs, so there is something to unwind — and the admin has
+     to say which: drop the session, or keep it and leave the money owed. Guessing
+     either way is how a client turns up to a cancelled slot, or trains for free. */
+  const denyObligation = (obId, reason, alsoCancelBooking) => {
+    const ob = obligations.find(x => x.id === obId); if (!ob) return false;
+    setObligations(list => list.map(x => x.id !== obId ? x : { ...x, status: "denied",
+      deniedAt: toISO(new Date()), deniedBy: user?.id || "staff", denyReason: reason || "" }));
+    if (alsoCancelBooking && ob.bookingId) {
+      setPtBookings(pb => pb.filter(b => b.id !== ob.bookingId));
+      setMyPT(p => p.filter(b => b.id !== ob.bookingId));
+      notifyStaff(ob.trainer || "admin", `${ob.who}'s ${ob.date || ""} session was cancelled — ${ob.ref} denied`);
+    }
+    logAudit(`Manual charge denied · ${ob.ref} · ${ob.who} · ${alsoCancelBooking ? "booking cancelled" : "booking kept"}${reason?` · "${reason}"`:""}`);
+    notifyClient(ob.who, alsoCancelBooking
+      ? `${ob.what} could not be confirmed${reason?`: ${reason}`:""}. The session has been released — message us to rebook.`
+      : `${ob.what} could not be confirmed${reason?`: ${reason}`:""}. Your session stands; please get in touch about payment.`);
+    ping(alsoCancelBooking ? "Denied — session released and client told" : "Denied — session kept, client told");
+    return true;
+  };
+
+  const owedFor = (clientId) => owedByClient(obligations, clientId);
+  const openObligations = obligations.filter(isOpen);
+
   /* Client notices — pushed when STAFF book or change something on a client's
      behalf. Unlike the derived notification feed, these are events, so they're
      stored. TODO(twilio): when WhatsApp is wired up, send the same text via the
@@ -822,11 +997,11 @@ export function AppProvider({ children }) {
     setTimeOffSheet(null); setMoveSheet(null); setClientMove(null); setMoveDay(null); setShiftEditor(null); setAddTrainer(null);
     setMeasForm(null); setIntakeForm(null); setCampBuilder(null); setTemplateBuilder(null);
     setDoneSheet(null); setNoteSheet(null); setAddLead(null); setWalkSheet(null); setBookFor(null);
-    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null); setClaimEditor(null); setClaimReview(null); setIntakeView(null);
+    setAboutEdit(null); setBioEdit(null); setOfferSheet(null); setCouponForm(null); setExceptionSheet(null); setJustBooked(null); setEnquiry(null); setLegalSheet(null); setProductForm(null); setClassBuilder(null); setBookingDetail(null); setEventSheet(null); setClaimEditor(null); setClaimReview(null); setIntakeView(null); setRecordPay(null);
     // log sub-overlays close first; the active workout itself is closed last
     if (exPicker||customEx||plate||routineSheet||rest) { setExPicker(false); setCustomEx(null); setPlate(null); setRoutineSheet(null); setRest(null); }
     else setActive(null); };
-  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||intakeView||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||claimEditor||claimReview||active||exPicker||customEx||plate||routineSheet||rest);
+  const anyOverlay = !!(sheet||shopSheet||campSheet||chatOpen||timeOffSheet||moveSheet||clientMove||moveDay||shiftEditor||addTrainer||measForm||intakeForm||intakeView||recordPay||campBuilder||templateBuilder||doneSheet||noteSheet||addLead||walkSheet||bookFor||couponForm||aboutEdit||bioEdit||offerSheet||exceptionSheet||justBooked||enquiry||legalSheet||productForm||classBuilder||bookingDetail||eventSheet||claimEditor||claimReview||active||exPicker||customEx||plate||routineSheet||rest);
   const backRef = useRef({});
   backRef.current = { anyOverlay, tab, user, closeOverlays };
   useEffect(() => {
@@ -1339,18 +1514,28 @@ export function AppProvider({ children }) {
     // which is exactly the kind of thing that goes quiet and then becomes a grievance.
     expenses: pendingClaims.length + approvedUnpaid.length,
     deletions: deletionRequests.filter(d=>d.status==="pending").length,
+    /* Manual money the admin still has to act on: coach-flagged charges awaiting
+       verification, and anything still owed. Money owed silently is the failure this
+       whole flow exists to prevent, so it badges like every other queue. */
+    manualmoney: openObligations.length,
+    newclients: pendingClients.length,
   };
   pendingCounts.receipts = pendingCounts.expenses;   // legacy alias
   pendingCounts.schedule = pendingCounts.exceptions;
-  pendingCounts.clients  = pendingCounts.noshows;
   /* `payments` was counted on the Money tab's own badge but left out of both
      `manage` and `total` — so a PayNow proof, which is money already in the bank
      and a member waiting on credits, raised no count on the nav and never appeared
      under "Waiting on you". If it was the only thing pending the summary card
      didn't render at all. It is the most time-critical queue of the five. */
   pendingCounts.manage   = pendingCounts.refunds + pendingCounts.expenses + pendingCounts.deletions + pendingCounts.payments;
+  /* Manual money badges the Reports tab, where Money owed lives — an amount owed
+     silently is the exact failure this flow exists to prevent. A coach-added client
+     badges Clients, because an unconfirmed record can't be billed or logged in as. */
+  pendingCounts.reports  = pendingCounts.manualmoney;
+  pendingCounts.clients  = pendingCounts.noshows + pendingCounts.newclients;
   pendingCounts.total    = pendingCounts.exceptions + pendingCounts.refunds + pendingCounts.noshows
-                         + pendingCounts.expenses + pendingCounts.deletions + pendingCounts.payments;
+                         + pendingCounts.expenses + pendingCounts.deletions + pendingCounts.payments
+                         + pendingCounts.manualmoney + pendingCounts.newclients;
 
   const addLocation = () => {
     if (!newLocName.trim()) return;
@@ -1535,7 +1720,9 @@ export function AppProvider({ children }) {
     newClaim, updateClaim, deleteClaim, submitClaim, withdrawClaim, toggleClaimLine,
     decideClaim, markClaimPaid, myClaims, pendingClaims, approvedUnpaid, owedTo, claimById,
     eventSheet, setEventSheet, moveBooking, previewMove, lastMove, undoMove,
-    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, updateGroup, deleteGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, intakeView, setIntakeView, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
+    bookingDetail, setBookingDetail, classBuilder, setClassBuilder, openClassBuilder, saveClass, cancelSession, restoreSession, showCancelled, setShowCancelled, legalSheet, setLegalSheet, deletionRequests, requestDeletion, resolveDeletion, checkedIn, checkIn, copyText, deactivateTrainer, reactivateTrainer, applyTemplate, productForm, setProductForm, addProduct, reportView, setReportView, intakeRecords, saveIntake, sessionLog, addSessionLog, groupPacks, setGroupPacks, clientNotices, notifyClient, staffNotices, notifyStaff, clients, setClients, clientGroups, setClientGroups, clientById, groupByName, addClient, createGroup, updateGroup, deleteGroup, importClientsCsv, logGroupSession, editClient, myGroup, myGroupPack, intakeView, setIntakeView,
+    obligations, setObligations, recordPay, setRecordPay, raiseObligation, recordPayment, markObligationSettled, denyObligation, owedFor, openObligations,
+    addPendingClient, confirmPendingClient, pendingClients, findClientByPhone, MANUAL_PAYNOW, paymentQueue, submitPaymentProof, resolvePayment, paynowConfig, setPaynowConfig, setLeadStatus, openLeads, closedLeads, LEAD_OPEN, logout, sendOtp, verifyOtp, memberBusy, memberClash, enquiry, setEnquiry, openEnquiry, submitEnquiry,
     notifications, unreadNotifs, notifOpen, setNotifOpen, readNotifs, markAllNotifsRead, openNotification,
     addRefundable, bookPay, exceptionQueue, exceptionSheet, justBooked, optInAt, pendingCounts, policy, refundQueue, refundables, reminderChannel, requestException, requestRefund, resolveException, resolveRefund, setBookPay, setExceptionQueue, setExceptionSheet, setJustBooked, setOptInAt, setPolicy, setRefundQueue, setRefundables, setReminderChannel, windowFor,
     ACCOUNTS, aboutCopy, aboutEdit, active, addCustomExercise, addExerciseToActive, addLead, addLocation, addSet, addTimeOff, addTrainer, adminSec, anyOverlay, applyCoupon, audit, backRef, bioEdit, bookDates, bookFor, bookWeek, bookWeeks, booked, calDay, calSpan, calTrainer, calWeek, campBuilder, campOpenId, campSheet, camps, cancelCamp, cancelClass, cancelHrs, cancelPT, chatInput, chatMsgs, chatOpen, classPass, classTemplates, clientMove, closeOverlays, commitClientMove, confirmBook, confirmCampBuy, confirmShopBuy, coupon, couponForm, couponMsg, couponValue, coupons, credits, customEx, cycleType, day, daySessions, doneSheet, exLib, exPicker, exSearch, finishWorkout, goal, hoursUntil, intakeForm, isAdmin, isClient, joinWaitlist, leads, ledger, loc, locName, locations, logAudit, logOpen, logView, login, logs, mark, markAll, marketingOptIn, measForm, measurements, moveDay, moveSheet, myCalDay, myCamps, myClassBookings, myPT, mySpan, myView, myWaitlist, myWeek, navItems, newLocName, noShowQueue, noteSheet, offerSheet, offers, otherPlace, payMode, perm, permOpen, ping, plate, prToast, products, progEx, progMetric, promoteSuggested, ptBookings, ptByTrainer, ptCtx, ptLoc, ptPool, ptTrainers, rates, ratings, referralCode, referralReward, referralUses, removeExercise, removeSet, removeTimeOff, repeatLog, resolveNoShow, rest, revenue, rosterOpen, routineSheet, routines, schedView, seg, sessions, setAboutCopy, setAboutEdit, setActive, setAddLead, setAddTrainer, setAdminSec, setAudit, setBioEdit, setBookDates, setBookFor, setBookWeek, setBookWeeks, setCalDay, setCalSpan, setCalTrainer, setCalWeek, setCampBuilder, setCampOpenId, setCampSheet, setCamps, activeChatThread, adminInboxOpen, chatThreads, setActiveChatThread, setAdminInboxOpen, setChatInput, setChatMsgs, setChatOpen, setChatThreads, setClassPass, setClassTemplates, setClientMove, setCoupon, setCouponForm, setCouponMsg, setCoupons, setCredits, setCustomEx, setDay, setDoneSheet, setExLib, setExPicker, setExSearch, setGoal, setIntakeForm, setLeads, setLedger, setLoc, setLocations, setLogOpen, setLogView, setLogs, gymHoursStart, gymHoursEnd, setGymHoursStart, setGymHoursEnd, menuConfig, setMenuConfig, setMarketingOptIn, setMeasForm, setMeasurements, setMoveDay, setMoveSheet, setMyCalDay, setMyCamps, setMyClassBookings, setMyPT, setMySpan, setMyView, setMyWaitlist, setMyWeek, setNewLocName, setNoShowQueue, setNoteSheet, setOfferSheet, setOffers, setOtherPlace, setPayMode, setPerm, setPermOpen, setPlate, setPrToast, setProducts, setProgEx, setProgMetric, setPtBookings, setPtLoc, setPtTrainers, setRates, setRatings, setReferralReward, setReferralUses, setRest, setRosterOpen, setRoutineSheet, setRoutines, setSchedView, setSeg, setSessions, setSheet, setShiftEditor, setShifts, setShopSheet, setShopTab, setSuggestedLocs, setTab, setTemplateBuilder, setTimeOff, setTimeOffSheet, setToast, setTrainers, setTravel, setUser, setWalkSheet, sheet, shiftEditor, shifts, shopSheet, shopTab, staffSessions, staffTimeOff, startBlank, startCamp, startFromRoutine, suggestedLocs, tName, tab, templateBuilder, timeOff, timeOffSheet, toast, toggleSetDone, trainers, travel, updSet, user, walkSheet };

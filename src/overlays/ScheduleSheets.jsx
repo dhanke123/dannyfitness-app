@@ -1,14 +1,17 @@
 import { useApp } from "../state/AppState.jsx";
 import TimeOffForm from "../components/TimeOffForm.jsx";
 import { CLIENTS, CT, isHead } from "../data/seed.js";
-import { DAYS, FULLDAYS, TODAY, dateFor, fmtDM, fmtFull, fromMin, toMin, upcomingDate, weekLabel } from "../lib/dates.js";
+import { DAYS, FULLDAYS, TODAY, dateFor, fmtDM, fmtFull, fromMin, toISO, toMin, upcomingDate, weekLabel } from "../lib/dates.js";
 import { PT_DUR, ptSlotsFor, sessTrainers, trainerBusyBlocks, workWindow } from "../lib/scheduling.js";
 import { nid } from "../lib/util.js";
 import { T, disp } from "../theme.js";
-import { Btn, Card, Select } from "../ui/kit.jsx";
+import { Btn, Card, Select, TimeInput } from "../ui/kit.jsx";
+import BookingFunding, { fundingErrors } from "../components/BookingFunding.jsx";
+import { money } from "../lib/money.js";
 
 export default function ScheduleSheets() {
-  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, commitClientMove, day, doneSheet, hoursUntil, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet, notifyClient, clients, clientGroups, clientById, logGroupSession, addSessionLog, trainers: allTrainers } = useApp();
+  const { cancelSession, restoreSession, addTimeOff, audit, bookFor, booked, cancelPT, clientMove, policy, setExceptionSheet, commitClientMove, day, doneSheet, hoursUntil, isAdmin, loc, locName, locations, logAudit, mark, moveDay, moveSheet, myPT, otherPlace, ping, ptBookings, ptCtx, revenue, sessions, setBookFor, setChatOpen, setClientMove, setDoneSheet, setMoveDay, setMoveSheet, setPtBookings, setSessions, setTimeOffSheet, setWalkSheet, sheet, shifts, tName, timeOffSheet, trainers, travel, walkSheet, notifyClient, clients, clientGroups, clientById, logGroupSession, addSessionLog, trainers: allTrainers,
+          addPendingClient, findClientByPhone, raiseObligation, recordPayment, setCredits, setGroupPacks, ptPool, credits } = useApp();
   return (<>
         {/* time off sheet */}
         {timeOffSheet && (
@@ -79,8 +82,7 @@ export default function ScheduleSheets() {
                 </div>
                 <div className="flex gap-2 mb-3">
                   <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>NEW TIME</div>
-                    <input value={nt} onChange={e=>setMoveSheet(m=>({...m,newTime:e.target.value}))}
-                      placeholder="HH:MM" className="w-full px-3 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                    <TimeInput value={nt} onChange={v=>setMoveSheet(m=>({...m,newTime:v}))} style={{width:"100%", textAlign:"center"}}/></div>
                   <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>LOCATION</div>
                     <Select value={nl} onChange={v=>setMoveSheet(m=>({...m,newLoc:v}))} options={locations.map(l=>[l.id,l.name])}/></div>
                 </div>
@@ -327,20 +329,51 @@ export default function ScheduleSheets() {
                       {bookFor.nonClient?"↩ Pick registered client":"+ Non-client (not registered)"}</button>
                   </div>
                   {bookFor.nonClient ? (
-                    <input value={bookFor.who||""} onChange={e=>setBookFor(b=>({...b,who:e.target.value}))} placeholder="Name (walk-in / not yet a member)" autoFocus
-                      className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.accent}`,background:T.card}}/>
+                    /* A coach in front of someone who isn't a member yet. The record
+                       is created on confirm as `pending` — real enough for the
+                       booking, the credit and the payment to attach to — and the
+                       admin confirms it later. Blocking until approval means the
+                       coach can't finish the job with the person standing there. */
+                    <div className="space-y-1.5">
+                      <input value={bookFor.who||""} onChange={e=>setBookFor(b=>({...b,who:e.target.value, dup:null}))} placeholder="Full name" autoFocus
+                        className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.accent}`,background:T.card}}/>
+                      <div className="flex gap-2">
+                        <input value={bookFor.newPhone||""} inputMode="tel"
+                          onChange={e=>{ const phone=e.target.value;
+                            setBookFor(b=>({...b, newPhone:phone, dup: findClientByPhone(phone) })); }}
+                          placeholder="Mobile (their login)"
+                          className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                        <input value={bookFor.newEmail||""} onChange={e=>setBookFor(b=>({...b,newEmail:e.target.value}))} placeholder="Email (optional)"
+                          className="flex-1 px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/>
+                      </div>
+                      {/* Phone is the login identity and unique. Two coaches each
+                          adding "Priya" produces a collision the day she signs up —
+                          and by then there are two histories to merge. */}
+                      {bookFor.dup ? (
+                        <div className="text-xs rounded-lg p-2" style={{background:"#F7EEE9", color:T.accent}}>
+                          That number already belongs to <b>{bookFor.dup.name}</b>.{" "}
+                          <button className="font-bold underline"
+                            onClick={()=>setBookFor(b=>({...b, nonClient:false, who:b.dup.name, dup:null}))}>
+                            Use their record instead →</button>
+                        </div>
+                      ) : (
+                        <div className="text-xs" style={{color:T.muted}}>
+                          Creates a client record on confirm, pending the admin's check.
+                        </div>)}
+                    </div>
                   ) : (
                     <Select value={bookFor.who||""} onChange={v=>setBookFor(b=>({...b,who:v}))} options={[["","Select a client…"],
                       ...clientGroups.map(g=>[g.name, `👥 ${g.name} (group)`]),
-                      ...clients.map(c=>[c.name, c.name])]}/>
+                      ...clients.map(c=>[c.name, c.name + (c.status==="pending" ? " · pending" : "")])]}/>
                   )}
-                  {bookFor.nonClient && <div className="text-xs mt-1" style={{color:T.accent}}>Marked non-client — booked for attendance; not linked to a member account.</div>}
                 </div>
 
                 <div className="flex gap-2">
                   <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>TIME</div>
-                    <input value={bookFor.time} onChange={e=>setBookFor(b=>({...b,time:e.target.value}))} placeholder="HH:MM"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm text-center outline-none" style={{border:`1.5px solid ${T.line}`,background:T.card}}/></div>
+                    {/* Native picker. This was the last free-text time box: "9am" and
+                        "banana" both parse to NaN, every NaN comparison is false, and
+                        the clash check silently found nothing wrong. */}
+                    <TimeInput value={bookFor.time} onChange={v=>setBookFor(b=>({...b,time:v}))} style={{width:"100%", textAlign:"center"}}/></div>
                   <div className="flex-1"><div className="text-xs font-bold mb-1" style={{color:T.muted}}>LOCATION</div>
                     <Select value={bookFor.loc} onChange={v=>setBookFor(b=>({...b,loc:v}))} options={[...locations.map(l=>[l.id,l.name]), ["other","Other (type a place)"]]}/></div>
                 </div>
@@ -349,16 +382,78 @@ export default function ScheduleSheets() {
                     className="w-full px-3 py-2.5 rounded-lg text-sm outline-none" style={{border:`1.5px solid ${T.accent}`,background:T.card}}/>
                     <div className="text-xs mt-1" style={{color:T.muted}}>Ad-hoc spot — Danny can save it as a real location later.</div></div>)}
               </div>
-              <div className="text-xs my-3" style={{color:T.muted}}>{isAdmin?"Recorded to the audit trail — who booked what, for which coach, and when.":"Added to your schedule. Payment handled at checkout / outside the app for walk-ins."}</div>
-              <Btn full disabled={!(bookFor.who||"").trim() || (bookFor.loc==="other" && !(bookFor.otherPlace||"").trim())} onClick={()=>{
-                const who=(bookFor.who||"").trim(); const date=fmtFull(dateFor(bookFor.weekOff,bookFor.day));
+              {/* Case 1: how is this being paid? The sheet used to ask nothing and
+                  say "payment handled outside the app", which is another way of
+                  writing "nobody knows". */}
+              {(bookFor.who||"").trim() && (
+                <div className="mt-3 pt-3" style={{borderTop:`1.5px solid ${T.line}`}}>
+                  <BookingFunding value={bookFor.funding} onChange={f=>setBookFor(b=>({...b, funding:f}))}
+                    trainer={bookFor.trainer} whoName={(bookFor.who||"").trim()}
+                    isGroup={clientGroups.some(g=>g.name===(bookFor.who||"").trim())}/>
+                </div>)}
+
+              <div className="text-xs my-3" style={{color:T.muted}}>
+                {isAdmin?"Recorded to the audit trail — who booked what, for which coach, and when."
+                       :"Added to your schedule. Anything not on credit goes to the admin to confirm."}</div>
+              {(() => {
+                const who=(bookFor.who||"").trim();
+                const fErrs = who ? fundingErrors(bookFor.funding) : ["Pick a client"];
+                const blocked = !who || (bookFor.loc==="other" && !(bookFor.otherPlace||"").trim())
+                  || !!bookFor.dup || fErrs.length > 0;
+                return (<>
+                  {who && fErrs.length > 0 && (
+                    <div className="text-xs mb-2 font-semibold" style={{color:T.accent}}>{fErrs[0]}</div>)}
+                  <Btn full disabled={blocked} onClick={()=>{
+                const date=fmtFull(dateFor(bookFor.weekOff,bookFor.day));
                 const otherLabel = bookFor.loc==="other" ? (bookFor.otherPlace||"Other spot").trim() : null;
                 const locShown = otherLabel || locName(bookFor.loc);
-                setPtBookings(pb=>[...pb,{id:nid(), trainer:bookFor.trainer, day:bookFor.day, time:bookFor.time, loc:bookFor.loc, otherLabel, who:who+(bookFor.nonClient?" (non-client)":""), date, weekOff:bookFor.weekOff, byAdmin:isAdmin, nonClient:bookFor.nonClient}]);
-                if (isAdmin) logAudit(`Booked PT · ${who}${bookFor.nonClient?" (non-client)":""} with ${tName(bookFor.trainer)} · ${date} ${bookFor.time} · ${locShown}`);
-                if (!bookFor.nonClient && !bookFor.self) notifyClient(who,
-                  `A PT session with ${tName(bookFor.trainer)} was booked for you: ${date} at ${bookFor.time} (${locShown}).`);
-                ping(`Booked ${who} · ${tName(bookFor.trainer)}${isAdmin?" · audit-logged":""}`); setBookFor(null);}}>Confirm booking</Btn>
+                const isGroup = clientGroups.some(g=>g.name===who);
+                const f = bookFor.funding || {};
+
+                /* New person: create the record FIRST so the booking, the credit and
+                   the payment all attach to a real client rather than a string. */
+                let clientId = clients.find(c=>c.name===who)?.id || null;
+                if (bookFor.nonClient) {
+                  const res = addPendingClient({ name:who, phone:bookFor.newPhone, email:bookFor.newEmail, loc:bookFor.loc==="other"?"":bookFor.loc });
+                  if (res.duplicate) { setBookFor(b=>({...b, dup:res.duplicate})); return; }
+                  if (res.error) { ping(res.error); return; }
+                  clientId = res.id;
+                }
+
+                const bookingId = nid();
+                setPtBookings(pb=>[...pb,{id:bookingId, trainer:bookFor.trainer, day:bookFor.day, time:bookFor.time,
+                  loc:bookFor.loc, otherLabel, who, date, weekOff:bookFor.weekOff, byAdmin:isAdmin,
+                  clientId, forGroup: isGroup ? who : undefined,
+                  // the calendar marks it unpaid until the admin clears it
+                  unpaid: f.how !== "credit"}]);
+
+                /* Credit deducts immediately — nothing for the admin to do. A group
+                   session burns the group's shared pack, never a member's personal
+                   credits: one payment, one pool (Decision 18). */
+                if (f.how === "credit") {
+                  if (isGroup) setGroupPacks(gs=>gs.map(g=>(g.name===who||clientGroups.find(x=>x.id===g.groupId)?.name===who)
+                    ? {...g, used: Math.min(g.size, g.used+1)} : g));
+                  else setCredits(c=>({...c, [ptPool(bookFor.trainer)]: Math.max(0, c[ptPool(bookFor.trainer)] - 1)}));
+                } else {
+                  const ob = raiseObligation({ clientId, who, kind:"pt",
+                    what:`PT · ${tName(bookFor.trainer)} · ${date} ${bookFor.time}`,
+                    amount:Number(f.amount)||0, bookingId, trainer:bookFor.trainer,
+                    date, time:bookFor.time, note:f.note, source:"coach_flag" });
+                  // "Paid outside" means the money already moved — record it now, and
+                  // it lands in the admin's queue to verify rather than to chase.
+                  if (f.how === "paid") recordPayment(ob, { amt:Number(f.amount)||0, method:f.method||"cash",
+                    date: toISO(new Date()), proof:f.proof, noProofReason:f.noProofReason, note:f.note });
+                }
+
+                logAudit(`Booked PT · ${who} with ${tName(bookFor.trainer)} · ${date} ${bookFor.time} · ${locShown} · ${f.how==="credit"?"credit":f.how==="paid"?`paid ${money(Number(f.amount)||0)}`:`PAY LATER ${money(Number(f.amount)||0)}`}`);
+                if (!bookFor.self) notifyClient(who,
+                  `A PT session with ${tName(bookFor.trainer)} was booked for you: ${date} at ${bookFor.time} (${locShown}).`
+                  + (f.how==="credit" ? " 1 credit used." : f.how==="later" ? ` ${money(Number(f.amount)||0)} to pay.` : ""));
+                ping(f.how==="credit" ? `Booked ${who} — 1 credit used`
+                   : f.how==="paid"   ? `Booked ${who} — payment sent to admin to verify`
+                                      : `Booked ${who} — ${money(Number(f.amount)||0)} added to their balance`);
+                setBookFor(null);}}>Confirm booking</Btn>
+                </>);})()}
             </div>
           </div>)}
 

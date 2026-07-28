@@ -10,6 +10,7 @@ import { useApp } from "../../state/AppState.jsx";
 import Reports from "../../components/Reports.jsx";
 import PayoutReport from "../../components/PayoutReport.jsx";
 import CoachDayLog from "../../components/CoachDayLog.jsx";
+import PaymentsReport from "../../components/PaymentsReport.jsx";
 import { T } from "../../theme.js";
 import { Chip, H } from "../../ui/kit.jsx";
 
@@ -28,7 +29,7 @@ export default function AdminReports() {
       {/* Coach log sits BEFORE Payouts deliberately: it answers "what did they do?",
           which is the question the admin has to settle before "what do I owe them?". */}
       <div className="flex gap-2 pb-3 overflow-x-auto">
-        {[["analytics", "Analytics"], ["coachlog", "Coach log"], ["payouts", "Payouts"]].map(([k, l]) => (
+        {[["analytics", "Analytics"], ["coachlog", "Coach log"], ["money", "Money owed"], ["payouts", "Payouts"]].map(([k, l]) => (
           <Chip key={k} active={reportView === k} onClick={() => setReportView(k)}>{l}</Chip>))}
       </div>
       {reportView === "analytics" && byPerson.length > 0 && (
@@ -45,6 +46,7 @@ export default function AdminReports() {
         </div>)}
       {reportView === "payouts" ? <PayoutReport/>
         : reportView === "coachlog" ? <CoachDayLog/>
+        : reportView === "money" ? <PaymentsReport/>
         : <Reports/>}
       <div className="text-[11px] text-center mt-4" style={{ color: T.muted }}>
         Every section exports to CSV. Coach log is the diary of what was run; Payouts is what

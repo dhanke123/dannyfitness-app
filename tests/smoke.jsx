@@ -9,6 +9,26 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 const React = (await import("react")).default;
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
+
+/* ---- pin the clock to 07:00 today ----
+   These suites book "today", and the client booking paths deliberately hide slots
+   and classes that have already started. Run after about 7pm and nothing today is
+   bookable, so the very first `Book` button doesn't exist and the suite dies — a
+   failure that has nothing to do with the code under test and appears only in the
+   evening. The weekday stays whatever it really is, so the seeded timetable behaves
+   exactly as it does live; only the hour is fixed.
+
+   Installed BEFORE importing App, because `lib/dates.js` captures TODAY and
+   ANCHOR_MON at module load. (That capture is itself a known gap — an installed PWA
+   left open overnight keeps yesterday's calendar. See the regression pack.) */
+const _RealDate = Date;
+const _PINNED = (() => { const d = new _RealDate(); d.setHours(7, 0, 0, 0); return d.getTime(); })();
+class _FixedDate extends _RealDate {
+  constructor(...a) { if (a.length === 0) super(_PINNED); else super(...a); }
+  static now() { return _PINNED; }
+}
+global.Date = _FixedDate; dom.window.Date = _FixedDate;
+
 const App = (await import("../src/App.jsx")).default;
 
 const errs=[]; const origErr=console.error; console.error=(...a)=>{errs.push(a.join(" ")); origErr(...a);};

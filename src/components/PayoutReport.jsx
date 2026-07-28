@@ -261,8 +261,13 @@ export default function PayoutReport() {
             bonus on renewals or retention, say which and it becomes a rate type rather than a
             figure someone adds by hand afterwards.</div>
         </div>
+        {/* Retired 28 Jul: cash and other outside payments now have somewhere to go
+            (Reports → Money owed), so the old line saying they never enter the app
+            became false the moment manual payment recording shipped. */}
         <div className="text-[11px] mt-2" style={{ color: T.muted }}>
-          Cash collected at walk-ins stays outside the app and is never added here.
+          Money taken outside the app — cash, transfers, packages agreed in person — is recorded
+          under <b>Money owed</b> and appears in revenue there. It is not part of this payout run,
+          which is what ExerciseOnly pays coaches, not what clients pay ExerciseOnly.
         </div>
       </Card>
     </div>

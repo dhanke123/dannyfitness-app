@@ -29,7 +29,12 @@ ok("per-head coach shown with head rate", /per head \$12/.test(txt()));
 ok("salary coach shown as salary", /\$6000.00\/month salary/.test(txt()));
 ok("per-class coach shown with class rate", /per class \$40/.test(txt()));
 ok("open questions surfaced not hidden", txt().includes("STILL TO CONFIRM WITH DANNY"));
-ok("cash-outside-app rule stated", txt().includes("Cash collected at walk-ins"));
+/* The old line said cash "stays outside the app and is never added here" — true
+   until manual payment recording shipped, false the moment it did. The rule now is
+   the distinction that actually matters: this report is what ExerciseOnly pays
+   COACHES, not what clients pay ExerciseOnly. */
+ok("outside-money rule stated, and points at where it lives", /Money owed/.test(txt()));
+ok("  ...and separates the two directions of money", /pays coaches, not what clients pay/.test(txt()));
 ok("CSV export offered", !!findBtn("Export payout CSV"));
 
 /* ---- the period is real dates now ----
