@@ -59,6 +59,26 @@ ok("a real zero survives", I.intakeValue({pushUps:0},"pushUps")==="0");
 ok("an untouched section is reported empty", !I.sectionFilled({who:"x"}, I.INTAKE_SECTIONS[3]));
 ok("  ...a filled one isn't", I.sectionFilled(newer, I.INTAKE_SECTIONS[1]));
 
+/* ---- the seeded records are what the exports are judged on ---- */
+const S=await import("../src/data/seed.js");
+const sam=S.seedIntakeRecords.filter(r=>r.who==="Sam Lee");
+ok("Sam Lee has three dated assessments to trend", sam.length===3);
+ok("  ...every section of every one is filled",
+   sam.every(r=>I.INTAKE_SECTIONS.every(s=>I.sectionFilled(r,s))));
+/* A record captured at sign-up before the physical assessment. Proves the
+   read-back can say "not measured" instead of implying a measured zero. */
+const partial=S.seedIntakeRecords.find(r=>r.who==="Cheryl");
+ok("a partly-filled record is seeded too", !!partial);
+ok("  ...its personal details are there", I.sectionFilled(partial, I.INTAKE_SECTIONS[0]));
+ok("  ...its unmeasured body panel is reported empty, not zero", !I.sectionFilled(partial, I.INTAKE_SECTIONS[1]));
+ok("  ...and so is the assessment it hasn't had", !I.sectionFilled(partial, I.INTAKE_SECTIONS[3]));
+/* The trend has to actually go the right way, or the seed proves nothing. */
+const n=(r,k)=>parseFloat(r[k]);
+ok("weight falls across the three assessments", n(sam[2],"weight")>n(sam[1],"weight") && n(sam[1],"weight")>n(sam[0],"weight"));
+ok("  ...body fat with it", n(sam[2],"bodyFat")>n(sam[1],"bodyFat") && n(sam[1],"bodyFat")>n(sam[0],"bodyFat"));
+ok("  ...muscle mass moves the other way", n(sam[2],"skeletalMuscle")<n(sam[1],"skeletalMuscle") && n(sam[1],"skeletalMuscle")<n(sam[0],"skeletalMuscle"));
+ok("  ...and the assessment scores improve", n(sam[2],"pushUps")<n(sam[1],"pushUps") && n(sam[1],"pushUps")<n(sam[0],"pushUps"));
+
 /* ============================ 3 · WORD DOC ============================ */
 
 const doc=I.buildIntakeDoc(newer,{client:"Sam Lee",coachName:"Dylan",resolve});
@@ -75,6 +95,25 @@ ok("  ...blank fields are omitted rather than printed empty", !doc.includes("Lon
 /* An unescaped angle bracket in a client note would break the whole document. */
 const nasty=I.buildIntakeDoc({...newer, notes:'A & B <script>x</script>'},{client:"X",resolve});
 ok("  ...HTML in a note is escaped", nasty.includes("&lt;script&gt;") && !nasty.includes("<script>"));
+
+/* ====================== 3b · PDF (print pipeline) ====================== */
+
+/* Same HTML as the Word export, so the two can never disagree about what's in the
+   record — only the print chrome differs. */
+const pdfSrc=I.buildIntakeDoc(newer,{client:"Sam Lee",coachName:"Dylan",resolve,forPrint:true});
+ok("PDF renders the same document as Word", pdfSrc.includes("Body fat %") && pdfSrc.includes("19.2"));
+ok("  ...with a Save as PDF trigger for blocked auto-print", pdfSrc.includes("window.print()"));
+ok("  ...and the trigger is excluded from the printed page", /@media print\s*{\s*\.noprint\s*{\s*display:\s*none/.test(pdfSrc));
+ok("  ...sections don't split across a page break", pdfSrc.includes("page-break-inside: avoid"));
+ok("the Word export carries no print chrome", !doc.includes("window.print()") && !doc.includes("noprint"));
+
+/* A blocked popup must report failure — a coach who thinks a PDF was produced
+   won't go looking for it. */
+const realOpen=dom.window.open;
+dom.window.open=()=>null; global.window=dom.window;
+ok("a blocked pop-up returns false rather than failing silently",
+   I.printIntakePdf(newer,{client:"Sam Lee",resolve})===false);
+dom.window.open=realOpen;
 
 /* ============================ 4 · EXCEL CSV ============================ */
 
@@ -116,8 +155,13 @@ await click("Open full form");
 ok("the saved record opens as the full form", txt().includes("Personal Details") || txt().includes("PERSONAL DETAILS"));
 ok("  ...every paper section is present", ["BODY ANALYSIS","BODY HEALTH","FITNESS ASSESSMENT","REMARKS"]
    .every(s=>txt().toUpperCase().includes(s)));
-ok("  ...sections nobody filled say so, rather than printing blank rows", txt().includes("Not recorded at this assessment"));
-ok("  ...both exports are offered from the record", !!btns().find(b=>b.textContent.includes("Word")) && !!btns().find(b=>b.textContent.includes("Excel")));
+/* The whole point of the read-back: fields that used to go in and never come out.
+   None of these appeared anywhere before — the card showed goals, injuries, notes. */
+ok("  ...the body-composition panel reads back", /Skeletal muscle mass/.test(txt()) && /Visceral fat/.test(txt()));
+ok("  ...so does the fitness assessment", /Push ups/.test(txt()) && /Burpees/.test(txt()));
+ok("  ...and the 1-10 ratings keep their scale", /\/ 10/.test(txt()));
+ok("  ...all three exports are offered from the record",
+   ["PDF","Word","Excel"].every(l=>!!btns().find(b=>b.textContent.includes(l))));
 ok("  ...and it explains it is read-only", txt().includes("never edited"));
 
 // Re-assess must open a NEW record, pre-filled — not edit this one (Decision 23).

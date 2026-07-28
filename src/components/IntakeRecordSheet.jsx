@@ -20,7 +20,7 @@ import { T, disp } from "../theme.js";
 import { Btn } from "../ui/kit.jsx";
 import {
   INTAKE_SECTIONS, buildIntakeCsv, buildIntakeDoc, downloadBlob,
-  intakeValue, sectionFilled, slug,
+  intakeValue, printIntakePdf, sectionFilled, slug,
 } from "../lib/intake.js";
 
 export default function IntakeRecordSheet() {
@@ -41,6 +41,15 @@ export default function IntakeRecordSheet() {
       buildIntakeDoc(rec, { client: rec.who, coachName: tName(rec.by), resolve }),
       "application/msword");
     ping("Word document downloaded — same layout as the paper form");
+  };
+
+  /* Same document as the Word export, rendered through the browser's own print
+     pipeline. A popup blocker is the one failure mode, and it has to be said out
+     loud — a coach who thinks a PDF was produced won't check. */
+  const exportPdf = () => {
+    const ok = printIntakePdf(rec, { client: rec.who, coachName: tName(rec.by), resolve });
+    ping(ok ? "Opened for printing — choose Save as PDF"
+            : "Your browser blocked the print window. Allow pop-ups for this site and try again.");
   };
 
   const exportCsv = () => {
@@ -85,9 +94,14 @@ export default function IntakeRecordSheet() {
               style={{border:`1.5px solid ${T.line}`,color:T.muted}}>✕</button>
           </div>
           <div className="flex gap-1.5 mt-2.5">
+            <Btn small kind="ghost" onClick={exportPdf}>📕 PDF</Btn>
             <Btn small kind="ghost" onClick={exportDoc}>📄 Word</Btn>
             <Btn small kind="ghost" onClick={exportCsv}>📊 Excel</Btn>
             <Btn small onClick={reassess}>Re-assess</Btn>
+          </div>
+          <div className="text-[10px] mt-1.5" style={{color:T.muted}}>
+            PDF and Word are this one assessment, laid out like the paper form.
+            Excel is every assessment, one row each, for the trend.
           </div>
         </div>
 

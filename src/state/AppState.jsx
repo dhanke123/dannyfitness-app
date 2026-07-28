@@ -2,7 +2,7 @@
    Supabase queries and realtime subscriptions replace the useState calls — the screens
    consuming useApp() should not need to change. */
 import { createContext, useContext, useState, useEffect, useMemo, useRef } from "react";
-import { COUPONS, CT, PT_PRICE, TRAINERS, isHead, mkSet, seedAbout, seedCamps, seedClassTemplates, seedLeads, seedLedger, seedLocations, seedOffers, seedExpenseClaims, seedProducts, seedPtBookings, seedRoutines, seedSessions, seedShifts, seedTimeOff, seedTravel, seedWorkoutSessions } from "../data/seed.js";
+import { COUPONS, CT, PT_PRICE, TRAINERS, isHead, mkSet, seedAbout, seedCamps, seedClassTemplates, seedLeads, seedLedger, seedLocations, seedOffers, seedExpenseClaims, seedIntakeRecords, seedProducts, seedPtBookings, seedRoutines, seedSessions, seedShifts, seedTimeOff, seedTravel, seedWorkoutSessions } from "../data/seed.js";
 import { DAYS, TODAY, dateFor, fmtFull, fromISO, isoFor, toISO, toMin } from "../lib/dates.js";
 import { EXLIB, best1RM, bestWeight, est1RM, estKcal, exMeta, isWorking, muscleOf } from "../lib/metrics.js";
 import { PT_DUR, ptRangesFor, ptSlotsFor, sessTrainers, workWindow } from "../lib/scheduling.js";
@@ -297,14 +297,10 @@ export function AppProvider({ children }) {
      answers vanished. That's the record a coach most needs when a client is handed
      over: goals, injury history, what's already been tried. Now kept per client,
      newest first, and exportable. */
-  const [intakeRecords, setIntakeRecords] = useState([
-    { id:"ia1", who:"Sam Lee", by:"danny", d:"1 Jul 2026",
-      goals:"Build strength, prep for IPPT in Nov", injuries:"Left shoulder impingement (2024) — cleared, avoid heavy overhead",
-      notes:"Desk job, trains 3x/wk. Prefers early mornings." },
-    { id:"ia2", who:"Ben", by:"dylan", d:"18 Jun 2026",
-      goals:"General conditioning, lose 4kg", injuries:"None reported",
-      notes:"New to structured training. Responds well to group settings." },
-  ]);
+  /* Seeded in seed.js, fully populated across every field of the paper form —
+     three dated assessments for Sam Lee a quarter apart so the trend, the deltas
+     and the exports all have something real to show. */
+  const [intakeRecords, setIntakeRecords] = useState(seedIntakeRecords);
   const saveIntake = (rec) => {
     /* Full record: every field from the paper intake form is kept. Earlier
        records are never overwritten — history is the point.

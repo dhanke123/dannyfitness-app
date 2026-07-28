@@ -3,7 +3,7 @@ import { useApp } from "../../state/AppState.jsx";
 import { CLIENTS } from "../../data/seed.js";
 import ApprovalQueue from "../../components/ApprovalQueue.jsx";
 import { downloadCsv } from "../../lib/analytics.js";
-import { buildIntakeCsv, buildIntakeDoc, downloadBlob, slug } from "../../lib/intake.js";
+import { buildIntakeCsv, buildIntakeDoc, downloadBlob, printIntakePdf, slug } from "../../lib/intake.js";
 import { T, disp } from "../../theme.js";
 import { Btn, Card, H, Select } from "../../ui/kit.jsx";
 
@@ -164,6 +164,14 @@ export default function StaffClients() {
                                 Excel = one row per dated assessment, for the trend. Two
                                 different questions, so two buttons rather than one
                                 "Export" that answers neither well. */}
+                            <button onClick={()=>{
+                                const r0 = recs[0];
+                                const ok = printIntakePdf(r0, { client:n, coachName:tName(r0.by), resolve });
+                                ping(ok ? "Opened for printing — choose Save as PDF"
+                                        : "Your browser blocked the print window. Allow pop-ups and try again.");
+                              }}
+                              className="text-xs font-bold px-2 py-1 rounded-lg"
+                              style={{border:`1.5px solid ${T.line}`, color:T.ink}}>📕 PDF</button>
                             <button onClick={()=>{
                                 const r0 = recs[0];
                                 downloadBlob(`intake-${slug(n)}-${slug(r0.d)}.doc`,

@@ -65,7 +65,7 @@ await click("Clients");
 ok("intake records visible in the same menu as the client", txt().includes("Intake records"));
 await click("Intake records");
 ok("  ...shows a dated record", txt().includes("1 Jul 2026"));
-ok("  ...shows goals", txt().includes("prep for IPPT"));
+ok("  ...shows goals", /IPPT/.test(txt()));
 ok("  ...flags injuries", txt().includes("shoulder impingement"));
 ok("  ...explains that records are never overwritten", txt().includes("never overwritten"));
 /* One "Export" button became two: Word is the paper form for a handover, Excel is

@@ -308,3 +308,196 @@ export const seedLeads = [
   { id:nid(), name:"Jon Tay", phone:"98765432", source:"Enquiry form", status:"contacted", note:"Wants a trial Strength class" },
   { id:nid(), name:"Wen Jie's colleague", phone:"", source:"Referral", status:"trial booked", note:"Referred by Wen Jie" },
 ];
+
+/* ---------------------------------------------------------------- INTAKE ----
+   Fully populated intake records — every field the paper form
+   (`Client information_template.pdf`) asks for, not just goals and injuries.
+
+   These exist because a skeleton record makes the whole feature untestable by
+   eye: the Word document came out at 2.3KB of headings with nothing under them,
+   and the Excel export had columns but no trend to chart. Two of the questions
+   this app has to answer — "is this client actually improving?" and "what does a
+   handover document look like?" — can't be judged against empty rows.
+
+   Sam Lee has THREE dated assessments a quarter apart, and they are internally
+   consistent: weight, BMI, body fat, visceral fat and metabolic age all move
+   together, skeletal muscle rises as fat falls, and every assessment score
+   improves at a believable rate. The ratings follow the numbers rather than
+   drifting on their own. Ben has one, so the "single record, no previous" path
+   is covered; the Swati & Supriya pair have one each so the group view isn't
+   empty either.
+
+   Coach and venue are stored as IDS (`danny`, `CDS`) exactly as the app saves
+   them, so the export path gets exercised on real shapes and any place that
+   forgets to resolve an id shows up immediately. */
+
+const samCommon = {
+  who:"Sam Lee", venue:"CDS", dob:"12 Mar 1990", gender:"M",
+  address:"Blk 32 Bayshore Road #11-04, Singapore 469974",
+  contact:"9123 0001", emergency:"Mei Lin (wife) 9123 4455",
+  email:"sam@example.sg", occupation:"Software engineer — desk-based, 9 to 7",
+  height:"176",
+  triedBefore:"Ran 5k three times a week for about a year and nothing changed after the first two months. Tried a commercial gym membership in 2024, went four times.",
+  whyNow:"IPPT in November and I failed the last one. Also turned 36 and the annual health screening flagged my cholesterol.",
+  allergies:"Peanuts — mild, avoids them",
+  gastric:"Occasional acid reflux if he eats late. Not on medication for it.",
+  medication:"None long-term",
+  supplements:"Whey protein after training. Started vitamin D in Feb on the GP's advice.",
+  dietRestrict:"No", smoke:"No",
+  preferredTimes:"Mon / Wed / Fri, 6:30–7:30am before work",
+  frequency:"3x a week", policyAgreed:true,
+};
+
+export const seedIntakeRecords = [
+  /* ---- newest first, as the app stores them ---- */
+  {
+    id:"ia-sam-3", ...samCommon, by:"danny", coach:"danny",
+    d:"1 Jul 2026", iso:"2026-07-01",
+    age:"36", weight:"74.5", bmi:"24.1", kgToLose:"3", idealWeight:"71.5",
+    bodyFat:"18.4", visceralFat:"7", skeletalMuscle:"34.8", restingMetab:"1710", metabolicAge:"34",
+    bedTime:"22:45", wakeTime:"06:00",
+    goals:"IPPT gold in November. Hold 3 more kg off and keep the shoulder pain-free through the push-up station.",
+    breakfast:"Oats with banana and whey", lunch:"Chicken rice, skips the skin", dinner:"Home-cooked, rice and two dishes", supper:"Rarely — Greek yoghurt if hungry",
+    snacking:"Down to fruit and nuts. No more office biscuits.", socialGathering:"2x a month, sticks to one drink",
+    fruitsVeg:"Yes", alcohol:"Yes", exercise:"Yes", exerciseFreq:"5x a week — 3 PT + 2 runs",
+    water:"2.5 L",
+    injuries:"Left shoulder impingement (2024) — cleared. No pain in overhead work since April. Right knee occasionally aches after long runs.",
+    assessDur:"45 secs",
+    bearCrawl:"22", pushUps:"31", shoulderTap:"38", plank:"95", mountainClimber:"52",
+    squats:"46", sumoSquat:"41", wallSeat:"110", lunges:"38", stationaryLunges:"34",
+    lungeHold:"75", superman:"30", supermanL:"26", supermanR:"26", legRaises:"27",
+    legRaiseHold:"55", flutterLeg:"60", scissorKicks:"48", sitUp:"36", sidePlank:"70",
+    burpees:"23", cardio:"2.4 km in 12 min",
+    rArms:8, rCore:7, rAbs:7, rBack:8, rCardio:8, rLegs:8,
+    mobility:"Overhead reach now full and pain-free. Hip flexors still tight from sitting.",
+    flexibility:"Fingertips to floor on forward fold — first time.",
+    trainingPlan:"Hold 3x a week through to IPPT. Weeks 1–4 keep the strength base; weeks 5–8 shift to IPPT-specific circuits (push-up and sit-up volume, 2.4km pacing). Deload the week before the test. Keep overhead pressing but stop short of failure to protect the shoulder.",
+    notes:"Much more consistent since moving sessions to 6:30am — no longer cancelling for work. Confidence is the big change; he now finishes sets he'd have stopped short of in January.",
+  },
+  {
+    id:"ia-sam-2", ...samCommon, by:"dylan", coach:"dylan",
+    d:"2 Apr 2026", iso:"2026-04-02",
+    age:"36", weight:"77.2", bmi:"24.9", kgToLose:"6", idealWeight:"71.5",
+    bodyFat:"21.0", visceralFat:"8", skeletalMuscle:"33.4", restingMetab:"1685", metabolicAge:"38",
+    bedTime:"23:30", wakeTime:"06:30",
+    goals:"Get back to under 75kg and rebuild the shoulder so overhead work stops hurting. IPPT in November is the real deadline.",
+    breakfast:"Oats with banana", lunch:"Chicken rice or economy rice", dinner:"Home-cooked, rice and two dishes", supper:"Occasionally — instant noodles after late work",
+    snacking:"Office biscuits most afternoons", socialGathering:"2–3x a month, 2–3 drinks",
+    fruitsVeg:"No", alcohol:"Yes", exercise:"Yes", exerciseFreq:"3x a week — 2 PT + 1 run",
+    water:"1.8 L",
+    injuries:"Left shoulder impingement (2024) — cleared by physio but still catches on heavy overhead. Right knee aches after runs over 5km.",
+    assessDur:"45 secs",
+    bearCrawl:"17", pushUps:"24", shoulderTap:"30", plank:"70", mountainClimber:"42",
+    squats:"38", sumoSquat:"33", wallSeat:"80", lunges:"30", stationaryLunges:"27",
+    lungeHold:"55", superman:"23", supermanL:"20", supermanR:"19", legRaises:"20",
+    legRaiseHold:"40", flutterLeg:"46", scissorKicks:"37", sitUp:"28", sidePlank:"50",
+    burpees:"17", cardio:"2.4 km in 13 min 40 s",
+    rArms:6, rCore:5, rAbs:5, rBack:6, rCardio:6, rLegs:7,
+    mobility:"Overhead reach limited on the left, roughly 20° short. Hip flexors tight.",
+    flexibility:"Forward fold to mid-shin.",
+    trainingPlan:"Keep 3x a week. Progressive overload on the lower body, controlled volume overhead — no pressing to failure until the shoulder is quiet for a full month. Add one steady run for the 2.4km.",
+    notes:"Missing roughly one session a fortnight to work. Suggested moving to 6:30am so it happens before the day starts.",
+  },
+  {
+    id:"ia-sam-1", ...samCommon, by:"danny", coach:"danny",
+    d:"6 Jan 2026", iso:"2026-01-06",
+    age:"35", weight:"81.0", bmi:"26.1", kgToLose:"9", idealWeight:"71.5",
+    bodyFat:"24.8", visceralFat:"10", skeletalMuscle:"32.1", restingMetab:"1650", metabolicAge:"43",
+    bedTime:"00:15", wakeTime:"07:00",
+    goals:"Lose the weight I put on over the last two years and be able to do a proper push-up again without my shoulder complaining.",
+    breakfast:"Usually skips — coffee only", lunch:"Economy rice, 2 meat 1 veg", dinner:"Hawker, often after 8pm", supper:"2–3x a week, supper with colleagues",
+    snacking:"Yes — biscuits and bubble tea most days", socialGathering:"Weekly, 3–4 drinks",
+    fruitsVeg:"No", alcohol:"Yes", exercise:"No", exerciseFreq:"Nothing regular since 2024",
+    water:"1 L or less, mostly coffee",
+    injuries:"Left shoulder impingement diagnosed 2024, six sessions of physio, still painful overhead. Lower back stiff in the mornings.",
+    assessDur:"45 secs",
+    bearCrawl:"11", pushUps:"14", shoulderTap:"20", plank:"42", mountainClimber:"30",
+    squats:"27", sumoSquat:"22", wallSeat:"45", lunges:"20", stationaryLunges:"18",
+    lungeHold:"30", superman:"15", supermanL:"12", supermanR:"12", legRaises:"12",
+    legRaiseHold:"22", flutterLeg:"30", scissorKicks:"24", sitUp:"18", sidePlank:"30",
+    burpees:"9", cardio:"2.4 km in 15 min 20 s",
+    rArms:4, rCore:3, rAbs:3, rBack:3, rCardio:4, rLegs:5,
+    mobility:"Overhead reach clearly restricted on the left. Ankle dorsiflexion limited, heels lift in a deep squat.",
+    flexibility:"Forward fold to just below the knee.",
+    trainingPlan:"Baseline block, 8 weeks. Rebuild the movement pattern before adding load — bodyweight and light dumbbell only. Shoulder: scapular work and no overhead pressing at all for the first four weeks. Address sleep and water before touching the diet in detail.",
+    notes:"First assessment. Honest about the drinking and the supper habit, which is a good sign. Priority is getting three sessions a week to actually happen — everything else follows from consistency.",
+  },
+
+  /* ---- one record only: exercises the "no previous assessment" path ---- */
+  {
+    id:"ia-ben-1", who:"Ben", by:"dylan", coach:"dylan", venue:"GBB",
+    d:"18 Jun 2026", iso:"2026-06-18",
+    dob:"4 Sep 1997", gender:"M", contact:"9123 0002",
+    emergency:"Adeline Ng (sister) 9887 1122", occupation:"Junior architect",
+    age:"28", height:"181", weight:"88.4", bmi:"27.0", kgToLose:"10", idealWeight:"78",
+    bodyFat:"26.2", visceralFat:"11", skeletalMuscle:"34.9", restingMetab:"1820", metabolicAge:"36",
+    bedTime:"01:00", wakeTime:"07:30",
+    goals:"General conditioning and lose about 4kg to start with. Wants to feel less winded on site visits.",
+    triedBefore:"Gym on and off since university, never with a plan. Tried intermittent fasting for a month.",
+    whyNow:"Wedding next March and a recent health screening showing pre-diabetic HbA1c.",
+    breakfast:"Kaya toast and kopi", lunch:"Cai fan", dinner:"Varies, often takeaway", supper:"Frequently — late nights at work",
+    snacking:"Yes, constant while working", socialGathering:"Weekly",
+    fruitsVeg:"No", alcohol:"Yes", smoke:"No", exercise:"No", dietRestrict:"No",
+    exerciseFreq:"Nothing regular for about 8 months", water:"1.2 L",
+    supplements:"None", allergies:"None reported",
+    gastric:"No", medication:"None",
+    injuries:"None reported. Some lower-back stiffness after long days standing on site.",
+    assessDur:"45 secs",
+    bearCrawl:"13", pushUps:"19", shoulderTap:"26", plank:"50", mountainClimber:"36",
+    squats:"32", sumoSquat:"28", wallSeat:"55", lunges:"24", stationaryLunges:"21",
+    lungeHold:"38", superman:"18", supermanL:"15", supermanR:"15", legRaises:"15",
+    legRaiseHold:"28", flutterLeg:"34", scissorKicks:"28", sitUp:"22", sidePlank:"35",
+    burpees:"12", cardio:"2.4 km in 14 min 50 s",
+    rArms:5, rCore:4, rAbs:4, rBack:5, rCardio:4, rLegs:6,
+    mobility:"Good overhead range. Thoracic rotation limited.",
+    flexibility:"Forward fold to mid-shin.",
+    preferredTimes:"Tue / Thu evenings, after 7pm", frequency:"2x a week to start",
+    trainingPlan:"Responds well to group settings — start him in the Tuesday Strength class alongside one PT session so the habit forms socially. Conditioning bias, keep the intensity moderate for the first month.",
+    notes:"New to structured training. Set the expectation early that two consistent sessions beat four sporadic ones.",
+    policyAgreed:true,
+  },
+
+  /* ---- deliberately PARTIAL: details taken at sign-up, physical assessment not
+     done yet. A real and common state, and the one that proves the read-back
+     distinguishes "not measured" from "measured as zero" — a blank body-fat row
+     and 0% body fat are different claims. ---- */
+  {
+    id:"ia-cheryl-1", who:"Cheryl", by:"danny", coach:"danny", venue:"MP",
+    d:"24 Jul 2026", iso:"2026-07-24",
+    gender:"F", dob:"9 Nov 1994", contact:"9123 0003",
+    emergency:"Daniel Ho (partner) 8123 9900", email:"cheryl@example.sg",
+    occupation:"Physiotherapist",
+    goals:"Return to training after a year off. Wants to start slowly and rebuild.",
+    triedBefore:"Trained consistently until 2025, stopped after a house move.",
+    whyNow:"Settled in and misses it.",
+    injuries:"None current. Broken left wrist in 2019, fully healed.",
+    preferredTimes:"Weekends, flexible", frequency:"To be agreed after the assessment",
+    notes:"Details taken at sign-up. Body composition and fitness assessment booked for next Saturday.",
+    policyAgreed:true,
+  },
+
+  /* ---- group members: the pair view is not empty either ---- */
+  {
+    id:"ia-swati-1", who:"Swati", by:"ansab", coach:"ansab", venue:"CDS",
+    d:"14 May 2026", iso:"2026-05-14",
+    gender:"F", contact:"9123 0014", emergency:"Supriya 9123 0015", occupation:"Marketing manager",
+    age:"34", height:"162", weight:"58.6", bmi:"22.3", bodyFat:"27.4", visceralFat:"5",
+    skeletalMuscle:"22.8", restingMetab:"1290", metabolicAge:"33",
+    bedTime:"23:00", wakeTime:"05:30",
+    goals:"Tone up and build strength. Trains with Supriya and wants to keep it that way.",
+    triedBefore:"Yoga twice a week for two years. Enjoyed it but saw no strength change.",
+    whyNow:"Turning 35 and wants to start resistance training before it gets harder.",
+    fruitsVeg:"Yes", alcohol:"No", smoke:"No", exercise:"Yes", dietRestrict:"Yes",
+    exerciseFreq:"2x a week PT plus weekend walks", water:"2 L",
+    supplements:"Iron, prescribed", allergies:"None", medication:"None",
+    injuries:"Mild lower-back discomfort with heavy hinging. No diagnosis.",
+    assessDur:"30 secs",
+    pushUps:"12", plank:"55", squats:"29", lunges:"24", sitUp:"20", burpees:"11",
+    rArms:5, rCore:6, rAbs:5, rBack:5, rCardio:6, rLegs:6,
+    mobility:"Good overall. Hip mobility strong from yoga.",
+    preferredTimes:"Wed / Fri, 6:00–6:15am", frequency:"2x a week, joint sessions",
+    trainingPlan:"Joint sessions with Supriya. Deadlift pattern taught from the floor with a trap bar before loading, given the back discomfort.",
+    notes:"Trains as a pair — 1 shared credit per session regardless of who attends.",
+    policyAgreed:true,
+  },
+];

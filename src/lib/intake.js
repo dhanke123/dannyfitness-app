@@ -176,7 +176,7 @@ const esc = (s) => String(s ?? "")
  * The layout mirrors `Client information_template.pdf` so a coach can hold the two
  * side by side. `@page` gives it real A4 margins rather than Word's default.
  */
-export function buildIntakeDoc(rec, { client, coachName, resolve } = {}) {
+export function buildIntakeDoc(rec, { client, coachName, resolve, forPrint } = {}) {
   const section = (s) => {
     if (!sectionFilled(rec, s)) return "";
     const rows = s.fields
@@ -204,8 +204,19 @@ export function buildIntakeDoc(rec, { client, coachName, resolve } = {}) {
   td.v { font-weight: 600; }
   .sig { margin-top: 22pt; font-size: 10pt; }
   .foot { margin-top: 14pt; font-size: 8.5pt; color: #6B675C; }
+  /* A section must not be split across a page break — half a body-composition
+     panel on page 1 and half on page 2 is how a reader misses a row. */
+  h2 { page-break-after: avoid; break-after: avoid; }
+  table { page-break-inside: avoid; break-inside: avoid; }
+  ${forPrint ? `@media print { .noprint { display: none; } }
+  .noprint { position: sticky; top: 0; background: #FBF7F0; border-bottom: 1px solid #EEE7DB;
+             padding: 10px 0 12px; margin-bottom: 14px; font-size: 10pt; color: #6B675C; }
+  .noprint button { font: inherit; font-weight: 700; color: #fff; background: #FF5A3C;
+             border: 0; border-radius: 8px; padding: 8px 16px; cursor: pointer; margin-right: 8px; }` : ""}
 </style></head>
 <body>
+  ${forPrint ? `<div class="noprint"><button onclick="window.print()">Save as PDF</button>
+    Choose <b>Save as PDF</b> as the destination. Nothing else on this page prints.</div>` : ""}
   <h1>Client Information — ${esc(client)}</h1>
   <div class="meta">Assessment date: ${esc(rec?.d || "—")}
     &nbsp;·&nbsp; Recorded by: ${esc(coachName || "—")}
@@ -253,6 +264,32 @@ export function buildIntakeCsv(records, { resolve } = {}) {
     ...ordered.map(r => cols.map(([k]) =>
       k === "d" || k === "who" || k === "by" ? meta(r, k) : cell(r, k)).join(",")),
   ].join("\n");
+}
+
+/* PDF, without a PDF library.
+ *
+ * The browser already has a very good PDF renderer behind Print → Save as PDF: real
+ * text (searchable and selectable, not a bitmap), correct A4 pagination, and the
+ * system fonts. jsPDF would add ~350KB to a bundle already at 817KB and produce a
+ * worse document — its layout engine can't reflow a table and doesn't hyphenate.
+ *
+ * Opens the same HTML the Word export uses, so the two can never disagree about
+ * what's in the record. Auto-triggers the print dialog, and leaves a button for
+ * anyone whose browser blocks the automatic call.
+ *
+ * Returns false when a popup blocker eats the window — the caller must say so
+ * rather than let the coach think a file was produced.
+ */
+export function printIntakePdf(rec, opts = {}) {
+  const w = window.open("", "_blank");
+  if (!w) return false;
+  w.document.write(buildIntakeDoc(rec, { ...opts, forPrint: true }));
+  w.document.close();
+  w.document.title = `intake-${slug(opts.client)}-${slug(rec?.d)}`;   // becomes the default filename
+  w.focus();
+  // Give the document a beat to lay out; printing an empty frame is a blank PDF.
+  setTimeout(() => { try { w.print(); } catch { /* the button is still there */ } }, 400);
+  return true;
 }
 
 /* Shared browser download. Kept here so the components stay presentational. */
