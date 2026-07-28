@@ -27,8 +27,17 @@ export const RANGE_PRESETS = [
   { key: "mtd",   label: "This month" },
   { key: "qtd",   label: "Quarter"    },
   { key: "ytd",   label: "This year"  },
+  /* Forward windows. Every other preset ends today, which is right for a payout and
+     useless for a forecast — a "Future" view over a period that stops today can only
+     ever be empty. These are the two that make the forecast answerable. */
+  { key: "next7",  label: "Next 7 days"  },
+  { key: "next30", label: "Next 30 days" },
   { key: "all",   label: "All time"   },
 ];
+
+/* Ranges that look forward. The UI uses this to know when a future-facing filter
+   has been pointed at a period that can't contain anything. */
+export const isForwardRange = (key) => key === "next7" || key === "next30";
 
 const shift = (dt, days) => new Date(dt.getTime() + days * MS_DAY);
 const startOfDay = (dt) => { const d = new Date(dt); d.setHours(0, 0, 0, 0); return d; };
@@ -57,6 +66,10 @@ export function resolveRange(key, custom = {}, now = new Date()) {
       return mk(new Date(today.getFullYear(), q * 3, 1), `Q${q + 1} ${today.getFullYear()}`);
     }
     case "ytd": return mk(new Date(today.getFullYear(), 0, 1), String(today.getFullYear()));
+    /* Forward windows start TODAY, not tomorrow — the rest of today is still ahead
+       of you, and a forecast that drops this afternoon's sessions is wrong. */
+    case "next7":  return { key, from: iso, to: toISO(shift(today, 6)),  label: "Next 7 days" };
+    case "next30": return { key, from: iso, to: toISO(shift(today, 29)), label: "Next 30 days" };
     case "all": return { key, from: "0000-01-01", to: "9999-12-31", label: "All time" };
     case "custom": {
       // Tolerate a backwards range rather than silently returning nothing: someone

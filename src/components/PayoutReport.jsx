@@ -153,7 +153,9 @@ export default function PayoutReport() {
     <div className="space-y-3">
       {/* Same control, same default, same rows as the Coach log — read one, pay from
           the other, and they describe the same days. */}
-      <RangeBar value={rangeSel} onChange={setRangeSel} range={range}
+      {/* allowFuture so the wage bill can be forecast as well as paid — on
+          "Include booked" a forward period shows what the month is committed to. */}
+      <RangeBar value={rangeSel} onChange={setRangeSel} range={range} allowFuture
         note="Pick a day, a week, a month, a year — or two dates." />
 
       <Card style={{ background: T.ink, color: T.paper, border: "none" }}>

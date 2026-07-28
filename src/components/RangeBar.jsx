@@ -9,20 +9,25 @@
  * to know exactly which days it covers.
  */
 
-import { GRAINS, RANGE_PRESETS, fmtISO, rangeDays } from "../lib/period.js";
+import { GRAINS, RANGE_PRESETS, fmtISO, isForwardRange, rangeDays } from "../lib/period.js";
 import { T, disp } from "../theme.js";
 import { Chip, DateInput } from "../ui/kit.jsx";
 import { toISO } from "../lib/dates.js";
 
-export default function RangeBar({ value, onChange, range, grain, onGrain, note }) {
+/* `allowFuture` opens the custom pickers past today. Reports that only look
+   backwards (money already taken, expenses already paid) keep the cap — a P&L with a
+   future end date is a P&L nobody can explain. The coach log and the payout run need
+   it, because a forecast is a legitimate question about the same rows. */
+export default function RangeBar({ value, onChange, range, grain, onGrain, note, allowFuture }) {
   const custom = value.key === "custom";
   const today = toISO(new Date());
+  const maxDate = allowFuture ? undefined : today;
 
   return (
     <div className="rounded-2xl p-3" style={{ background: T.card, border: `1.5px solid ${T.line}` }}>
       <div className="text-[10px] font-bold mb-1.5" style={{ color: T.muted }}>PERIOD</div>
       <div className="flex gap-1.5 flex-wrap">
-        {RANGE_PRESETS.map(p => (
+        {RANGE_PRESETS.filter(p => allowFuture || !isForwardRange(p.key)).map(p => (
           <button key={p.key} onClick={() => onChange({ key: p.key, from: value.from, to: value.to })}
             className="px-2.5 py-1 rounded-lg text-[11px] font-bold"
             style={{ background: value.key === p.key ? T.ink : "transparent",
@@ -39,12 +44,12 @@ export default function RangeBar({ value, onChange, range, grain, onGrain, note 
         <div className="flex items-end gap-2 mt-2">
           <div className="flex-1">
             <div className="text-[10px] font-bold mb-1" style={{ color: T.muted }}>FROM</div>
-            <DateInput value={value.from} max={today}
+            <DateInput value={value.from} max={maxDate}
               onChange={v => onChange({ ...value, key: "custom", from: v })} style={{ width: "100%" }}/>
           </div>
           <div className="flex-1">
             <div className="text-[10px] font-bold mb-1" style={{ color: T.muted }}>TO</div>
-            <DateInput value={value.to} max={today}
+            <DateInput value={value.to} max={maxDate}
               onChange={v => onChange({ ...value, key: "custom", to: v })} style={{ width: "100%" }}/>
           </div>
         </div>)}

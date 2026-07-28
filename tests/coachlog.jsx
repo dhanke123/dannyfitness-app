@@ -86,6 +86,55 @@ ok("  ...counting attended, not booked", bootcamps[0].booked===2);
 ok("a coach with no work gets no rows", W.coachWorkRows("nobody", july, ctx).length===0);
 ok("counts exclude cancelled work", W.workCounts(rows).cancelled>0 && W.workCounts(rows).total<rows.length);
 
+/* ---- PAX: how many people were in front of the coach ----
+   One number, four sources. It is the difference between an hour with one client and
+   an hour with fourteen, which no other column shows — two weeks can look identical
+   and be twice the work. */
+ok("a class counts its roster", bootcamps[0].pax===1 && bootcamps[0].paxNote==="attended");
+const unmarkedCtx={...ctx, sessions:[{...ctx.sessions[0], id:"s3", done:false}]};
+const unmarkedRow=W.coachWorkRows("x", july, unmarkedCtx)[0];
+ok("  ...booked before attendance is marked, attended after",
+   unmarkedRow.pax===2 && unmarkedRow.paxNote==="booked");
+const ptCtx={ ...ctx, sessions:[],
+  ptBookings:[{id:"b1",trainer:"x",day:1,time:"08:00",loc:"MP",who:"Sam"},
+              {id:"b2",trainer:"x",day:2,time:"08:00",loc:"MP",who:"Swati & Supriya",forGroup:"Swati & Supriya"}],
+  clientGroups:[{id:"g1",name:"Swati & Supriya",memberIds:["c14","c15"],primaryId:"c14"}] };
+const ptRows=W.coachWorkRows("x", july, ptCtx);
+ok("individual PT is 1 pax", ptRows.find(r=>r.kind==="pt").pax===1);
+ok("  ...labelled 1-to-1", ptRows.find(r=>r.kind==="pt").paxNote==="1-to-1");
+ok("group PT counts the group", ptRows.find(r=>r.kind==="grouppt").pax===2);
+const campCtx={ ...ctx, sessions:[], camps:[{id:"cx",name:"Holiday camp",loc:"MP",cap:20,spots:9,startInDays:0,
+  days:[{label:"Day 1",sessions:[{activity:"Football",trainer:"x",start:"10:30",hours:2}]}]}] };
+ok("a camp counts places sold, not capacity",
+   (W.coachWorkRows("x", P.resolveRange("30d",{},NOW), campCtx).find(r=>r.kind==="camp")||{}).pax===11);
+ok("total pax is people, not sessions", W.workCounts(ptRows).pax===3 && W.workCounts(ptRows).total===2);
+
+/* ---- FILTERS: the same rows read forwards and backwards ---- */
+const TODAY_ISO="2026-07-15";
+const mixed=[
+  {iso:"2026-07-10", delivered:true,  cancelled:false},
+  {iso:"2026-07-14", delivered:false, cancelled:false},
+  {iso:"2026-07-15", delivered:false, cancelled:false},   // today
+  {iso:"2026-07-20", delivered:false, cancelled:false},   // future
+  {iso:"2026-07-11", delivered:false, cancelled:true},
+  {iso:"",           delivered:true,  cancelled:false},   // hand-entered history
+];
+ok("five filters offered", W.WORK_FILTERS.length===5);
+ok("  ...named as asked", ["all","completed","unmarked","past","future"].every(k=>W.WORK_FILTERS.some(f=>f.key===k)));
+/* "Past" includes TODAY. A 6am session is finished by the time anyone opens this, and
+   a payout view that silently drops the current day is how a coach ends up short. */
+ok("Past INCLUDES today", W.filterWork(mixed,"past",TODAY_ISO).some(r=>r.iso===TODAY_ISO));
+ok("  ...and excludes tomorrow", !W.filterWork(mixed,"past",TODAY_ISO).some(r=>r.iso==="2026-07-20"));
+ok("  ...and keeps undated history, which already happened", W.filterWork(mixed,"past",TODAY_ISO).some(r=>!r.iso));
+ok("Future is strictly after today", W.filterWork(mixed,"future",TODAY_ISO).length===1);
+ok("  ...so past and future don't overlap",
+   W.filterWork(mixed,"past",TODAY_ISO).length + W.filterWork(mixed,"future",TODAY_ISO).length === mixed.length);
+ok("Completed is delivered work only", W.filterWork(mixed,"completed",TODAY_ISO).length===2);
+ok("Not marked is the chase list", W.filterWork(mixed,"unmarked",TODAY_ISO).length===3);
+ok("  ...and neither includes cancelled work",
+   [...W.filterWork(mixed,"completed",TODAY_ISO), ...W.filterWork(mixed,"unmarked",TODAY_ISO)].every(r=>!r.cancelled));
+ok("All is everything", W.filterWork(mixed,"all",TODAY_ISO).length===mixed.length);
+
 await click("Owner console · not a trainer");
 
 /* ==================== 1 · SHEET 1 — COACH DAY LOG ==================== */
@@ -111,7 +160,39 @@ ok("  ...a week", !!btns().find(b=>b.textContent.trim()==="This week"));
 ok("  ...a month", !!btns().find(b=>b.textContent.trim()==="This month"));
 ok("  ...a quarter and a year", !!btns().find(b=>b.textContent.trim()==="Quarter") && !!btns().find(b=>b.textContent.trim()==="This year"));
 ok("  ...or two arbitrary dates", !!btns().find(b=>b.textContent.includes("Custom")));
+ok("  ...and forward windows, so a forecast has a period it can live in",
+   !!btns().find(b=>b.textContent.trim()==="Next 7 days") && !!btns().find(b=>b.textContent.trim()==="Next 30 days"));
 ok("  ...and the exact days are spelled out, not just a preset name", /end date included/.test(txt()));
+
+/* ---- the filter row, in the real UI ---- */
+ok("the report filters as well as ranges", ["All","Completed","Not marked","Past","Future"]
+   .every(l=>!!btns().find(b=>b.textContent.trim().startsWith(l))));
+ok("  ...each carrying its own count, so you can see where the work sits",
+   !!btns().find(b=>/^Past\s*\d+$/.test(b.textContent.trim().replace(/\s+/g," "))));
+ok("defaults to Past — the payable window, not the forecast", /the payable window/.test(txt()));
+await click("Not marked");
+ok("Not marked explains itself as the chase list", /Chase these before running the payout/.test(txt()));
+await click("Future");
+ok("Future is named as a forecast, not a bill", /forecast, not the bill/.test(txt()));
+/* Every backward preset ends today, so asking for the forecast over one can only
+   return nothing. An empty list reads as "no sessions booked", which is a different
+   and wrong claim — so it says why and offers the fix. */
+ok("  ...and a forecast over a backward period explains itself", /This period ends today/.test(txt()));
+ok("  ...offering a forward window in one tap", !!btns().find(b=>/next 30 days/i.test(b.textContent)));
+await click("Look at the next 30 days");
+ok("  ...which actually shows what's committed ahead", !/This period ends today/.test(txt()));
+ok("  ...over a forward range", /Next 30 days/.test(txt()));
+await exact("This month");
+await click("Completed");
+ok("Completed is named as the payout basis", /what a payout should be built from/.test(txt()));
+await click("Past");
+
+/* ---- pax column ---- */
+ok("Pax is its own column", /PAX/.test(txt()));
+ok("  ...and its own total", /Pax/.test(txt()));
+ok("  ...explained, because 1 client and 14 look the same everywhere else",
+   /people trained, not sessions run/.test(txt()));
+ok("  ...saying what the number counts per row", /1-to-1|attended|booked|enrolled|in the group/.test(txt()));
 
 const sessionCount=()=>Number((/Sessions(\d+)/.exec(txt().replace(/\s/g,""))||[])[1] ?? -1);
 const monthN=sessionCount();
@@ -129,7 +210,7 @@ ok("returning to the month restores the same figure", sessionCount()===monthN);
 ok("classes appear alongside PT", /Boot Camp|Strength|HIIT|Cardio|NS \/ IPPT/.test(txt()));
 ok("named PT clients appear", /PT|Sam Lee|Swati/.test(txt()));
 ok("a running total of what was worked", /Sessions/.test(txt()) && /Classes/.test(txt()));
-ok("camp days counted separately", /Camp days/.test(txt()));
+ok("camp days counted separately", /Camps/.test(txt()));
 
 /* THE COLUMN THAT MATTERS: pack balance, computed not typed. */
 ok("explains what Number of Sessions means", /pack balance left after that session/.test(txt()));

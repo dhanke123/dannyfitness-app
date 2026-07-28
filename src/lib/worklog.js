@@ -81,6 +81,23 @@ export function coachWorkRows(coachId, range, ctx) {
 
   const packFor = (name) => groupPacks.find(p => p.name === name)
     || groupPacks.find(p => clientGroups.find(g => g.id === p.groupId)?.name === name);
+  const groupByName = (name) => clientGroups.find(g => g.name === name);
+
+  /* PAX — how many people the coach actually had in front of them.
+     One number, four sources: 1 for individual PT, the group's size for a joint
+     session, and the roster for a class or camp. It matters because it is the
+     difference between an hour with one person and an hour with fourteen, which no
+     other column on the report shows — a coach's week can look identical and be
+     twice the work. It is also the basis a per-head rate multiplies. */
+  const groupPax = (name) => {
+    const g = groupByName(name);
+    if (g) return g.memberIds.length;
+    const p = packFor(name);
+    if (p?.members?.length) return p.members.length;
+    // "Mable & Wendy & Helen" — fall back to counting the names in the label
+    const parts = String(name || "").split(/\s*&\s*/).filter(Boolean);
+    return Math.max(1, parts.length);
+  };
 
   const rows = [];
   const days = daysInRange(range);
@@ -102,6 +119,9 @@ export function coachWorkRows(coachId, range, ctx) {
           delivered: s.done === true,
           payable: s.status !== "cancelled",
           attended, booked: attendees.length, share, type: s.type,
+          // roster: who is on the list. Once attendance is marked, who turned up.
+          pax: s.done ? attended : attendees.length,
+          paxNote: s.done ? "attended" : "booked", cap: s.cap,
           coCoaches: sessTrainers(s).filter(x => x !== coachId),
           remark: [
             s.status === "cancelled" ? `CANCELLED${s.cancelReason ? ` — ${s.cancelReason}` : ""}` : "",
@@ -126,6 +146,8 @@ export function coachWorkRows(coachId, range, ctx) {
           delivered: b.status === "done",
           payable: b.status !== "cancelled",
           share: 1,
+          pax: b.forGroup ? groupPax(who) : 1,
+          paxNote: b.forGroup ? "in the group" : "1-to-1",
           remark: [
             b.status === "cancelled" ? "CANCELLED" : "",
             b.status === "done" ? "completed" : b.status === "cancelled" ? "" : "not marked complete",
@@ -147,6 +169,9 @@ export function coachWorkRows(coachId, range, ctx) {
           name: c.name, kind: "camp", where: locName(c.loc),
           cancelled: false, delivered: true, payable: true, share: coaches.length,
           hours: cs.hours || 1,
+          // camp roster = places sold, i.e. capacity minus the seats still open
+          pax: Math.max(0, (c.cap ?? 0) - (c.spots ?? 0)),
+          paxNote: "enrolled", cap: c.cap,
           remark: [cd.label, cs.activity, `${cs.hours}h`].filter(Boolean).join(" · "),
           sessionsLeft: null,
         });
@@ -171,6 +196,7 @@ export function coachWorkRows(coachId, range, ctx) {
       time: l.time || "", dateText: l.date,
       name: l.who, kind: "logged", where: "",
       cancelled: false, delivered: true, payable: true, share: 1,
+      pax: groupPax(l.who), paxNote: groupByName(l.who) ? "in the group" : "1-to-1",
       remark: l.remark || "recorded from history",
       sessionsLeft: pack ? pack.size - pack.used : null,
     });
@@ -216,5 +242,39 @@ export const workCounts = (rows) => {
     camps: live.filter(r => r.kind === "camp").length,
     cancelled: rows.length - live.length,
     heads: live.filter(r => r.kind === "class").reduce((a, r) => a + (r.attended || 0), 0),
+    // total people trained across everything — the number that says how heavy a week was
+    pax: live.reduce((a, r) => a + (r.pax || 0), 0),
   };
 };
+
+/* ---------------------------------------------------------------- filters ----
+ *
+ * The same report is read for two opposite reasons and the difference is time.
+ * Looking BACK it is a payout document: what happened, and was it marked. Looking
+ * FORWARD it is a forecast: what is committed, so a coach's load and the wage bill
+ * can be seen before the month runs. One report, two jobs, so the filter has to
+ * carry both axes rather than force a choice between them.
+ *
+ * "Past" includes TODAY deliberately. A session at 6am is finished by the time
+ * anyone opens this, and a payout view that silently drops the current day is the
+ * kind of off-by-one that goes unnoticed until a coach is short.
+ */
+export const WORK_FILTERS = [
+  { key: "all",       label: "All",        blurb: "Everything in the period." },
+  { key: "completed", label: "Completed",  blurb: "Attendance marked or the PT session closed. This is what a payout should be built from." },
+  { key: "unmarked",  label: "Not marked", blurb: "Happened, or is due, but nobody has confirmed it. Chase these before running the payout." },
+  { key: "past",      label: "Past",       blurb: "Up to and including today — the payable window." },
+  { key: "future",    label: "Future",     blurb: "Committed but not yet run — the forecast, not the bill." },
+];
+
+export function filterWork(rows, key, todayIso = toISO(new Date())) {
+  switch (key) {
+    // Undated hand-entered history is past by definition — it is a record of
+    // something that already happened.
+    case "past":      return rows.filter(r => !r.iso || r.iso <= todayIso);
+    case "future":    return rows.filter(r => r.iso && r.iso > todayIso);
+    case "completed": return rows.filter(r => r.delivered && !r.cancelled);
+    case "unmarked":  return rows.filter(r => !r.delivered && !r.cancelled);
+    default:          return rows;
+  }
+}
